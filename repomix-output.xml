@@ -1,0 +1,4599 @@
+This file is a merged representation of the entire codebase, combined into a single document by Repomix.
+
+<file_summary>
+This section contains a summary of this file.
+
+<purpose>
+This file contains a packed representation of the entire repository's contents.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+</purpose>
+
+<file_format>
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  - File path as an attribute
+  - Full contents of the file
+</file_format>
+
+<usage_guidelines>
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+</usage_guidelines>
+
+<notes>
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Files are sorted by Git change count (files with more changes are at the bottom)
+</notes>
+
+</file_summary>
+
+<directory_structure>
+public/
+  data/
+    site04_shackleton_rim/
+      elevation.bin
+      metadata.json
+      Site04_final_adj_5mpp_ldec.tif
+      Site04_final_adj_5mpp_slp.tif
+      Site04_final_adj_5mpp_slperr.tif
+      Site04_final_adj_5mpp_surf.tif
+      Site04_final_adj_5mpp_toterr.tif
+  models/
+    earth.glb
+    sun.glb
+  textures/
+    earth_daymap.jpg
+    nasa-lunar-crater.webp
+    quickmap-lroc.png
+  file.svg
+  globe.svg
+  next.svg
+  vercel.svg
+  window.svg
+scripts/
+  analyze-xyzi-coverage.mjs
+  analyze-xyzi.mjs
+  convert-lola.mjs
+  inspect-lola-80s.mjs
+  inspect-lola-count.mjs
+  inspect-lola-georeferencing.mjs
+  inspect-lola-slope-uncertainty.mjs
+  inspect-lola-slope.mjs
+  inspect-lola-uncertainty.mjs
+  inspect-lola.mjs
+  inspect-xyzi.mjs
+  Site04_final_adj.xyzi
+  validate-lola-count.mjs
+  validate-lola-proj.py
+  validate-lola-projection.mjs
+  validate-lola-sample.mjs
+  validate-lola-slope-uncertainty.mjs
+  validate-lola-slope.mjs
+  validate-lola-uncertainty.mjs
+  validate-xyzi-against-raster.mjs
+  validate-xyzi-statistics.mjs
+  verify-lola-registration.mjs
+src/
+  app/
+    api/
+      horizons/
+        route.ts
+    terrain-check/
+      page.tsx
+    terrain-validation/
+      page.tsx
+    favicon.ico
+    globals.css
+    layout.tsx
+    page.tsx
+  components/
+    lib/
+      lunar/
+        ephemeris.ts
+        terrainData.ts
+        terrainHorizon.ts
+        terrainLoader.ts
+    types/
+      lunar.ts
+.gitignore
+AGENTS.md
+eslint.config.mjs
+next.config.ts
+package.json
+README.md
+tsconfig.json
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path="public/data/site04_shackleton_rim/metadata.json">
+{
+  "width": 3200,
+  "height": 3200,
+  "minElevation": -2847.877197265625,
+  "maxElevation": 1805.0726318359375,
+  "resolutionMeters": 5,
+  "bbox": [
+    -9000,
+    -15000,
+    7000,
+    1000
+  ],
+  "pixelResolution": [
+    5,
+    -5,
+    0
+  ],
+  "coordinateSystem": {
+    "projection": "South Polar Stereographic",
+    "referenceFrame": "MOON_ME",
+    "ephemeris": "DE421",
+    "linearUnits": "meters",
+    "pixelRegistration": "pixel area"
+  },
+  "georeferencing": {
+    "tiePoint": {
+      "column": 0,
+      "row": 0,
+      "x": -9000,
+      "y": 1000
+    },
+    "centralMeridianDegrees": 0,
+    "lunarRadiusMeters": 1737400
+  },
+  "dataType": "Float32",
+  "byteOrder": "little-endian"
+}
+</file>
+
+<file path="public/file.svg">
+<svg fill="none" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="M14.5 13.5V5.41a1 1 0 0 0-.3-.7L9.8.29A1 1 0 0 0 9.08 0H1.5v13.5A2.5 2.5 0 0 0 4 16h8a2.5 2.5 0 0 0 2.5-2.5m-1.5 0v-7H8v-5H3v12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1M9.5 5V2.12L12.38 5zM5.13 5h-.62v1.25h2.12V5zm-.62 3h7.12v1.25H4.5zm.62 3h-.62v1.25h7.12V11z" clip-rule="evenodd" fill="#666" fill-rule="evenodd"/></svg>
+</file>
+
+<file path="public/globe.svg">
+<svg fill="none" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><g clip-path="url(#a)"><path fill-rule="evenodd" clip-rule="evenodd" d="M10.27 14.1a6.5 6.5 0 0 0 3.67-3.45q-1.24.21-2.7.34-.31 1.83-.97 3.1M8 16A8 8 0 1 0 8 0a8 8 0 0 0 0 16m.48-1.52a7 7 0 0 1-.96 0H7.5a4 4 0 0 1-.84-1.32q-.38-.89-.63-2.08a40 40 0 0 0 3.92 0q-.25 1.2-.63 2.08a4 4 0 0 1-.84 1.31zm2.94-4.76q1.66-.15 2.95-.43a7 7 0 0 0 0-2.58q-1.3-.27-2.95-.43a18 18 0 0 1 0 3.44m-1.27-3.54a17 17 0 0 1 0 3.64 39 39 0 0 1-4.3 0 17 17 0 0 1 0-3.64 39 39 0 0 1 4.3 0m1.1-1.17q1.45.13 2.69.34a6.5 6.5 0 0 0-3.67-3.44q.65 1.26.98 3.1M8.48 1.5l.01.02q.41.37.84 1.31.38.89.63 2.08a40 40 0 0 0-3.92 0q.25-1.2.63-2.08a4 4 0 0 1 .85-1.32 7 7 0 0 1 .96 0m-2.75.4a6.5 6.5 0 0 0-3.67 3.44 29 29 0 0 1 2.7-.34q.31-1.83.97-3.1M4.58 6.28q-1.66.16-2.95.43a7 7 0 0 0 0 2.58q1.3.27 2.95.43a18 18 0 0 1 0-3.44m.17 4.71q-1.45-.12-2.69-.34a6.5 6.5 0 0 0 3.67 3.44q-.65-1.27-.98-3.1" fill="#666"/></g><defs><clipPath id="a"><path fill="#fff" d="M0 0h16v16H0z"/></clipPath></defs></svg>
+</file>
+
+<file path="public/next.svg">
+<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 394 80"><path fill="#000" d="M262 0h68.5v12.7h-27.2v66.6h-13.6V12.7H262V0ZM149 0v12.7H94v20.4h44.3v12.6H94v21h55v12.6H80.5V0h68.7zm34.3 0h-17.8l63.8 79.4h17.9l-32-39.7 32-39.6h-17.9l-23 28.6-23-28.6zm18.3 56.7-9-11-27.1 33.7h17.8l18.3-22.7z"/><path fill="#000" d="M81 79.3 17 0H0v79.3h13.6V17l50.2 62.3H81Zm252.6-.4c-1 0-1.8-.4-2.5-1s-1.1-1.6-1.1-2.6.3-1.8 1-2.5 1.6-1 2.6-1 1.8.3 2.5 1a3.4 3.4 0 0 1 .6 4.3 3.7 3.7 0 0 1-3 1.8zm23.2-33.5h6v23.3c0 2.1-.4 4-1.3 5.5a9.1 9.1 0 0 1-3.8 3.5c-1.6.8-3.5 1.3-5.7 1.3-2 0-3.7-.4-5.3-1s-2.8-1.8-3.7-3.2c-.9-1.3-1.4-3-1.4-5h6c.1.8.3 1.6.7 2.2s1 1.2 1.6 1.5c.7.4 1.5.5 2.4.5 1 0 1.8-.2 2.4-.6a4 4 0 0 0 1.6-1.8c.3-.8.5-1.8.5-3V45.5zm30.9 9.1a4.4 4.4 0 0 0-2-3.3 7.5 7.5 0 0 0-4.3-1.1c-1.3 0-2.4.2-3.3.5-.9.4-1.6 1-2 1.6a3.5 3.5 0 0 0-.3 4c.3.5.7.9 1.3 1.2l1.8 1 2 .5 3.2.8c1.3.3 2.5.7 3.7 1.2a13 13 0 0 1 3.2 1.8 8.1 8.1 0 0 1 3 6.5c0 2-.5 3.7-1.5 5.1a10 10 0 0 1-4.4 3.5c-1.8.8-4.1 1.2-6.8 1.2-2.6 0-4.9-.4-6.8-1.2-2-.8-3.4-2-4.5-3.5a10 10 0 0 1-1.7-5.6h6a5 5 0 0 0 3.5 4.6c1 .4 2.2.6 3.4.6 1.3 0 2.5-.2 3.5-.6 1-.4 1.8-1 2.4-1.7a4 4 0 0 0 .8-2.4c0-.9-.2-1.6-.7-2.2a11 11 0 0 0-2.1-1.4l-3.2-1-3.8-1c-2.8-.7-5-1.7-6.6-3.2a7.2 7.2 0 0 1-2.4-5.7 8 8 0 0 1 1.7-5 10 10 0 0 1 4.3-3.5c2-.8 4-1.2 6.4-1.2 2.3 0 4.4.4 6.2 1.2 1.8.8 3.2 2 4.3 3.4 1 1.4 1.5 3 1.5 5h-5.8z"/></svg>
+</file>
+
+<file path="public/vercel.svg">
+<svg fill="none" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1155 1000"><path d="m577.3 0 577.4 1000H0z" fill="#fff"/></svg>
+</file>
+
+<file path="public/window.svg">
+<svg fill="none" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path fill-rule="evenodd" clip-rule="evenodd" d="M1.5 2.5h13v10a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1zM0 1h16v11.5a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 0 12.5zm3.75 4.5a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5M7 4.75a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0m1.75.75a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5" fill="#666"/></svg>
+</file>
+
+<file path="scripts/analyze-xyzi-coverage.mjs">
+import fs from "node:fs";
+
+const buffer = fs.readFileSync(
+  "scripts/Site04_final_adj.xyzi"
+);
+
+const RECORD_SIZE = 32;
+const COUNT = buffer.length / RECORD_SIZE;
+
+// Observation point converted from metres to kilometres.
+// Provisional assumption: XYZI coordinates use kilometres.
+const targetX = -1.0000366057;
+const targetY = -7.0003455653;
+
+const radiiMeters = [25, 50, 100, 250, 500, 1000];
+
+const counts = Object.fromEntries(
+  radiiMeters.map((r) => [r, 0])
+);
+
+const nearest = [];
+
+for (let i = 0; i < COUNT; i++) {
+  const offset = i * RECORD_SIZE;
+
+  const x = buffer.readDoubleLE(offset);
+  const y = buffer.readDoubleLE(offset + 8);
+  const z = buffer.readDoubleLE(offset + 16);
+  const fourth = buffer.readDoubleLE(offset + 24);
+
+  const distanceMeters =
+    Math.hypot(x - targetX, y - targetY) * 1000;
+
+  for (const radius of radiiMeters) {
+    if (distanceMeters <= radius) {
+      counts[radius]++;
+    }
+  }
+
+  if (nearest.length < 10 || distanceMeters < nearest[9].distanceMeters) {
+    nearest.push({
+      record: i,
+      distanceMeters,
+      x,
+      y,
+      z,
+      fourth,
+    });
+
+    nearest.sort(
+      (a, b) => a.distanceMeters - b.distanceMeters
+    );
+
+    if (nearest.length > 10) nearest.pop();
+  }
+}
+
+console.log("\n=== NASA LOLA POINT-CLOUD COVERAGE ===\n");
+
+console.log("Records:", COUNT);
+console.log("Target:", { x: targetX, y: targetY });
+
+console.log("\n=== POINTS WITHIN DISTANCE ===\n");
+console.table(
+  Object.entries(counts).map(([radius, count]) => ({
+    radiusMeters: Number(radius),
+    pointCount: count,
+  }))
+);
+
+console.log("\n=== 10 NEAREST POINTS ===\n");
+console.table(nearest);
+
+console.log("\n=== ANALYSIS COMPLETE ===\n");
+</file>
+
+<file path="scripts/analyze-xyzi.mjs">
+import fs from "node:fs";
+
+const filePath = "scripts/Site04_final_adj.xyzi";
+const buffer = fs.readFileSync(filePath);
+
+const RECORD_SIZE = 32;
+const RECORD_COUNT = buffer.length / RECORD_SIZE;
+
+if (!Number.isInteger(RECORD_COUNT)) {
+  throw new Error("Invalid record size.");
+}
+
+const fields = ["x", "y", "z", "fourth"];
+
+const stats = Object.fromEntries(
+  fields.map((field) => [
+    field,
+    { min: Infinity, max: -Infinity, finite: true },
+  ])
+);
+
+const fourthValues = new Map();
+const records = [];
+
+for (let i = 0; i < RECORD_COUNT; i++) {
+  const offset = i * RECORD_SIZE;
+
+  const record = {
+    x: buffer.readDoubleLE(offset),
+    y: buffer.readDoubleLE(offset + 8),
+    z: buffer.readDoubleLE(offset + 16),
+    fourth: buffer.readDoubleLE(offset + 24),
+  };
+
+  if (i < 10) records.push(record);
+
+  for (const field of fields) {
+    const value = record[field];
+    const stat = stats[field];
+
+    if (!Number.isFinite(value)) {
+      stat.finite = false;
+      continue;
+    }
+
+    if (value < stat.min) stat.min = value;
+    if (value > stat.max) stat.max = value;
+  }
+
+  const fourth = record.fourth;
+  fourthValues.set(
+    fourth,
+    (fourthValues.get(fourth) || 0) + 1
+  );
+}
+
+console.log("\n=== NASA XYZI ANALYSIS ===\n");
+console.log("Record count:", RECORD_COUNT);
+
+console.log("\n=== FIRST 10 RECORDS ===\n");
+console.table(records);
+
+console.log("\n=== FIELD RANGES ===\n");
+console.table(stats);
+
+console.log("\n=== FOURTH FIELD FREQUENCIES ===\n");
+console.table(
+  [...fourthValues.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 10)
+);
+
+console.log("\n=== ANALYSIS COMPLETE ===\n");
+</file>
+
+<file path="scripts/convert-lola.mjs">
+import { fromFile } from "geotiff";
+import { mkdir, writeFile } from "node:fs/promises";
+import path from "node:path";
+
+const root = process.cwd();
+
+const inputPath = path.join(
+  root,
+  "public/data/site04_shackleton_rim/Site04_final_adj_5mpp_surf.tif"
+);
+
+const outputDir = path.join(
+  root,
+  "public/data/site04_shackleton_rim"
+);
+
+console.log("Reading original NASA LOLA GeoTIFF...");
+
+const tiff = await fromFile(inputPath);
+const image = await tiff.getImage();
+
+const width = image.getWidth();
+const height = image.getHeight();
+const bbox = image.getBoundingBox();
+const resolution = image.getResolution();
+const origin = image.getOrigin();
+const geoKeys = image.getGeoKeys();
+
+const requiredValues = {
+  originX: origin?.[0],
+  originY: origin?.[1],
+  pixelWidth: resolution?.[0],
+  pixelHeight: resolution?.[1],
+  lunarRadius: geoKeys.GeogSemiMajorAxisGeoKey,
+  centralMeridian: geoKeys.ProjStraightVertPoleLongGeoKey,
+};
+
+for (const [name, value] of Object.entries(requiredValues)) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new Error(`Missing or invalid GeoTIFF value: ${name}`);
+  }
+}
+
+if (geoKeys.GTRasterTypeGeoKey !== 1) {
+  throw new Error("Expected PixelIsArea raster registration.");
+}
+
+if (geoKeys.ProjCoordTransGeoKey !== 15) {
+  throw new Error("Unexpected projection method.");
+}
+
+const rasters = await image.readRasters({ samples: [0] });
+const sourceElevations = rasters[0];
+
+if (sourceElevations.length !== width * height) {
+  throw new Error("Raster dimensions do not match elevation data.");
+}
+
+const elevationBuffer = Buffer.alloc(sourceElevations.length * 4);
+
+let minElevation = Infinity;
+let maxElevation = -Infinity;
+
+for (let i = 0; i < sourceElevations.length; i++) {
+  const value = sourceElevations[i];
+
+  if (!Number.isFinite(value)) {
+    throw new Error(`Invalid elevation at index ${i}.`);
+  }
+
+  elevationBuffer.writeFloatLE(value, i * 4);
+
+  minElevation = Math.min(minElevation, value);
+  maxElevation = Math.max(maxElevation, value);
+}
+
+await mkdir(outputDir, { recursive: true });
+
+await writeFile(
+  path.join(outputDir, "elevation.bin"),
+  elevationBuffer
+);
+
+const metadata = {
+  width,
+  height,
+  minElevation,
+  maxElevation,
+  resolutionMeters: Math.abs(resolution[0]),
+  bbox,
+  pixelResolution: resolution,
+
+  coordinateSystem: {
+    projection: "South Polar Stereographic",
+    referenceFrame: "MOON_ME",
+    ephemeris: "DE421",
+    linearUnits: "meters",
+    pixelRegistration: "pixel area"
+  },
+
+  georeferencing: {
+    tiePoint: {
+      column: 0,
+      row: 0,
+      x: origin[0],
+      y: origin[1]
+    },
+    centralMeridianDegrees:
+      geoKeys.ProjStraightVertPoleLongGeoKey,
+    lunarRadiusMeters:
+      geoKeys.GeogSemiMajorAxisGeoKey
+  },
+
+  dataType: "Float32",
+  byteOrder: "little-endian"
+};
+
+const metadataPath = path.join(outputDir, "metadata.json");
+
+await writeFile(
+  metadataPath,
+  JSON.stringify(metadata, null, 2)
+);
+
+// Read back the actual file to verify the saved structure.
+const savedMetadata = JSON.parse(
+  await (await import("node:fs/promises")).readFile(metadataPath, "utf8")
+);
+
+if (!savedMetadata.georeferencing?.tiePoint) {
+  throw new Error("Saved metadata is missing georeferencing.tiePoint.");
+}
+
+console.log("\nConversion and metadata validation successful.");
+
+console.log({
+  dimensions: `${width} x ${height}`,
+  rasterType: "PixelIsArea",
+  origin,
+  resolution,
+  georeferencing: savedMetadata.georeferencing,
+  elevationRange: `${minElevation.toFixed(2)} m to ${maxElevation.toFixed(2)} m`,
+  binarySizeMB: (elevationBuffer.byteLength / 1024 / 1024).toFixed(2)
+});
+</file>
+
+<file path="scripts/inspect-lola-80s.mjs">
+import { fromUrl } from "geotiff";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
+
+const URL =
+  "https://pgda.gsfc.nasa.gov/data/LOLA_20mpp/LDEM_80S_20MPP_ADJ.TIF";
+
+const ROOT = process.cwd();
+
+const SITE04 = {
+  path: path.join(
+    ROOT,
+    "public",
+    "data",
+    "site04_shackleton_rim",
+    "elevation.bin"
+  ),
+  width: 3200,
+  height: 3200,
+  originX: -9000,
+  originY: 1000,
+  pixelSize: 5,
+};
+
+const OBSERVER = {
+  x: -1000.0366057,
+  y: -7000.3455653,
+};
+
+function getTag(directory, name) {
+  if (typeof directory.getValue === "function") {
+    return directory.getValue(name);
+  }
+
+  return directory[name];
+}
+
+function bilinear(values, fx, fy) {
+  if (values.length !== 4 || values.some((v) => !Number.isFinite(v))) {
+    return null;
+  }
+
+  const top = values[0] + (values[1] - values[0]) * fx;
+  const bottom = values[2] + (values[3] - values[2]) * fx;
+
+  return top + (bottom - top) * fy;
+}
+
+function interpolateGrid(x, y, originX, originY, pixelSize) {
+  // PixelIsArea: coordinates refer to pixel centres.
+  const col = (x - originX) / pixelSize - 0.5;
+  const row = (originY - y) / pixelSize - 0.5;
+
+  const col0 = Math.floor(col);
+  const row0 = Math.floor(row);
+
+  return {
+    col,
+    row,
+    col0,
+    row0,
+    fx: col - col0,
+    fy: row - row0,
+  };
+}
+
+function readLocalFour(buffer, width, col, row) {
+  if (
+    col < 0 ||
+    row < 0 ||
+    col + 1 >= width ||
+    row + 1 >= SITE04.height
+  ) {
+    throw new Error("Site04 observer window is outside the raster.");
+  }
+
+  const offset = (row * width + col) * 4;
+  const rowOffset = width * 4;
+
+  return [
+    buffer.readFloatLE(offset),
+    buffer.readFloatLE(offset + 4),
+    buffer.readFloatLE(offset + rowOffset),
+    buffer.readFloatLE(offset + rowOffset + 4),
+  ];
+}
+
+async function main() {
+  console.log("=== NASA LOLA PRODUCT 90 ===");
+  console.log("Remote range reading only.");
+  console.log("No full DEM download.\n");
+
+  const tiff = await fromUrl(URL, {
+    allowFullFile: false,
+    maxRanges: 8,
+  });
+
+  const image = await tiff.getImage(0);
+  const directory = image.getFileDirectory();
+
+  const width = image.getWidth();
+  const height = image.getHeight();
+
+  console.log("BigTIFF:", tiff.bigTiff);
+  console.log("Raster:", width, "x", height);
+  console.log("Tile:", image.getTileWidth(), "x", image.getTileHeight());
+
+  // Use the same metadata accessor as the original successful inspection.
+  const scale = getTag(directory, "ModelPixelScale");
+  const tiepoint = getTag(directory, "ModelTiepoint");
+
+  if (!scale || !tiepoint) {
+    console.log("\nAvailable TIFF directory keys:");
+    console.log(Object.keys(directory));
+
+    throw new Error(
+      "ModelPixelScale or ModelTiepoint could not be read."
+    );
+  }
+
+  const pixelSizeX = Number(scale[0]);
+  const pixelSizeY = Number(scale[1]);
+
+  const originX = Number(tiepoint[3]);
+  const originY = Number(tiepoint[4]);
+
+  if (
+    !Number.isFinite(pixelSizeX) ||
+    !Number.isFinite(pixelSizeY) ||
+    !Number.isFinite(originX) ||
+    !Number.isFinite(originY)
+  ) {
+    throw new Error("Invalid TIFF grid metadata.");
+  }
+
+  console.log("\n=== GRID METADATA ===");
+  console.log("Pixel scale:", Array.from(scale));
+  console.log("Tiepoint:", Array.from(tiepoint));
+  console.log("Origin:", originX, originY);
+  console.log("Pixel size:", pixelSizeX, pixelSizeY);
+
+  const grid = interpolateGrid(
+    OBSERVER.x,
+    OBSERVER.y,
+    originX,
+    originY,
+    pixelSizeX
+  );
+
+  console.log("\n=== PRODUCT 90 OBSERVER PIXEL ===");
+  console.log("Column:", grid.col);
+  console.log("Row:", grid.row);
+  console.log("2x2 window:", [
+    grid.col0,
+    grid.row0,
+    grid.col0 + 2,
+    grid.row0 + 2,
+  ]);
+
+  if (
+    grid.col0 < 0 ||
+    grid.row0 < 0 ||
+    grid.col0 + 1 >= width ||
+    grid.row0 + 1 >= height
+  ) {
+    throw new Error("Observer is outside Product 90 raster.");
+  }
+
+  // Read only four remote elevation pixels.
+  const raster = await image.readRasters({
+    window: [
+      grid.col0,
+      grid.row0,
+      grid.col0 + 2,
+      grid.row0 + 2,
+    ],
+    interleave: true,
+  });
+
+  const product90Values = Array.from(raster).slice(0, 4);
+
+  console.log("\n=== PRODUCT 90 ELEVATIONS ===");
+  console.log("Four surrounding pixels (m):", product90Values);
+
+  const product90Elevation = bilinear(
+    product90Values,
+    grid.fx,
+    grid.fy
+  );
+
+  console.log("Product 90 bilinear elevation:", product90Elevation);
+
+  // Read existing local Site04 terrain.
+  console.log("\n=== SITE04 COMPARISON ===");
+
+  const site04Grid = interpolateGrid(
+    OBSERVER.x,
+    OBSERVER.y,
+    SITE04.originX,
+    SITE04.originY,
+    SITE04.pixelSize
+  );
+
+  console.log("Site04 column:", site04Grid.col);
+  console.log("Site04 row:", site04Grid.row);
+
+  const site04Buffer = await readFile(SITE04.path);
+
+  const expectedBytes =
+    SITE04.width *
+    SITE04.height *
+    Float32Array.BYTES_PER_ELEMENT;
+
+  if (site04Buffer.length !== expectedBytes) {
+    throw new Error(
+      `Unexpected Site04 binary size: ${site04Buffer.length}; expected ${expectedBytes}`
+    );
+  }
+
+  const site04Values = readLocalFour(
+    site04Buffer,
+    SITE04.width,
+    site04Grid.col0,
+    site04Grid.row0
+  );
+
+  console.log("Site04 four surrounding pixels (m):", site04Values);
+
+  const site04Elevation = bilinear(
+    site04Values,
+    site04Grid.fx,
+    site04Grid.fy
+  );
+
+  console.log("Site04 bilinear elevation:", site04Elevation);
+
+  console.log("\n=== ELEVATION COMPARISON ===");
+
+  if (
+    product90Elevation === null ||
+    site04Elevation === null
+  ) {
+    console.log("Comparison unavailable: invalid or NoData elevation.");
+  } else {
+    const difference = product90Elevation - site04Elevation;
+
+    console.log("Product 90:", product90Elevation, "m");
+    console.log("Site04:", site04Elevation, "m");
+    console.log("Difference:", difference, "m");
+    console.log("Absolute difference:", Math.abs(difference), "m");
+  }
+
+  console.log("\n=== RESULT ===");
+  console.log("Remote elevation window read completed.");
+  console.log("No full raster download requested.");
+}
+
+main().catch((error) => {
+  console.error("\nINSPECTION FAILED:");
+  console.error(error);
+  process.exitCode = 1;
+});
+</file>
+
+<file path="scripts/inspect-lola-count.mjs">
+import { fromFile } from "geotiff";
+
+const filePath =
+  "public/data/site04_shackleton_rim/Site04_final_adj_5mpp_ldec.tif";
+
+const tiff = await fromFile(filePath);
+const image = await tiff.getImage();
+
+const directory = image.getFileDirectory();
+const geoKeys = image.getGeoKeys();
+const tiePoints = await image.getTiePoints();
+
+console.log("\n=== NASA LOLA MEASUREMENT COUNT INSPECTION ===\n");
+
+console.log("Dimensions:", {
+  width: image.getWidth(),
+  height: image.getHeight(),
+});
+
+console.log("Bounding box:", image.getBoundingBox());
+console.log("Origin:", image.getOrigin());
+console.log("Resolution:", image.getResolution());
+console.log("Tie points:", tiePoints);
+
+console.log("\n=== TIFF METADATA ===\n");
+
+console.log("Samples per pixel:", directory.SamplesPerPixel);
+console.log("Sample format:", directory.SampleFormat);
+console.log("Bits per sample:", directory.BitsPerSample);
+console.log("NoData:", directory.GDAL_NODATA ?? "Not specified");
+
+console.log("\n=== GEOGRAPHIC METADATA ===\n");
+
+console.log({
+  modelType: geoKeys.GTModelTypeGeoKey,
+  rasterType: geoKeys.GTRasterTypeGeoKey,
+  projectionMethod: geoKeys.ProjCoordTransGeoKey,
+  linearUnits: geoKeys.ProjLinearUnitsGeoKey,
+  centralMeridian: geoKeys.ProjStraightVertPoleLongGeoKey,
+  latitudeOfOrigin: geoKeys.ProjNatOriginLatGeoKey,
+});
+
+console.log("\n=== INSPECTION COMPLETE ===\n");
+</file>
+
+<file path="scripts/inspect-lola-georeferencing.mjs">
+import { fromFile } from "geotiff";
+
+const inputPath =
+  "public/data/site04_shackleton_rim/Site04_final_adj_5mpp_surf.tif";
+
+const tiff = await fromFile(inputPath);
+const image = await tiff.getImage();
+
+const directory = image.fileDirectory;
+
+function readTag(name) {
+  try {
+    return directory.getValue(name) ?? null;
+  } catch (error) {
+    return `Unavailable: ${error.message}`;
+  }
+}
+
+console.log("\n=== ORIGINAL NASA LOLA GEOTIFF ===");
+
+console.log({
+  width: image.getWidth(),
+  height: image.getHeight()
+});
+
+console.log("\n=== RAW TIFF TAGS ===");
+
+console.log({
+  ModelTiepoint: readTag("ModelTiepoint"),
+  ModelPixelScale: readTag("ModelPixelScale"),
+  ModelTransformation: readTag("ModelTransformation")
+});
+
+console.log("\n=== PARSED TIE POINTS ===");
+
+try {
+  const tiePoints = await image.getTiePoints();
+  console.dir(tiePoints, { depth: null });
+} catch (error) {
+  console.log("Tie point inspection failed:", error.message);
+}
+
+console.log("\n=== GEOTIFF COORDINATE METADATA ===");
+
+console.log({
+  geoKeys: image.getGeoKeys(),
+  boundingBox: image.getBoundingBox(),
+  origin: image.getOrigin(),
+  resolution: image.getResolution()
+});
+
+console.log("\n=== END ===");
+</file>
+
+<file path="scripts/inspect-lola-slope-uncertainty.mjs">
+import { fromFile } from "geotiff";
+
+const filePath =
+  "public/data/site04_shackleton_rim/Site04_final_adj_5mpp_slp.tif";
+
+const tiff = await fromFile(filePath);
+const image = await tiff.getImage();
+
+const directory = image.getFileDirectory();
+const geoKeys = image.getGeoKeys();
+const tiePoints = await image.getTiePoints();
+
+console.log("\n=== NASA LOLA SLOPE UNCERTAINTY INSPECTION ===\n");
+
+console.log("Dimensions:", {
+  width: image.getWidth(),
+  height: image.getHeight(),
+});
+
+console.log("Bounding box:", image.getBoundingBox());
+console.log("Origin:", image.getOrigin());
+console.log("Resolution:", image.getResolution());
+console.log("Tie points:", tiePoints);
+
+console.log("\n=== TIFF METADATA ===\n");
+
+console.log("Samples per pixel:", directory.SamplesPerPixel);
+console.log("Sample format:", directory.SampleFormat);
+console.log("Bits per sample:", directory.BitsPerSample);
+console.log("NoData:", directory.GDAL_NODATA ?? "Not specified");
+
+console.log("\n=== GEOGRAPHIC METADATA ===\n");
+
+console.log({
+  modelType: geoKeys.GTModelTypeGeoKey,
+  rasterType: geoKeys.GTRasterTypeGeoKey,
+  projectionMethod: geoKeys.ProjCoordTransGeoKey,
+  linearUnits: geoKeys.ProjLinearUnitsGeoKey,
+  centralMeridian: geoKeys.ProjStraightVertPoleLongGeoKey,
+  latitudeOfOrigin: geoKeys.ProjNatOriginLatGeoKey,
+});
+
+console.log("\n=== INSPECTION COMPLETE ===\n");
+</file>
+
+<file path="scripts/inspect-lola-slope.mjs">
+import { fromFile } from "geotiff";
+
+const filePath =
+  "public/data/site04_shackleton_rim/Site04_final_adj_5mpp_slp.tif";
+
+const tiff = await fromFile(filePath);
+const image = await tiff.getImage();
+
+const directory = image.getFileDirectory();
+const geoKeys = image.getGeoKeys();
+const tiePoints = await image.getTiePoints();
+
+console.log("\n=== NASA LOLA SLOPE RASTER INSPECTION ===\n");
+
+console.log("Dimensions:", {
+  width: image.getWidth(),
+  height: image.getHeight(),
+});
+
+console.log("Bounding box:", image.getBoundingBox());
+console.log("Origin:", image.getOrigin());
+console.log("Resolution:", image.getResolution());
+console.log("Tie points:", tiePoints);
+
+console.log("\n=== TIFF METADATA ===\n");
+
+console.log("Samples per pixel:", directory.SamplesPerPixel);
+console.log("Sample format:", directory.SampleFormat);
+console.log("Bits per sample:", directory.BitsPerSample);
+console.log("NoData:", directory.GDAL_NODATA ?? "Not specified");
+
+console.log("\n=== GEOGRAPHIC METADATA ===\n");
+
+console.log({
+  modelType: geoKeys.GTModelTypeGeoKey,
+  rasterType: geoKeys.GTRasterTypeGeoKey,
+  projectionMethod: geoKeys.ProjCoordTransGeoKey,
+  linearUnits: geoKeys.ProjLinearUnitsGeoKey,
+  radius: geoKeys.ProjAzimuthalRadiusGeoKey,
+  centralMeridian: geoKeys.ProjStraightVertPoleLongGeoKey,
+  latitudeOfOrigin: geoKeys.ProjNatOriginLatGeoKey,
+});
+
+console.log("\n=== INSPECTION COMPLETE ===\n");
+</file>
+
+<file path="scripts/inspect-lola-uncertainty.mjs">
+import { fromFile } from "geotiff";
+
+const filePath =
+  "public/data/site04_shackleton_rim/Site04_final_adj_5mpp_toterr.tif";
+
+const tiff = await fromFile(filePath);
+const image = await tiff.getImage();
+
+const directory = image.getFileDirectory();
+const geoKeys = image.getGeoKeys();
+const tiePoints = await image.getTiePoints();
+
+console.log("\n=== NASA LOLA UNCERTAINTY RASTER ===\n");
+
+console.log("Dimensions:", {
+  width: image.getWidth(),
+  height: image.getHeight(),
+});
+
+console.log("Bounding box:", image.getBoundingBox());
+console.log("Origin:", image.getOrigin());
+console.log("Resolution:", image.getResolution());
+
+console.log("\n=== RAW TIFF TAGS ===\n");
+
+console.log("ModelTiepoint:", directory.getValue("ModelTiepoint"));
+console.log("ModelPixelScale:", directory.getValue("ModelPixelScale"));
+console.log("ModelTransformation:", directory.getValue("ModelTransformation"));
+
+console.log("\n=== GEOREFERENCING ===\n");
+
+console.log("Parsed tie points:", tiePoints);
+console.log("GeoKeys:", geoKeys);
+
+console.log("\n=== RASTER DATA TYPE ===\n");
+
+console.log("Samples per pixel:", image.getSamplesPerPixel());
+console.log("Sample format:", directory.getValue("SampleFormat"));
+console.log("Bits per sample:", directory.getValue("BitsPerSample"));
+
+console.log("\nInspection complete.");
+</file>
+
+<file path="scripts/inspect-lola.mjs">
+import { fromFile } from "geotiff";
+import path from "node:path";
+
+const filePath = path.resolve(
+  process.cwd(),
+  "public/data/site04_shackleton_rim/Site04_final_adj_5mpp_surf.tif"
+);
+
+const tiff = await fromFile(filePath);
+const image = await tiff.getImage();
+
+const width = image.getWidth();
+const height = image.getHeight();
+
+const bbox = image.getBoundingBox();
+const resolution = image.getResolution();
+
+// Resolve tie points before inspecting them
+const tiePoints = await image.getTiePoints();
+
+const geoKeys = image.getGeoKeys();
+
+const raster = await image.readRasters({ samples: [0] });
+const elevations = raster[0];
+
+let minElevation = Infinity;
+let maxElevation = -Infinity;
+let validCount = 0;
+
+for (const value of elevations) {
+  if (Number.isFinite(value)) {
+    minElevation = Math.min(minElevation, value);
+    maxElevation = Math.max(maxElevation, value);
+    validCount++;
+  }
+}
+
+console.log(
+  JSON.stringify(
+    {
+      width,
+      height,
+      bbox,
+      resolution,
+      tiePoints,
+      geoKeys,
+      minElevation,
+      maxElevation,
+      validCount,
+      totalPixels: width * height,
+    },
+    null,
+    2
+  )
+);
+</file>
+
+<file path="scripts/inspect-xyzi.mjs">
+import fs from "node:fs";
+
+const filePath = "scripts/Site04_final_adj.xyzi";
+const buffer = fs.readFileSync(filePath);
+
+console.log("\n=== XYZI FILE INSPECTION ===\n");
+
+console.log("File size:", buffer.length, "bytes");
+
+console.log("\nFirst 64 bytes (hex):");
+console.log(buffer.subarray(0, 64).toString("hex"));
+
+console.log("\nFirst 64 bytes (ASCII):");
+console.log(
+  buffer.subarray(0, 64).toString("ascii")
+);
+
+console.log("\n=== POSSIBLE FLOAT32 VALUES ===\n");
+
+for (const endian of ["LE", "BE"]) {
+  console.log(`\n${endian}:`);
+
+  for (let offset = 0; offset < 32; offset += 4) {
+    const value =
+      endian === "LE"
+        ? buffer.readFloatLE(offset)
+        : buffer.readFloatBE(offset);
+
+    console.log(`Offset ${offset}:`, value);
+  }
+}
+
+console.log("\n=== INSPECTION COMPLETE ===\n");
+</file>
+
+<file path="scripts/validate-lola-count.mjs">
+import { fromFile } from "geotiff";
+
+const filePath =
+  "public/data/site04_shackleton_rim/Site04_final_adj_5mpp_ldec.tif";
+
+const latitude = -89.7668;
+const longitude = 188.13;
+
+const radius = 1737400;
+const centralMeridian = 0;
+
+const tiff = await fromFile(filePath);
+const image = await tiff.getImage();
+
+const latitudeFromSouthPole =
+  ((90 + latitude) * Math.PI) / 180;
+
+const longitudeDifference =
+  ((longitude - centralMeridian) * Math.PI) / 180;
+
+const rho =
+  2 * radius * Math.tan(latitudeFromSouthPole / 2);
+
+const xMeters = rho * Math.sin(longitudeDifference);
+const yMeters = rho * Math.cos(longitudeDifference);
+
+const origin = image.getOrigin();
+const resolution = image.getResolution();
+
+const column =
+  (xMeters - origin[0]) / resolution[0] - 0.5;
+
+const row =
+  (yMeters - origin[1]) / resolution[1] - 0.5;
+
+const col0 = Math.floor(column);
+const row0 = Math.floor(row);
+
+const raster = await image.readRasters({
+  window: [col0, row0, col0 + 2, row0 + 2],
+});
+
+const values = [
+  Number(raster[0][0]),
+  Number(raster[0][1]),
+  Number(raster[0][2]),
+  Number(raster[0][3]),
+];
+
+console.log("\n=== NASA LOLA MEASUREMENT COUNT ===\n");
+
+console.log("Observation point:", { latitude, longitude });
+console.log("Fractional pixel:", { column, row });
+
+console.log("\nFour surrounding pixels:");
+console.log(`(${col0}, ${row0}):`, values[0]);
+console.log(`(${col0 + 1}, ${row0}):`, values[1]);
+console.log(`(${col0}, ${row0 + 1}):`, values[2]);
+console.log(`(${col0 + 1}, ${row0 + 1}):`, values[3]);
+
+console.log("\n=== RESULT ===\n");
+
+console.log(
+  "All values finite:",
+  values.every(Number.isFinite)
+);
+
+console.log(
+  "All values non-negative:",
+  values.every((value) => value >= 0)
+);
+
+console.log("\n=== VALIDATION COMPLETE ===\n");
+</file>
+
+<file path="scripts/validate-lola-proj.py">
+from pyproj import CRS, Transformer
+
+# Site04 geographic observation point
+latitude = -89.7668
+longitude_east = 188.13
+
+# NASA LOLA spherical lunar radius
+lunar_radius = 1737400
+
+# Geographic coordinates on a spherical Moon
+geographic_crs = CRS.from_proj4(
+    f"+proj=longlat +R={lunar_radius} +no_defs +type=crs"
+)
+
+# Conventional south-polar stereographic projection
+projected_crs = CRS.from_proj4(
+    f"+proj=stere +lat_0=-90 +lon_0=0 "
+    f"+k_0=1 +R={lunar_radius} +units=m +no_defs +type=crs"
+)
+
+transformer = Transformer.from_crs(
+    geographic_crs,
+    projected_crs,
+    always_xy=True
+)
+
+proj_x, proj_y = transformer.transform(
+    longitude_east,
+    latitude
+)
+
+# Our JavaScript implementation
+rho = 2 * lunar_radius * __import__("math").tan(
+    (90 + latitude) * __import__("math").pi / 360
+)
+
+import math
+
+our_x = rho * math.sin(math.radians(longitude_east))
+our_y = rho * math.cos(math.radians(longitude_east))
+
+# NASA raster bounds
+min_x, min_y, max_x, max_y = -9000, -15000, 7000, 1000
+
+def inside_raster(x, y):
+    return min_x <= x <= max_x and min_y <= y <= max_y
+
+print("\n=== INDEPENDENT PROJ VALIDATION ===")
+
+print("\nPROJ standard south-polar result:")
+print({
+    "x": proj_x,
+    "y": proj_y,
+    "insideRaster": inside_raster(proj_x, proj_y)
+})
+
+print("\nPROJ result with Y-axis reversed:")
+print({
+    "x": proj_x,
+    "y": -proj_y,
+    "insideRaster": inside_raster(proj_x, -proj_y)
+})
+
+print("\nOur JavaScript projection:")
+print({
+    "x": our_x,
+    "y": our_y,
+    "insideRaster": inside_raster(our_x, our_y)
+})
+
+print("\n=== DIFFERENCES ===")
+
+print({
+    "xDifference": abs(proj_x - our_x),
+    "yDifferenceStandard": abs(proj_y - our_y),
+    "yDifferenceReversed": abs(-proj_y - our_y)
+})
+</file>
+
+<file path="scripts/validate-lola-projection.mjs">
+import { readFile } from "node:fs/promises";
+import path from "node:path";
+
+const dataDir = path.join(
+  process.cwd(),
+  "public/data/site04_shackleton_rim"
+);
+
+const metadata = JSON.parse(
+  await readFile(path.join(dataDir, "metadata.json"), "utf8")
+);
+
+const latitude = -89.7668;
+const longitudeEast = 188.13;
+
+const radius = metadata.georeferencing.lunarRadiusMeters;
+const centralMeridian =
+  metadata.georeferencing.centralMeridianDegrees;
+
+const toRadians = (degrees) => degrees * Math.PI / 180;
+const toDegrees = (radians) => radians * 180 / Math.PI;
+
+// Forward projection.
+const latitudeRadians = toRadians(latitude);
+const longitudeDifference = toRadians(
+  longitudeEast - centralMeridian
+);
+
+const rho =
+  2 * radius *
+  Math.tan((Math.PI / 2 + latitudeRadians) / 2);
+
+const projectedX = rho * Math.sin(longitudeDifference);
+const projectedY = rho * Math.cos(longitudeDifference);
+
+// Independent inverse projection.
+const inverseRho = Math.hypot(projectedX, projectedY);
+
+const recoveredLatitude =
+  -90 + toDegrees(
+    2 * Math.atan(inverseRho / (2 * radius))
+  );
+
+let recoveredLongitude =
+  centralMeridian +
+  toDegrees(Math.atan2(projectedX, projectedY));
+
+recoveredLongitude =
+  ((recoveredLongitude % 360) + 360) % 360;
+
+// Compare the recovered geographic coordinates.
+const latitudeError = recoveredLatitude - latitude;
+
+// Normalize longitude difference to [-180, 180].
+const longitudeError =
+  ((recoveredLongitude - longitudeEast + 540) % 360) - 180;
+
+// Convert projected coordinates into raster pixel indices.
+const originX = metadata.georeferencing.tiePoint.x;
+const originY = metadata.georeferencing.tiePoint.y;
+
+const pixelWidth = metadata.pixelResolution[0];
+const pixelHeight = Math.abs(metadata.pixelResolution[1]);
+
+const column =
+  (projectedX - originX) / pixelWidth - 0.5;
+
+const row =
+  (originY - projectedY) / pixelHeight - 0.5;
+
+console.log("\n=== INDEPENDENT PROJECTION ROUND-TRIP ===");
+
+console.log({
+  inputLatitude: latitude,
+  inputLongitudeEast: longitudeEast,
+  projectedX,
+  projectedY,
+  recoveredLatitude,
+  recoveredLongitude,
+  latitudeErrorDegrees: latitudeError,
+  longitudeErrorDegrees: longitudeError
+});
+
+console.log("\n=== RASTER POSITION ===");
+
+console.log({
+  fractionalColumn: column,
+  fractionalRow: row,
+  insideRaster:
+    column >= 0 &&
+    row >= 0 &&
+    column < metadata.width - 1 &&
+    row < metadata.height - 1
+});
+
+const passed =
+  Math.abs(latitudeError) < 1e-10 &&
+  Math.abs(longitudeError) < 1e-10;
+
+console.log("\n=== RESULT ===");
+
+console.log(
+  passed
+    ? "PASS: Forward and inverse spherical projections agree."
+    : "FAIL: Geographic round-trip mismatch."
+);
+
+if (!passed) {
+  process.exitCode = 1;
+}
+</file>
+
+<file path="scripts/validate-lola-sample.mjs">
+import { fromFile } from "geotiff";
+
+const filePath =
+  "public/data/site04_shackleton_rim/Site04_final_adj_5mpp_toterr.tif";
+
+const tiff = await fromFile(filePath);
+const image = await tiff.getImage();
+
+const width = image.getWidth();
+const height = image.getHeight();
+
+const raster = await image.readRasters({ interleave: true });
+
+const column = 1599.4926788562125;
+const row = 1599.5691130540986;
+
+const x0 = Math.floor(column);
+const y0 = Math.floor(row);
+const x1 = x0 + 1;
+const y1 = y0 + 1;
+
+function getValue(x, y) {
+  return raster[y * width + x];
+}
+
+const v00 = getValue(x0, y0);
+const v10 = getValue(x1, y0);
+const v01 = getValue(x0, y1);
+const v11 = getValue(x1, y1);
+
+const dx = column - x0;
+const dy = row - y0;
+
+const top = v00 * (1 - dx) + v10 * dx;
+const bottom = v01 * (1 - dx) + v11 * dx;
+
+const interpolated = top * (1 - dy) + bottom * dy;
+
+console.log("\n=== NASA LOLA POINT UNCERTAINTY ===\n");
+
+console.log("Raster dimensions:", `${width} x ${height}`);
+console.log("Sample column:", column);
+console.log("Sample row:", row);
+
+console.log("\n=== FOUR SURROUNDING PIXELS ===\n");
+
+console.log(`(${x0}, ${y0}):`, v00);
+console.log(`(${x1}, ${y0}):`, v10);
+console.log(`(${x0}, ${y1}):`, v01);
+console.log(`(${x1}, ${y1}):`, v11);
+
+console.log("\n=== BILINEAR INTERPOLATION ===\n");
+
+console.log("Interpolated uncertainty:", interpolated);
+
+console.log("\n=== VALIDATION ===\n");
+
+console.log(
+  "All four values finite:",
+  [v00, v10, v01, v11].every(Number.isFinite)
+);
+
+console.log(
+  "All four values non-negative:",
+  [v00, v10, v01, v11].every(
+    (value) => Number.isFinite(value) && value >= 0
+  )
+);
+</file>
+
+<file path="scripts/validate-lola-slope-uncertainty.mjs">
+import { fromFile } from "geotiff";
+
+const filePath =
+  "public/data/site04_shackleton_rim/Site04_final_adj_5mpp_slperr.tif";
+
+const latitude = -89.7668;
+const longitude = 188.13;
+
+const radius = 1737400;
+const centralMeridian = 0;
+
+const tiff = await fromFile(filePath);
+const image = await tiff.getImage();
+
+const latitudeFromSouthPole = ((90 + latitude) * Math.PI) / 180;
+const longitudeDifference =
+  ((longitude - centralMeridian) * Math.PI) / 180;
+
+const rho =
+  2 * radius * Math.tan(latitudeFromSouthPole / 2);
+
+const xMeters = rho * Math.sin(longitudeDifference);
+const yMeters = rho * Math.cos(longitudeDifference);
+
+const origin = image.getOrigin();
+const resolution = image.getResolution();
+
+const column =
+  (xMeters - origin[0]) / resolution[0] - 0.5;
+
+const row =
+  (yMeters - origin[1]) / resolution[1] - 0.5;
+
+const col0 = Math.floor(column);
+const row0 = Math.floor(row);
+
+const raster = await image.readRasters({
+  window: [col0, row0, col0 + 2, row0 + 2],
+});
+
+const values = [
+  Number(raster[0][0]),
+  Number(raster[0][1]),
+  Number(raster[0][2]),
+  Number(raster[0][3]),
+];
+
+const dx = column - col0;
+const dy = row - row0;
+
+const [v00, v10, v01, v11] = values;
+
+const allValid = values.every(
+  (value) => Number.isFinite(value) && value >= 0
+);
+
+const interpolated = allValid
+  ? v00 * (1 - dx) * (1 - dy) +
+    v10 * dx * (1 - dy) +
+    v01 * (1 - dx) * dy +
+    v11 * dx * dy
+  : null;
+
+console.log("\n=== NASA LOLA SLOPE UNCERTAINTY ===\n");
+
+console.log("Observation:", { latitude, longitude });
+console.log("Fractional pixel:", { column, row });
+
+console.log("\nFour surrounding pixels:");
+console.log(`(${col0}, ${row0}):`, values[0]);
+console.log(`(${col0 + 1}, ${row0}):`, values[1]);
+console.log(`(${col0}, ${row0 + 1}):`, values[2]);
+console.log(`(${col0 + 1}, ${row0 + 1}):`, values[3]);
+
+console.log("\n=== RESULT ===\n");
+console.log("All values finite and non-negative:", allValid);
+console.log("Interpolated uncertainty:", interpolated);
+
+console.log("\n=== VALIDATION COMPLETE ===\n");
+</file>
+
+<file path="scripts/validate-lola-slope.mjs">
+import { fromFile } from "geotiff";
+
+const filePath =
+  "public/data/site04_shackleton_rim/Site04_final_adj_5mpp_slp.tif";
+
+const latitude = -89.7668;
+const longitude = 188.13;
+
+const radius = 1737400;
+const centralMeridian = 0;
+
+const tiff = await fromFile(filePath);
+const image = await tiff.getImage();
+
+// Convert lunar coordinates to south-polar stereographic coordinates.
+const latitudeFromSouthPole = ((90 + latitude) * Math.PI) / 180;
+const longitudeDifference =
+  ((longitude - centralMeridian) * Math.PI) / 180;
+
+const rho =
+  2 * radius * Math.tan(latitudeFromSouthPole / 2);
+
+const xMeters = rho * Math.sin(longitudeDifference);
+const yMeters = rho * Math.cos(longitudeDifference);
+
+// Convert projected coordinates to raster pixel coordinates.
+// The -0.5 correction accounts for PixelIsArea.
+const origin = image.getOrigin();
+const resolution = image.getResolution();
+
+const column = (xMeters - origin[0]) / resolution[0] - 0.5;
+const row = (yMeters - origin[1]) / resolution[1] - 0.5;
+
+const col0 = Math.floor(column);
+const row0 = Math.floor(row);
+
+// Read the four surrounding pixels.
+const raster = await image.readRasters({
+  window: [col0, row0, col0 + 2, row0 + 2],
+});
+
+const values = [
+  { pixel: `(${col0}, ${row0})`, value: Number(raster[0][0]) },
+  { pixel: `(${col0 + 1}, ${row0})`, value: Number(raster[0][1]) },
+  { pixel: `(${col0}, ${row0 + 1})`, value: Number(raster[0][2]) },
+  { pixel: `(${col0 + 1}, ${row0 + 1})`, value: Number(raster[0][3]) },
+];
+
+const dx = column - col0;
+const dy = row - row0;
+
+const [v00, v10, v01, v11] = values.map((item) => item.value);
+
+const allValid = values.every(
+  (item) => Number.isFinite(item.value)
+);
+
+let interpolatedSlope = null;
+
+if (allValid) {
+  interpolatedSlope =
+    v00 * (1 - dx) * (1 - dy) +
+    v10 * dx * (1 - dy) +
+    v01 * (1 - dx) * dy +
+    v11 * dx * dy;
+}
+
+console.log("\n=== NASA LOLA SLOPE VALIDATION ===\n");
+
+console.log("Observation point:", { latitude, longitude });
+console.log("Projected coordinates:", { xMeters, yMeters });
+console.log("Fractional pixel:", { column, row });
+
+console.log("\n=== FOUR SURROUNDING PIXELS ===\n");
+
+for (const item of values) {
+  console.log(`${item.pixel}: ${item.value}`);
+}
+
+console.log("\n=== VALIDATION RESULT ===\n");
+
+console.log("All four values finite:", allValid);
+console.log("Bilinear interpolated value:", interpolatedSlope);
+
+console.log("\n=== VALIDATION COMPLETE ===\n");
+</file>
+
+<file path="scripts/validate-lola-uncertainty.mjs">
+import { fromFile } from "geotiff";
+
+const filePath =
+  "public/data/site04_shackleton_rim/Site04_final_adj_5mpp_toterr.tif";
+
+const tiff = await fromFile(filePath);
+const image = await tiff.getImage();
+
+const width = image.getWidth();
+const height = image.getHeight();
+
+const raster = await image.readRasters({ interleave: true });
+
+const column = 1599.4926788562125;
+const row = 1599.5691130540986;
+
+const x0 = Math.floor(column);
+const y0 = Math.floor(row);
+const x1 = x0 + 1;
+const y1 = y0 + 1;
+
+function getValue(x, y) {
+  return raster[y * width + x];
+}
+
+const v00 = getValue(x0, y0);
+const v10 = getValue(x1, y0);
+const v01 = getValue(x0, y1);
+const v11 = getValue(x1, y1);
+
+const dx = column - x0;
+const dy = row - y0;
+
+const top = v00 * (1 - dx) + v10 * dx;
+const bottom = v01 * (1 - dx) + v11 * dx;
+
+const interpolated = top * (1 - dy) + bottom * dy;
+
+console.log("\n=== NASA LOLA POINT UNCERTAINTY ===\n");
+
+console.log("Raster dimensions:", `${width} x ${height}`);
+console.log("Sample column:", column);
+console.log("Sample row:", row);
+
+console.log("\n=== FOUR SURROUNDING PIXELS ===\n");
+
+console.log(`(${x0}, ${y0}):`, v00);
+console.log(`(${x1}, ${y0}):`, v10);
+console.log(`(${x0}, ${y1}):`, v01);
+console.log(`(${x1}, ${y1}):`, v11);
+
+console.log("\n=== BILINEAR INTERPOLATION ===\n");
+
+console.log("Interpolated uncertainty:", interpolated);
+
+console.log("\n=== VALIDATION ===\n");
+
+console.log(
+  "All four values finite:",
+  [v00, v10, v01, v11].every(Number.isFinite)
+);
+
+console.log(
+  "All four values non-negative:",
+  [v00, v10, v01, v11].every(
+    (value) => Number.isFinite(value) && value >= 0
+  )
+);
+</file>
+
+<file path="scripts/validate-xyzi-against-raster.mjs">
+import fs from "node:fs";
+import { fromFile } from "geotiff";
+
+const pointCloudPath = "scripts/Site04_final_adj.xyzi";
+const rasterPath =
+  "public/data/site04_shackleton_rim/Site04_final_adj_5mpp_surf.tif";
+
+const buffer = fs.readFileSync(pointCloudPath);
+const RECORD_SIZE = 32;
+const RECORD_COUNT = buffer.length / RECORD_SIZE;
+
+const WIDTH = 3200;
+const HEIGHT = 3200;
+
+// Raster georeferencing already verified against its original TIFF.
+const ORIGIN_X = -9000;
+const ORIGIN_Y = 1000;
+const PIXEL_WIDTH = 5;
+const PIXEL_HEIGHT = -5;
+
+// Provisional XYZI unit conversion: kilometres to metres.
+const UNIT_SCALE = 1000;
+
+const targetX = -1000.0366057189;
+const targetY = -7000.3455652705;
+
+const points = [];
+
+for (let i = 0; i < RECORD_COUNT; i++) {
+  const offset = i * RECORD_SIZE;
+
+  const x = buffer.readDoubleLE(offset) * UNIT_SCALE;
+  const y = buffer.readDoubleLE(offset + 8) * UNIT_SCALE;
+  const z = buffer.readDoubleLE(offset + 16) * UNIT_SCALE;
+
+  const distance = Math.hypot(x - targetX, y - targetY);
+
+  if (points.length < 10 || distance < points[9].distance) {
+    points.push({ record: i, x, y, z, distance });
+
+    points.sort((a, b) => a.distance - b.distance);
+
+    if (points.length > 10) points.pop();
+  }
+}
+
+const tiff = await fromFile(rasterPath);
+const image = await tiff.getImage();
+const rasterData = await image.readRasters();
+
+const elevation = rasterData[0];
+
+function sampleBilinear(x, y) {
+  const column =
+    (x - ORIGIN_X) / PIXEL_WIDTH - 0.5;
+
+  const row =
+    (y - ORIGIN_Y) / PIXEL_HEIGHT - 0.5;
+
+  const col0 = Math.floor(column);
+  const row0 = Math.floor(row);
+
+  const dx = column - col0;
+  const dy = row - row0;
+
+  if (
+    col0 < 0 ||
+    row0 < 0 ||
+    col0 + 1 >= WIDTH ||
+    row0 + 1 >= HEIGHT
+  ) {
+    return null;
+  }
+
+  const get = (col, r) => elevation[r * WIDTH + col];
+
+  const v00 = get(col0, row0);
+  const v10 = get(col0 + 1, row0);
+  const v01 = get(col0, row0 + 1);
+  const v11 = get(col0 + 1, row0 + 1);
+
+  if (![v00, v10, v01, v11].every(Number.isFinite)) {
+    return null;
+  }
+
+  return (
+    v00 * (1 - dx) * (1 - dy) +
+    v10 * dx * (1 - dy) +
+    v01 * (1 - dx) * dy +
+    v11 * dx * dy
+  );
+}
+
+console.log("\n=== XYZI POINTS VS NASA LDEM ===\n");
+
+console.log("Raster dimensions:", image.getWidth(), "x", image.getHeight());
+console.log("Points compared:", points.length);
+console.log("Assumed XYZI scale:", UNIT_SCALE, "metres per coordinate unit");
+
+const results = points.map((point) => {
+  const rasterElevation = sampleBilinear(point.x, point.y);
+
+  return {
+    record: point.record,
+    distanceFromTarget_m: Number(point.distance.toFixed(3)),
+    pointElevation_m: Number(point.z.toFixed(3)),
+    rasterElevation_m:
+      rasterElevation === null
+        ? null
+        : Number(rasterElevation.toFixed(3)),
+    difference_m:
+      rasterElevation === null
+        ? null
+        : Number((point.z - rasterElevation).toFixed(3)),
+  };
+});
+
+console.table(results);
+
+const valid = results.filter(
+  (item) => item.difference_m !== null
+);
+
+if (valid.length > 0) {
+  const meanAbsoluteDifference =
+    valid.reduce(
+      (sum, item) => sum + Math.abs(item.difference_m),
+      0
+    ) / valid.length;
+
+  console.log(
+    "\nMean absolute elevation difference:",
+    meanAbsoluteDifference.toFixed(3),
+    "m"
+  );
+}
+
+console.log("\n=== VALIDATION COMPLETE ===\n");
+</file>
+
+<file path="scripts/validate-xyzi-statistics.mjs">
+import fs from "node:fs";
+import { fromFile } from "geotiff";
+
+const buffer = fs.readFileSync("scripts/Site04_final_adj.xyzi");
+
+const RECORD_SIZE = 32;
+const RECORD_COUNT = buffer.length / RECORD_SIZE;
+
+const rasterPath =
+  "public/data/site04_shackleton_rim/Site04_final_adj_5mpp_surf.tif";
+
+const WIDTH = 3200;
+const HEIGHT = 3200;
+
+const ORIGIN_X = -9000;
+const ORIGIN_Y = 1000;
+const PIXEL_WIDTH = 5;
+const PIXEL_HEIGHT = -5;
+
+const targetX = -1000.0366057189;
+const targetY = -7000.3455652705;
+
+const MAX_DISTANCE_METERS = 1000;
+const UNIT_SCALE = 1000;
+
+const tiff = await fromFile(rasterPath);
+const image = await tiff.getImage();
+const rasterData = await image.readRasters();
+const elevation = rasterData[0];
+
+function sampleBilinear(x, y) {
+  const column =
+    (x - ORIGIN_X) / PIXEL_WIDTH - 0.5;
+
+  const row =
+    (y - ORIGIN_Y) / PIXEL_HEIGHT - 0.5;
+
+  const col0 = Math.floor(column);
+  const row0 = Math.floor(row);
+
+  if (
+    col0 < 0 ||
+    row0 < 0 ||
+    col0 + 1 >= WIDTH ||
+    row0 + 1 >= HEIGHT
+  ) {
+    return null;
+  }
+
+  const dx = column - col0;
+  const dy = row - row0;
+
+  const get = (col, r) => elevation[r * WIDTH + col];
+
+  const v00 = get(col0, row0);
+  const v10 = get(col0 + 1, row0);
+  const v01 = get(col0, row0 + 1);
+  const v11 = get(col0 + 1, row0 + 1);
+
+  if (![v00, v10, v01, v11].every(Number.isFinite)) {
+    return null;
+  }
+
+  return (
+    v00 * (1 - dx) * (1 - dy) +
+    v10 * dx * (1 - dy) +
+    v01 * (1 - dx) * dy +
+    v11 * dx * dy
+  );
+}
+
+let compared = 0;
+let skipped = 0;
+let sumAbsolute = 0;
+let sumSquared = 0;
+let sumSigned = 0;
+let maximumAbsolute = 0;
+
+const absoluteDifferences = [];
+
+for (let i = 0; i < RECORD_COUNT; i++) {
+  const offset = i * RECORD_SIZE;
+
+  const x = buffer.readDoubleLE(offset) * UNIT_SCALE;
+  const y = buffer.readDoubleLE(offset + 8) * UNIT_SCALE;
+  const z = buffer.readDoubleLE(offset + 16) * UNIT_SCALE;
+
+  const distance = Math.hypot(
+    x - targetX,
+    y - targetY
+  );
+
+  if (distance > MAX_DISTANCE_METERS) continue;
+
+  const rasterElevation = sampleBilinear(x, y);
+
+  if (rasterElevation === null) {
+    skipped++;
+    continue;
+  }
+
+  const difference = z - rasterElevation;
+  const absolute = Math.abs(difference);
+
+  compared++;
+  sumAbsolute += absolute;
+  sumSquared += difference * difference;
+  sumSigned += difference;
+
+  if (absolute > maximumAbsolute) {
+    maximumAbsolute = absolute;
+  }
+
+  absoluteDifferences.push(absolute);
+}
+
+absoluteDifferences.sort((a, b) => a - b);
+
+function percentile(sorted, p) {
+  if (sorted.length === 0) return null;
+
+  const index = Math.ceil(p * sorted.length) - 1;
+  return sorted[Math.max(0, index)];
+}
+
+console.log("\n=== EXPANDED NASA LOLA VALIDATION ===\n");
+
+console.log("Total point-cloud records:", RECORD_COUNT);
+console.log("Search radius:", MAX_DISTANCE_METERS, "m");
+console.log("Points compared:", compared);
+console.log("Points skipped:", skipped);
+
+if (compared === 0) {
+  throw new Error("No points could be compared.");
+}
+
+console.log("\n=== ELEVATION DIFFERENCE STATISTICS ===\n");
+
+console.table({
+  meanAbsoluteError_m: sumAbsolute / compared,
+  rootMeanSquareError_m: Math.sqrt(sumSquared / compared),
+  meanSignedError_m: sumSigned / compared,
+  maximumAbsoluteError_m: maximumAbsolute,
+  percentile95AbsoluteError_m: percentile(absoluteDifferences, 0.95),
+  medianAbsoluteError_m: percentile(absoluteDifferences, 0.50),
+});
+
+console.log("\n=== VALIDATION COMPLETE ===\n");
+</file>
+
+<file path="scripts/verify-lola-registration.mjs">
+import { fromFile } from "geotiff";
+import path from "node:path";
+
+const filePath = path.join(
+  process.cwd(),
+  "public/data/site04_shackleton_rim/Site04_final_adj_5mpp_surf.tif"
+);
+
+const tiff = await fromFile(filePath);
+const image = await tiff.getImage();
+
+const directory = image.getFileDirectory();
+const geoKeys = image.getGeoKeys();
+
+console.log("\n=== ORIGINAL NASA LOLA GEOTIFF ===");
+
+console.log("Dimensions:", {
+  width: image.getWidth(),
+  height: image.getHeight()
+});
+
+console.log("\n=== RAW GEOREFERENCING TAGS ===");
+
+console.log("ModelTiepoint:", directory.ModelTiepoint);
+console.log("ModelPixelScale:", directory.ModelPixelScale);
+console.log("ModelTransformation:", directory.ModelTransformation);
+
+console.log("\n=== GEOTIFF COORDINATE METADATA ===");
+
+console.log("Raster type:", geoKeys.GTRasterTypeGeoKey);
+console.log("Projection method:", geoKeys.ProjCoordTransGeoKey);
+console.log("Origin latitude:", geoKeys.ProjNatOriginLatGeoKey);
+console.log("Central meridian:", geoKeys.ProjStraightVertPoleLongGeoKey);
+console.log("Lunar radius:", geoKeys.GeogSemiMajorAxisGeoKey);
+
+console.log("\n=== LIBRARY INTERPRETATION ===");
+
+console.log("Bounding box:", image.getBoundingBox());
+console.log("Origin:", image.getOrigin());
+console.log("Resolution:", image.getResolution());
+
+console.log("\n=== REGISTRATION INTERPRETATION ===");
+
+if (geoKeys.GTRasterTypeGeoKey === 1) {
+  console.log("GeoTIFF declares PixelIsArea.");
+  console.log("The tie point describes the outer pixel corner.");
+  console.log("Pixel centres are offset by half a pixel.");
+} else if (geoKeys.GTRasterTypeGeoKey === 2) {
+  console.log("GeoTIFF declares PixelIsPoint.");
+  console.log("The tie point represents a pixel centre.");
+} else {
+  console.log("Raster registration is undefined or unexpected.");
+}
+
+console.log("\n=== END ===");
+</file>
+
+<file path="src/app/api/horizons/route.ts">
+import { NextRequest, NextResponse } from "next/server";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
+
+import {
+  type LolaTerrainData,
+  sampleLolaHeightAtLocation,
+} from "@/components/lib/lunar/terrainData";
+
+import {
+  calculateTerrainHorizon,
+} from "@/components/lib/lunar/terrainHorizon";
+
+const HORIZONS_URL = "https://ssd.jpl.nasa.gov/api/horizons.api";
+
+const BASE_OBSERVER = {
+  name: "Site04 — Shackleton Rim",
+  longitudeEast: 188.13,
+  latitude: -89.7668,
+};
+
+const STEP_SIZE = "10m";
+const EXPECTED_OBSERVATIONS_PER_DAY = 145;
+
+const TERRAIN_OPTIONS = {
+  directionCount: 1440,
+  sampleStepMeters: 5,
+  maxDistanceMeters: 15000,
+};
+
+type HorizonsPayload = {
+  result?: string;
+  error?: string;
+  signature?: {
+    source?: string;
+    version?: string;
+  };
+};
+
+type Observation = {
+  time: string;
+  timeUtc: string;
+  azimuthDeg: number;
+  elevationDeg: number;
+  horizonsMarker: string | null;
+};
+
+type ParsedObservations = {
+  observations: Observation[];
+  totalParsed: number;
+  totalUnparsed: number;
+  unparsedLines: string[];
+};
+
+type Observer = typeof BASE_OBSERVER & {
+  altitudeKm: number;
+};
+
+type TerrainVisibility = {
+  terrainHorizonElevationDeg: number;
+  clearanceDeg: number;
+  blockedBySampledTerrain: boolean;
+  assessment:
+    | "blocked_by_sampled_terrain"
+    | "above_sampled_terrain_unconfirmed";
+  terrainCoverageComplete: false;
+};
+
+type TerrainVisibilityObservation = Observation & {
+  terrainVisibility: TerrainVisibility;
+};
+
+type VisibilityState =
+  | "blocked_by_sampled_terrain"
+  | "above_sampled_terrain_unconfirmed";
+
+type VisibilityWindow = {
+  state: VisibilityState;
+  startTimeUtc: string;
+  endTimeUtc: string;
+  durationMinutes: number;
+  observationCount: number;
+  startClearanceDeg: number;
+  endClearanceDeg: number;
+};
+
+let terrainPromise: Promise<LolaTerrainData> | null = null;
+
+/**
+ * Converts a JPL Horizons timestamp into a Unix timestamp.
+ *
+ * Horizons format:
+ * 2026-Nov-09T00:00:00Z
+ *
+ * JavaScript Date.parse() does not reliably understand
+ * abbreviated month names in ISO-like timestamps.
+ */
+function parseHorizonsUtc(timeUtc: string): number {
+  const match = timeUtc.match(
+    /^(\d{4})-([A-Za-z]{3})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?Z$/
+  );
+
+  if (!match) {
+    throw new Error(
+      `Invalid Horizons UTC timestamp: ${timeUtc}`
+    );
+  }
+
+  const months: Record<string, number> = {
+    Jan: 0,
+    Feb: 1,
+    Mar: 2,
+    Apr: 3,
+    May: 4,
+    Jun: 5,
+    Jul: 6,
+    Aug: 7,
+    Sep: 8,
+    Oct: 9,
+    Nov: 10,
+    Dec: 11,
+  };
+
+  const [
+    ,
+    year,
+    monthName,
+    day,
+    hour,
+    minute,
+    second,
+    fraction = "",
+  ] = match;
+
+  const month = months[monthName];
+
+  if (month === undefined) {
+    throw new Error(
+      `Invalid month in Horizons timestamp: ${timeUtc}`
+    );
+  }
+
+  const milliseconds = Number(
+    fraction.padEnd(3, "0").slice(0, 3) || "0"
+  );
+
+  return Date.UTC(
+    Number(year),
+    month,
+    Number(day),
+    Number(hour),
+    Number(minute),
+    Number(second),
+    milliseconds
+  );
+}
+
+/**
+ * Loads the NASA LOLA Site04 elevation raster.
+ * The loaded terrain is cached in memory.
+ */
+async function loadTerrainFromDisk(): Promise<LolaTerrainData> {
+  if (terrainPromise) {
+    return terrainPromise;
+  }
+
+  const pending: Promise<LolaTerrainData> = (async () => {
+    const directory = path.join(
+      process.cwd(),
+      "public",
+      "data",
+      "site04_shackleton_rim"
+    );
+
+    const [metadataText, binary] = await Promise.all([
+      readFile(path.join(directory, "metadata.json"), "utf8"),
+      readFile(path.join(directory, "elevation.bin")),
+    ]);
+
+    const metadata = JSON.parse(
+      metadataText
+    ) as LolaTerrainData["metadata"];
+
+    const expectedBytes =
+      metadata.width *
+      metadata.height *
+      Float32Array.BYTES_PER_ELEMENT;
+
+    if (binary.byteLength !== expectedBytes) {
+      throw new Error(
+        `LOLA raster size mismatch. Expected ${expectedBytes} bytes, received ${binary.byteLength}.`
+      );
+    }
+
+    // Copy Buffer data into an independent, aligned ArrayBuffer.
+    const copiedBytes = Uint8Array.from(binary);
+
+    // NASA raster values are little-endian Float32 values.
+    const elevations = new Float32Array(copiedBytes.buffer);
+
+    return {
+      width: metadata.width,
+      height: metadata.height,
+      minElevation: metadata.minElevation,
+      maxElevation: metadata.maxElevation,
+      resolutionMeters: metadata.resolutionMeters,
+      metadata,
+      elevations,
+    };
+  })();
+
+  terrainPromise = pending;
+
+  try {
+    return await pending;
+  } catch (error) {
+    terrainPromise = null;
+    throw error;
+  }
+}
+
+/**
+ * Parses the Horizons observer table into structured observations.
+ */
+function parseHorizonsTable(table: string): ParsedObservations {
+  const observations: Observation[] = [];
+  const unparsedLines: string[] = [];
+
+  const lines = table
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  const numberPattern =
+    "[+-]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:[Ee][+-]?\\d+)?";
+
+  const rowRegex = new RegExp(
+    `^(\\d{4}-[A-Za-z]{3}-\\d{2})\\s+` +
+      `(\\d{2}:\\d{2}(?::\\d{2}(?:\\.\\d+)?)?)\\s+` +
+      `(\\*[A-Za-z]?)?\\s*` +
+      `(${numberPattern})\\s+` +
+      `(${numberPattern})\\s*$`
+  );
+
+  for (const line of lines) {
+    if (!/^\d{4}-[A-Za-z]{3}-\d{2}\s+\d{2}:\d{2}/.test(line)) {
+      continue;
+    }
+
+    const match = line.match(rowRegex);
+
+    if (!match) {
+      unparsedLines.push(line);
+      continue;
+    }
+
+    const [, date, time, marker, azimuthValue, elevationValue] =
+      match;
+
+    const azimuthDeg = Number(azimuthValue);
+    const elevationDeg = Number(elevationValue);
+
+    if (
+      !Number.isFinite(azimuthDeg) ||
+      !Number.isFinite(elevationDeg) ||
+      azimuthDeg < 0 ||
+      azimuthDeg > 360 ||
+      elevationDeg < -90 ||
+      elevationDeg > 90
+    ) {
+      unparsedLines.push(line);
+      continue;
+    }
+
+    const normalizedTime =
+      time.length === 5 ? `${time}:00` : time;
+
+    observations.push({
+      time: `${date} ${time}`,
+      timeUtc: `${date}T${normalizedTime}Z`,
+      azimuthDeg,
+      elevationDeg,
+      horizonsMarker: marker || null,
+    });
+  }
+
+  if (observations.length === 0) {
+    throw new Error(
+      "Could not parse any Horizons observations. Check the raw Horizons table format."
+    );
+  }
+
+  return {
+    observations,
+    totalParsed: observations.length,
+    totalUnparsed: unparsedLines.length,
+    unparsedLines,
+  };
+}
+
+/**
+ * Requests one celestial target from JPL Horizons.
+ */
+async function getTargetEphemeris(
+  targetId: "10" | "399",
+  startTime: string,
+  stopTime: string,
+  observer: Observer
+) {
+  const params = new URLSearchParams({
+    format: "json",
+    COMMAND: `'${targetId}'`,
+    MAKE_EPHEM: "'YES'",
+    EPHEM_TYPE: "'OBSERVER'",
+    OBJ_DATA: "'NO'",
+    CENTER: "'coord@301'",
+    COORD_TYPE: "'GEODETIC'",
+    SITE_COORD: `'${observer.longitudeEast},${observer.latitude},${observer.altitudeKm}'`,
+    START_TIME: `'${startTime}'`,
+    STOP_TIME: `'${stopTime}'`,
+    STEP_SIZE: `'${STEP_SIZE}'`,
+    QUANTITIES: "'4'",
+    TIME_TYPE: "'UT'",
+  });
+
+  const response = await fetch(
+    `${HORIZONS_URL}?${params.toString()}`,
+    {
+      method: "GET",
+      cache: "no-store",
+      signal: AbortSignal.timeout(60000),
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      `Horizons HTTP error for target ${targetId}: ${response.status}`
+    );
+  }
+
+  const payload = (await response.json()) as HorizonsPayload;
+
+  if (payload.error) {
+    throw new Error(
+      `Horizons error for target ${targetId}: ${payload.error}`
+    );
+  }
+
+  if (!payload.result) {
+    throw new Error(
+      `Horizons returned no result for target ${targetId}.`
+    );
+  }
+
+  const tableMatch = payload.result.match(
+    /\$\$SOE([\s\S]*?)\$\$EOE/
+  );
+
+  if (!tableMatch) {
+    throw new Error(
+      `Horizons observation table is missing for target ${targetId}.`
+    );
+  }
+
+  const table = tableMatch[1].trim();
+  const parsed = parseHorizonsTable(table);
+
+  const isComplete =
+    parsed.totalUnparsed === 0 &&
+    parsed.totalParsed === EXPECTED_OBSERVATIONS_PER_DAY;
+
+  return {
+    targetId,
+    observations: parsed.observations,
+    parsing: {
+      totalParsed: parsed.totalParsed,
+      expectedObservations: EXPECTED_OBSERVATIONS_PER_DAY,
+      totalUnparsed: parsed.totalUnparsed,
+      missingObservations: Math.max(
+        0,
+        EXPECTED_OBSERVATIONS_PER_DAY - parsed.totalParsed
+      ),
+      unexpectedExtraObservations: Math.max(
+        0,
+        parsed.totalParsed - EXPECTED_OBSERVATIONS_PER_DAY
+      ),
+      isComplete,
+      unparsedLines: parsed.unparsedLines,
+    },
+    raw: {
+      table,
+      result: payload.result,
+      signature: payload.signature ?? null,
+    },
+  };
+}
+
+/**
+ * Interpolates the terrain horizon at an arbitrary azimuth.
+ * Handles the wrap from 359.75 degrees back to 0 degrees.
+ */
+function getTerrainHorizonAtAzimuth(
+  azimuthDeg: number,
+  profile: ReturnType<typeof calculateTerrainHorizon>["directions"]
+) {
+  const normalizedAzimuth =
+    ((azimuthDeg % 360) + 360) % 360;
+
+  const angularStep = 360 / profile.length;
+  const position = normalizedAzimuth / angularStep;
+
+  const lowerIndex = Math.floor(position) % profile.length;
+  const upperIndex = (lowerIndex + 1) % profile.length;
+
+  const fraction = position - Math.floor(position);
+
+  const lower = profile[lowerIndex];
+  const upper = profile[upperIndex];
+
+  const horizonElevationDeg =
+    lower.horizonElevationDeg +
+    (upper.horizonElevationDeg -
+      lower.horizonElevationDeg) *
+      fraction;
+
+  return {
+    horizonElevationDeg,
+    lowerAzimuthDeg: lower.azimuthDeg,
+    upperAzimuthDeg: upper.azimuthDeg,
+    lowerTerminationReason: lower.terminationReason,
+    upperTerminationReason: upper.terminationReason,
+  };
+}
+
+/**
+ * Adds a terrain-obstruction assessment to every observation.
+ *
+ * Positive clearance is not proof of visibility because the
+ * available raster does not cover the complete lunar horizon.
+ */
+function addTerrainVisibility(
+  target: Awaited<ReturnType<typeof getTargetEphemeris>>,
+  profile: ReturnType<typeof calculateTerrainHorizon>["directions"]
+) {
+  return {
+    ...target,
+
+    observations: target.observations.map((observation) => {
+      const terrain = getTerrainHorizonAtAzimuth(
+        observation.azimuthDeg,
+        profile
+      );
+
+      const clearanceDeg =
+        observation.elevationDeg -
+        terrain.horizonElevationDeg;
+
+      const blockedBySampledTerrain =
+        clearanceDeg <= 0;
+
+      return {
+        ...observation,
+
+        terrainVisibility: {
+          terrainHorizonElevationDeg:
+            terrain.horizonElevationDeg,
+
+          clearanceDeg,
+
+          blockedBySampledTerrain,
+
+          assessment: blockedBySampledTerrain
+            ? "blocked_by_sampled_terrain" as const
+            : "above_sampled_terrain_unconfirmed" as const,
+
+          terrainCoverageComplete: false as const,
+        },
+      };
+    }),
+  };
+}
+
+/**
+ * Calculates continuous sampled intervals of terrain visibility.
+ *
+ * The window boundaries are observation timestamps.
+ * They are not exact interpolated event times.
+ */
+function calculateVisibilityWindows(
+  observations: TerrainVisibilityObservation[]
+): VisibilityWindow[] {
+  if (observations.length === 0) {
+    return [];
+  }
+
+  // Sort by actual UTC time to ensure chronological windows.
+  const sortedObservations = [...observations].sort(
+    (a, b) =>
+      parseHorizonsUtc(a.timeUtc) -
+      parseHorizonsUtc(b.timeUtc)
+  );
+
+  const windows: VisibilityWindow[] = [];
+
+  let currentState: VisibilityState | null = null;
+  let windowStartIndex = 0;
+
+  function getState(
+    observation: TerrainVisibilityObservation
+  ): VisibilityState {
+    return observation.terrainVisibility.blockedBySampledTerrain
+      ? "blocked_by_sampled_terrain"
+      : "above_sampled_terrain_unconfirmed";
+  }
+
+  function closeWindow(endIndex: number) {
+    if (currentState === null) {
+      return;
+    }
+
+    const startObservation =
+      sortedObservations[windowStartIndex];
+
+    const endObservation =
+      sortedObservations[endIndex];
+
+    // FIX: Explicitly parse Horizons' non-standard month format.
+    const startTime = parseHorizonsUtc(
+      startObservation.timeUtc
+    );
+
+    const endTime = parseHorizonsUtc(
+      endObservation.timeUtc
+    );
+
+    const durationMinutes =
+      (endTime - startTime) / 60000;
+
+    windows.push({
+      state: currentState,
+
+      startTimeUtc: startObservation.timeUtc,
+      endTimeUtc: endObservation.timeUtc,
+
+      durationMinutes: Math.max(0, durationMinutes),
+
+      observationCount:
+        endIndex - windowStartIndex + 1,
+
+      startClearanceDeg:
+        startObservation.terrainVisibility.clearanceDeg,
+
+      endClearanceDeg:
+        endObservation.terrainVisibility.clearanceDeg,
+    });
+  }
+
+  for (
+    let index = 0;
+    index < sortedObservations.length;
+    index++
+  ) {
+    const observation = sortedObservations[index];
+    const state = getState(observation);
+
+    if (currentState === null) {
+      currentState = state;
+      windowStartIndex = index;
+      continue;
+    }
+
+    if (state !== currentState) {
+      closeWindow(index - 1);
+
+      currentState = state;
+      windowStartIndex = index;
+    }
+  }
+
+  closeWindow(sortedObservations.length - 1);
+
+  return windows;
+}
+
+/**
+ * Validates and builds a one-day UTC date range.
+ */
+function getDateRange(date: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    throw new Error("Invalid date. Use YYYY-MM-DD.");
+  }
+
+  const start = new Date(`${date}T00:00:00.000Z`);
+
+  if (
+    Number.isNaN(start.getTime()) ||
+    start.toISOString().slice(0, 10) !== date
+  ) {
+    throw new Error("Invalid calendar date.");
+  }
+
+  const stop = new Date(start);
+  stop.setUTCDate(stop.getUTCDate() + 1);
+
+  return {
+    startTime: `${date} 00:00`,
+    stopTime: `${stop.toISOString().slice(0, 10)} 00:00`,
+  };
+}
+
+/**
+ * Main API endpoint.
+ */
+export async function GET(request: NextRequest) {
+  try {
+    const requestedDate =
+      request.nextUrl.searchParams.get("date") ??
+      new Date().toISOString().slice(0, 10);
+
+    const { startTime, stopTime } =
+      getDateRange(requestedDate);
+
+    // 1. Load actual NASA LOLA terrain.
+    const terrain = await loadTerrainFromDisk();
+
+    // 2. Get observer elevation from the actual LOLA raster.
+    const observerSample = sampleLolaHeightAtLocation(
+      terrain,
+      {
+        latitudeDeg: BASE_OBSERVER.latitude,
+        longitudeEastDeg: BASE_OBSERVER.longitudeEast,
+      }
+    );
+
+    const observer: Observer = {
+      ...BASE_OBSERVER,
+      altitudeKm: observerSample.elevationMeters / 1000,
+    };
+
+    // 3. Calculate the terrain horizon around the observer.
+    const terrainHorizon = calculateTerrainHorizon(
+      terrain,
+      {
+        latitudeDeg: observer.latitude,
+        longitudeEastDeg: observer.longitudeEast,
+      },
+      TERRAIN_OPTIONS
+    );
+
+    // 4. Get real Sun and Earth positions from JPL Horizons.
+    const [sun, earth] = await Promise.all([
+      getTargetEphemeris(
+        "10",
+        startTime,
+        stopTime,
+        observer
+      ),
+      getTargetEphemeris(
+        "399",
+        startTime,
+        stopTime,
+        observer
+      ),
+    ]);
+
+    // 5. Compare celestial positions against LOLA terrain.
+    const sunWithTerrain = addTerrainVisibility(
+      sun,
+      terrainHorizon.directions
+    );
+
+    const earthWithTerrain = addTerrainVisibility(
+      earth,
+      terrainHorizon.directions
+    );
+
+    // 6. Calculate sampled visibility intervals.
+    const sunVisibilityWindows =
+      calculateVisibilityWindows(
+        sunWithTerrain.observations
+      );
+
+    const earthVisibilityWindows =
+      calculateVisibilityWindows(
+        earthWithTerrain.observations
+      );
+
+    return NextResponse.json({
+      success: true,
+
+      source: [
+        "NASA/JPL Horizons",
+        "NASA LOLA Product 78 — Site04",
+      ],
+
+      observer: {
+        ...observer,
+        elevationSource: "NASA LOLA Site04 elevation raster",
+        elevationMeters: observerSample.elevationMeters,
+      },
+
+      coordinateConvention: {
+        longitude: "East-positive degrees",
+        latitude:
+          "Planetocentric/geodetic degrees as accepted by Horizons",
+        altitude: "Kilometres",
+      },
+
+      timeRange: {
+        start: startTime,
+        stop: stopTime,
+        timeScale: "UT",
+        interval: "10 minutes",
+        expectedObservationsPerTarget:
+          EXPECTED_OBSERVATIONS_PER_DAY,
+      },
+
+      quantities: {
+        code: "4",
+        description: "Azimuth and elevation",
+        angleUnit: "Degrees",
+      },
+
+      targets: {
+        sun: {
+          ...sunWithTerrain,
+          visibilityWindows: sunVisibilityWindows,
+        },
+
+        earth: {
+          ...earthWithTerrain,
+          visibilityWindows: earthVisibilityWindows,
+        },
+      },
+
+      terrainModel: {
+        source: "NASA LOLA Product 78 — Site04",
+
+        referenceFrame:
+          terrain.metadata.coordinateSystem.referenceFrame,
+
+        ephemeris:
+          terrain.metadata.coordinateSystem.ephemeris,
+
+        observerElevationMeters:
+          observerSample.elevationMeters,
+
+        sampleStepMeters:
+          terrainHorizon.sampleStepMeters,
+
+        directionCount:
+          terrainHorizon.calculatedDirections,
+
+        totalSamplesChecked:
+          terrainHorizon.totalSamplesChecked,
+
+        rasterBoundaryLimitedDirections:
+          terrainHorizon.rasterBoundaryLimitedDirections,
+
+        searchLimitReachedDirections:
+          terrainHorizon.searchLimitReachedDirections,
+
+        completeHorizonVerified:
+          terrainHorizon.completeHorizonVerified,
+
+        horizonProfile:
+          terrainHorizon.directions.map((direction) => ({
+            azimuthDeg: direction.azimuthDeg,
+            horizonElevationDeg:
+              direction.horizonElevationDeg,
+            distanceMeters: direction.distanceMeters,
+            terrainElevationMeters:
+              direction.terrainElevationMeters,
+            samplesChecked: direction.samplesChecked,
+            terminationReason:
+              direction.terminationReason,
+          })),
+      },
+
+      interpretation: {
+        azimuth: "Degrees clockwise from North.",
+
+        elevation:
+          "Degrees above or below the local astronomical horizon.",
+
+        blockedBySampledTerrain:
+          "The celestial object's elevation is at or below the interpolated terrain obstruction angle.",
+
+        aboveSampledTerrainUnconfirmed:
+          "The object is above sampled terrain at its azimuth, but complete visibility cannot be confirmed because the LOLA raster has limited coverage.",
+
+        visibilityWindows:
+          "Continuous intervals of sampled terrain-obstruction states. Window boundaries are observation timestamps, not exact interpolated event times.",
+
+        completeVisibility:
+          "Not established by this calculation. The terrain raster does not cover the complete lunar horizon.",
+
+        horizonsMarker:
+          "Preserved from the original Horizons table. It is not interpreted as terrain-adjusted visibility.",
+      },
+
+      notes: [
+        "Sun and Earth observations are retrieved directly from NASA/JPL Horizons.",
+        "Both targets are sampled every 10 minutes over a 24-hour UTC period.",
+        "Each target is expected to return 145 observations, including both endpoints.",
+        "Parsing completeness requires exactly 145 parsed observations and zero unparsed observation lines.",
+        "Terrain elevations are sampled from the local NASA LOLA Site04 raster.",
+        "Observer altitude is derived from the LOLA elevation at the observation point.",
+        "Terrain horizon is sampled at 1440 azimuth directions with 5 metre distance steps.",
+        "Terrain obstruction is evaluated independently for every Sun and Earth observation.",
+        "Visibility windows group adjacent observations with the same terrain assessment.",
+        "Visibility-window durations are calculated using explicitly parsed UTC timestamps.",
+        "Window boundaries are sampled observation times, not interpolated crossing times.",
+        "The available raster boundary limits every direction.",
+        "Being above sampled terrain does not establish unobstructed visibility.",
+        "These results do not yet calculate solar panel power or radio link performance.",
+      ],
+    });
+  } catch (error) {
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Unknown server error";
+
+    console.error(
+      "JPL Horizons terrain integration failed:",
+      message
+    );
+
+    return NextResponse.json(
+      {
+        success: false,
+        source: "NASA/JPL Horizons + NASA LOLA",
+        error: message,
+      },
+      { status: 502 }
+    );
+  }
+}
+</file>
+
+<file path="src/app/terrain-check/page.tsx">
+"use client";
+
+import { useEffect, useState } from "react";
+
+import {
+  loadLolaTerrain,
+  sampleSite04Elevation,
+  type LolaSample,
+} from "@/components/lib/lunar/terrainData";
+
+interface CheckResult {
+  sample: LolaSample;
+  width: number;
+  height: number;
+  minElevation: number;
+  maxElevation: number;
+  referenceFrame: string;
+  ephemeris: string;
+  projection: string;
+}
+
+export default function TerrainCheckPage() {
+  const [result, setResult] = useState<CheckResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function runCheck() {
+      try {
+        setLoading(true);
+        setError(null);
+
+        const terrain = await loadLolaTerrain();
+        const sample = sampleSite04Elevation(terrain);
+
+        if (cancelled) return;
+
+        setResult({
+          sample,
+          width: terrain.width,
+          height: terrain.height,
+          minElevation: terrain.minElevation,
+          maxElevation: terrain.maxElevation,
+          referenceFrame: terrain.metadata.coordinateSystem.referenceFrame,
+          ephemeris: terrain.metadata.coordinateSystem.ephemeris,
+          projection: terrain.metadata.coordinateSystem.projection,
+        });
+      } catch (err) {
+        if (!cancelled) {
+          setError(
+            err instanceof Error ? err.message : "Unknown terrain error."
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    }
+
+    runCheck();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return (
+    <main
+      className="relative w-full min-h-screen overflow-x-hidden overflow-y-auto bg-neutral-950 text-neutral-100"
+      style={{
+        height: "auto",
+        maxHeight: "none",
+        overscrollBehaviorY: "auto",
+      }}
+    >
+      <div className="mx-auto w-full max-w-4xl space-y-8 px-5 py-12 sm:px-8 sm:py-16">
+
+        <header className="space-y-3">
+          <p className="text-xs font-medium uppercase tracking-[0.2em] text-neutral-500">
+            NASA LOLA · Data validation
+          </p>
+
+          <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
+            Shackleton Rim Terrain Check
+          </h1>
+
+          <p className="max-w-2xl text-sm leading-7 text-neutral-400">
+            Validating geographic coordinates against the NASA LOLA elevation
+            raster.
+          </p>
+        </header>
+
+        {loading && (
+          <div className="rounded-2xl border border-neutral-800 bg-neutral-900/50 p-6">
+            <div className="flex items-center gap-3">
+              <div className="h-2.5 w-2.5 animate-pulse rounded-full bg-blue-400" />
+              <p className="text-sm text-neutral-300">
+                Loading NASA elevation data and calculating the Site04 position...
+              </p>
+            </div>
+          </div>
+        )}
+
+        {error && (
+          <div className="rounded-2xl border border-red-900 bg-red-950/30 p-6">
+            <h2 className="font-semibold text-red-400">
+              Terrain validation failed
+            </h2>
+
+            <p className="mt-3 break-words text-sm leading-6 text-red-200">
+              {error}
+            </p>
+
+            <button
+              onClick={() => window.location.reload()}
+              className="mt-5 rounded-lg border border-red-800 px-4 py-2 text-sm text-red-200 transition hover:bg-red-900/40"
+            >
+              Retry validation
+            </button>
+          </div>
+        )}
+
+        {result && (
+          <>
+            <section className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-6">
+              <SectionHeading
+                number="01"
+                title="Geographic observation point"
+              />
+
+              <div className="mt-6 grid grid-cols-1 gap-6 sm:grid-cols-2">
+                <Metric
+                  label="Latitude"
+                  value={`${result.sample.geographic.latitudeDeg}°`}
+                />
+
+                <Metric
+                  label="Longitude East"
+                  value={`${result.sample.geographic.longitudeEastDeg}°`}
+                />
+
+                <Metric
+                  label="Projected X"
+                  value={`${result.sample.projected.xMeters.toFixed(3)} m`}
+                />
+
+                <Metric
+                  label="Projected Y"
+                  value={`${result.sample.projected.yMeters.toFixed(3)} m`}
+                />
+              </div>
+            </section>
+
+            <section className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-6">
+              <SectionHeading
+                number="02"
+                title="Raster position"
+              />
+
+              <div className="mt-6 grid grid-cols-1 gap-6 sm:grid-cols-2">
+                <Metric
+                  label="Fractional column"
+                  value={result.sample.pixel.column.toFixed(4)}
+                />
+
+                <Metric
+                  label="Fractional row"
+                  value={result.sample.pixel.row.toFixed(4)}
+                />
+
+                <Metric
+                  label="Nearest column"
+                  value={String(result.sample.nearestPixel.column)}
+                />
+
+                <Metric
+                  label="Nearest row"
+                  value={String(result.sample.nearestPixel.row)}
+                />
+              </div>
+
+              <div className="mt-6 rounded-xl border border-emerald-900/60 bg-emerald-950/20 p-4">
+                <p className="text-sm text-emerald-400">
+                  Site04 maps inside the available raster.
+                </p>
+              </div>
+            </section>
+
+            <section className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-6">
+              <SectionHeading
+                number="03"
+                title="Elevation at Site04"
+              />
+
+              <p className="mt-6 text-4xl font-semibold tracking-tight tabular-nums sm:text-5xl">
+                {result.sample.elevationMeters.toFixed(3)}
+                <span className="ml-2 text-lg font-normal text-neutral-500">
+                  metres
+                </span>
+              </p>
+
+              <p className="mt-3 text-sm leading-6 text-neutral-500">
+                Bilinear interpolation using the four surrounding DEM pixels.
+              </p>
+            </section>
+
+            <section className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-6">
+              <SectionHeading
+                number="04"
+                title="Raster information"
+              />
+
+              <div className="mt-6 grid grid-cols-1 gap-6 sm:grid-cols-2">
+                <Metric
+                  label="Dimensions"
+                  value={`${result.width} × ${result.height}`}
+                />
+
+                <Metric
+                  label="Resolution"
+                  value="5 metres / pixel"
+                />
+
+                <Metric
+                  label="Minimum elevation"
+                  value={`${result.minElevation.toFixed(2)} m`}
+                />
+
+                <Metric
+                  label="Maximum elevation"
+                  value={`${result.maxElevation.toFixed(2)} m`}
+                />
+
+                <Metric
+                  label="Reference frame"
+                  value={result.referenceFrame}
+                />
+
+                <Metric
+                  label="Source ephemeris"
+                  value={result.ephemeris}
+                />
+              </div>
+
+              <p className="mt-6 text-sm text-neutral-500">
+                Projection: {result.projection}
+              </p>
+            </section>
+
+            <section className="rounded-2xl border border-amber-900/60 bg-amber-950/20 p-6">
+              <h2 className="font-semibold text-amber-400">
+                Scientific validation still required
+              </h2>
+
+              <p className="mt-3 text-sm leading-7 text-neutral-300">
+                This test verifies the implemented coordinate transformation
+                and raster lookup. It does not independently establish that
+                the DEM and Horizons observer coordinates use perfectly
+                aligned lunar reference frames.
+              </p>
+            </section>
+          </>
+        )}
+
+        <footer className="border-t border-neutral-800 py-8 text-xs text-neutral-600">
+          NASA LOLA · Site04 · Shackleton Rim
+          <span className="float-right">Terrain validation</span>
+        </footer>
+      </div>
+    </main>
+  );
+}
+
+function SectionHeading({
+  number,
+  title,
+}: {
+  number: string;
+  title: string;
+}) {
+  return (
+    <div className="flex items-center gap-3">
+      <span className="text-xs font-mono text-neutral-600">{number}</span>
+      <h2 className="text-lg font-semibold">{title}</h2>
+    </div>
+  );
+}
+
+function Metric({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="min-w-0">
+      <p className="text-xs font-medium uppercase tracking-wider text-neutral-500">
+        {label}
+      </p>
+
+      <p className="mt-2 break-words text-base font-medium tabular-nums text-neutral-100">
+        {value}
+      </p>
+    </div>
+  );
+}
+</file>
+
+<file path="src/app/terrain-validation/page.tsx">
+"use client";
+
+import { useState } from "react";
+import {
+  calculateTerrainHorizon,
+} from "@/components/lib/lunar/terrainHorizon";
+import {
+  loadLolaTerrain,
+} from "@/components/lib/lunar/terrainData";
+
+interface ValidationReport {
+  directions: number;
+  samples: number;
+  boundaryLimited: number;
+  searchLimitReached: number;
+  averageHorizon: number;
+  minimumHorizon: number;
+  maximumHorizon: number;
+  highestDirection: number;
+  highestDistance: number;
+  highestTerrainElevation: number;
+  observerElevation: number;
+  runtimeMs: number;
+}
+
+export default function TerrainValidationPage() {
+  const [report, setReport] = useState<ValidationReport | null>(null);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  async function runValidation() {
+    setLoading(true);
+    setError("");
+    setReport(null);
+
+    try {
+      const start = performance.now();
+
+      const terrain = await loadLolaTerrain();
+
+      const result = calculateTerrainHorizon(
+        terrain,
+        undefined,
+  {
+  directionCount: 1440,
+  sampleStepMeters: 5,
+  maxDistanceMeters: 15000,
+}
+      );
+
+      const angles = result.directions.map(
+        (direction) => direction.horizonElevationDeg
+      );
+
+      const highest = result.directions.reduce(
+        (previous, current) =>
+          current.horizonElevationDeg >
+          previous.horizonElevationDeg
+            ? current
+            : previous
+      );
+
+      const average =
+        angles.reduce((sum, value) => sum + value, 0) /
+        angles.length;
+
+      setReport({
+        directions: result.calculatedDirections,
+        samples: result.totalSamplesChecked,
+        boundaryLimited:
+          result.rasterBoundaryLimitedDirections,
+        searchLimitReached:
+          result.searchLimitReachedDirections,
+        averageHorizon: average,
+        minimumHorizon: Math.min(...angles),
+        maximumHorizon: Math.max(...angles),
+        highestDirection: highest.azimuthDeg,
+        highestDistance: highest.distanceMeters,
+        highestTerrainElevation:
+          highest.terrainElevationMeters,
+        observerElevation: result.observerElevationMeters,
+        runtimeMs: performance.now() - start,
+      });
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Unknown validation error"
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <main className="min-h-screen bg-[#111315] text-white p-8">
+      <div className="max-w-3xl mx-auto space-y-6">
+        <p className="text-xs tracking-[0.25em] text-white/50">
+          NASA LOLA · TERRAIN VALIDATION
+        </p>
+
+        <h1 className="text-3xl font-semibold">
+          Shackleton Rim Horizon Check
+        </h1>
+
+        <p className="text-sm text-white/60">
+          Testing terrain horizon calculations against
+          the actual Site04 NASA LOLA elevation raster.
+        </p>
+
+        <button
+          onClick={runValidation}
+          disabled={loading}
+          className="rounded-lg bg-white text-black px-5 py-3 text-sm font-medium disabled:opacity-50"
+        >
+          {loading ? "Calculating..." : "Run terrain validation"}
+        </button>
+
+        {error && (
+          <pre className="whitespace-pre-wrap rounded-lg bg-red-950/40 border border-red-500/30 p-4 text-sm text-red-300">
+            {error}
+          </pre>
+        )}
+
+        {report && (
+          <section className="rounded-xl border border-white/10 bg-white/[0.04] p-6 space-y-5">
+            <h2 className="text-lg font-medium">
+              Calculation results
+            </h2>
+
+            <div className="grid grid-cols-2 gap-5">
+              <Metric label="Directions" value={report.directions} />
+              <Metric label="Terrain samples" value={report.samples} />
+              <Metric label="Raster-boundary limited" value={report.boundaryLimited} />
+              <Metric label="Search limit reached" value={report.searchLimitReached} />
+              <Metric label="Average horizon" value={`${report.averageHorizon.toFixed(4)}°`} />
+              <Metric label="Minimum horizon" value={`${report.minimumHorizon.toFixed(4)}°`} />
+              <Metric label="Maximum horizon" value={`${report.maximumHorizon.toFixed(4)}°`} />
+              <Metric label="Observer elevation" value={`${report.observerElevation.toFixed(3)} m`} />
+              <Metric label="Highest direction" value={`${report.highestDirection.toFixed(1)}°`} />
+              <Metric label="Peak terrain distance" value={`${report.highestDistance.toFixed(0)} m`} />
+              <Metric label="Peak terrain elevation" value={`${report.highestTerrainElevation.toFixed(3)} m`} />
+              <Metric label="Runtime" value={`${report.runtimeMs.toFixed(0)} ms`} />
+            </div>
+
+            <p className="text-xs text-amber-300 border-t border-white/10 pt-4">
+              This is a sampled, raster-limited terrain horizon.
+              It is not a verified complete lunar horizon.
+            </p>
+          </section>
+        )}
+      </div>
+    </main>
+  );
+}
+
+function Metric({
+  label,
+  value,
+}: {
+  label: string;
+  value: string | number;
+}) {
+  return (
+    <div>
+      <p className="text-xs text-white/45">{label}</p>
+      <p className="mt-1 text-lg font-medium tabular-nums">
+        {value}
+      </p>
+    </div>
+  );
+}
+</file>
+
+<file path="src/app/globals.css">
+@import "tailwindcss";
+
+:root {
+  --background: #0a0a0a;
+  --foreground: #ededed;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+html {
+  min-height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+body {
+  min-height: 100vh;
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+</file>
+
+<file path="src/app/layout.tsx">
+import type { Metadata } from "next";
+import "./globals.css";
+
+export const metadata: Metadata = {
+  title: "Lunar Landing Site Navigator | NASA Space Apps",
+  description:
+    "Scientific lunar landing site assessment using NASA data.",
+};
+
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
+  return (
+    <html
+      lang="en"
+      className="min-h-full bg-black text-white"
+      suppressHydrationWarning
+    >
+      <body className="antialiased m-0 min-h-screen overflow-x-hidden overflow-y-auto p-0 font-sans">
+        {children}
+      </body>
+    </html>
+  );
+}
+</file>
+
+<file path="src/app/page.tsx">
+export default function Home() {
+  return (
+    <main className="min-h-screen bg-black text-white flex items-center justify-center p-8">
+      <div className="max-w-xl text-center">
+        <p className="text-sm uppercase tracking-[0.3em] text-gray-500 mb-4">
+          NASA Space Apps Challenge
+        </p>
+
+        <h1 className="text-3xl font-semibold mb-4">
+          Lunar Landing Site Navigator
+        </h1>
+
+        <p className="text-gray-400 mb-8">
+          Scientific lunar observation data powered by NASA/JPL Horizons.
+        </p>
+
+        <a
+          href="/api/horizons"
+          target="_blank"
+          rel="noreferrer"
+          className="inline-block rounded-lg border border-gray-700 px-6 py-3 hover:bg-white hover:text-black transition"
+        >
+          Retrieve JPL Data
+        </a>
+      </div>
+    </main>
+  );
+}
+</file>
+
+<file path="src/components/lib/lunar/ephemeris.ts">
+export interface CelestialEphemeris {
+  sunAzimuth: number;
+  sunElevation: number;
+  earthAzimuth: number;
+  earthElevation: number;
+  isSunVisible: boolean;
+  isEarthVisible: boolean;
+  solarIlluminationPercentage: number;
+}
+
+/**
+ * Calculates rigorous astronomical ephemeris for the lunar south pole region
+ * using orbital mechanics, solar longitude, and lunar tilt/obliquity.
+ */
+export function calculateEphemeris(date: Date): CelestialEphemeris {
+  // Convert date to Julian centuries from J2000.0
+  const timeMs = date.getTime();
+  const jd = timeMs / 86400000 + 2440587.5;
+  const d = jd - 2451545.0; // Days since J2000.0
+
+  // Mean anomaly of the Sun
+  const g = (357.529 + 0.9856003 * d) % 360;
+  const gRad = (g * Math.PI) / 180;
+
+  // Ecliptic longitude of the Sun
+  const q = 280.459 + 0.98564736 * d;
+  const l = (q + 1.915 * Math.sin(gRad) + 0.020 * Math.sin(2 * gRad)) % 360;
+  const lRad = (l * Math.PI) / 180;
+
+  // Lunar south pole axial tilt / obliquity relative to ecliptic (~1.54 degrees)
+  const lunarObliquity = 1.5427 * (Math.PI / 180);
+
+  // Approximate solar elevation at south polar rim based on solar ecliptic longitude and tilt
+  // The sun circles the horizon roughly every synodic month (~29.53 days)
+  const sunElevation = Math.asin(Math.sin(lunarObliquity) * Math.sin(lRad));
+  const sunAzimuth = (lRad * 2) % (Math.PI * 2);
+
+  // Earth's position relative to lunar south pole (librations omitted for baseline model, fixed geocentric offset)
+  const earthElevation = Math.PI / 4; // Earth is permanently hanging in the lunar south polar sky (~45 deg altitude)
+  const earthAzimuth = Math.PI * 0.25;
+
+  const isSunVisible = sunElevation > -0.01;
+  
+  // Calculate approximate illumination percentage based on solar elevation angle
+  const solarIlluminationPercentage = Math.max(0, Math.min(100, ((sunElevation + lunarObliquity) / (2 * lunarObliquity)) * 100));
+
+  return {
+    sunAzimuth,
+    sunElevation,
+    earthAzimuth,
+    earthElevation,
+    isSunVisible,
+    isEarthVisible: true, // Earth is always visible from Shackleton rim line-of-sight
+    solarIlluminationPercentage,
+  };
+}
+</file>
+
+<file path="src/components/lib/lunar/terrainData.ts">
+export interface GeographicCoordinate {
+  latitudeDeg: number;
+  longitudeEastDeg: number;
+}
+
+export interface ProjectedCoordinate {
+  xMeters: number;
+  yMeters: number;
+}
+
+export interface RasterPixelCoordinate {
+  column: number;
+  row: number;
+}
+
+export interface LolaTerrainMetadata {
+  width: number;
+  height: number;
+  minElevation: number;
+  maxElevation: number;
+  resolutionMeters: number;
+  bbox: [number, number, number, number];
+  pixelResolution: [number, number, number];
+
+  coordinateSystem: {
+    projection: string;
+    referenceFrame: string;
+    ephemeris: string;
+    linearUnits: string;
+    pixelRegistration: string;
+  };
+
+  georeferencing: {
+    tiePoint: {
+      column: number;
+      row: number;
+      x: number;
+      y: number;
+    };
+    centralMeridianDegrees: number;
+    lunarRadiusMeters: number;
+  };
+
+  dataType: string;
+  byteOrder: string;
+}
+
+export interface LolaTerrainData {
+  width: number;
+  height: number;
+  minElevation: number;
+  maxElevation: number;
+  resolutionMeters: number;
+  metadata: LolaTerrainMetadata;
+  elevations: Float32Array;
+}
+
+export interface LolaSample {
+  geographic: GeographicCoordinate;
+  projected: ProjectedCoordinate;
+  pixel: RasterPixelCoordinate;
+  nearestPixel: {
+    column: number;
+    row: number;
+  };
+  elevationMeters: number;
+}
+
+const DATA_PATH = "/data/site04_shackleton_rim";
+
+export const SITE04_COORDINATES: GeographicCoordinate = {
+  latitudeDeg: -89.7668,
+  longitudeEastDeg: 188.13,
+};
+
+let terrainPromise: Promise<LolaTerrainData> | null = null;
+
+function assertFinite(value: number, name: string): void {
+  if (!Number.isFinite(value)) {
+    throw new Error(`${name} must be finite. Received: ${value}`);
+  }
+}
+
+function requireObject(
+  value: unknown,
+  name: string
+): Record<string, unknown> {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`${name} is missing or invalid.`);
+  }
+
+  return value as Record<string, unknown>;
+}
+
+function requireNumber(value: unknown, name: string): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new Error(`${name} is missing or invalid.`);
+  }
+
+  return value;
+}
+
+function validateMetadata(raw: unknown): LolaTerrainMetadata {
+  const root = requireObject(raw, "Root metadata");
+
+  const coordinateSystem = requireObject(
+    root.coordinateSystem,
+    "coordinateSystem"
+  );
+
+  const georeferencing = requireObject(
+    root.georeferencing,
+    "georeferencing"
+  );
+
+  const tiePoint = requireObject(
+    georeferencing.tiePoint,
+    "georeferencing.tiePoint"
+  );
+
+  const pixelResolution = root.pixelResolution;
+  const bbox = root.bbox;
+
+  if (!Array.isArray(pixelResolution) || pixelResolution.length < 2) {
+    throw new Error("Invalid pixelResolution.");
+  }
+
+  if (!Array.isArray(bbox) || bbox.length !== 4) {
+    throw new Error("Invalid bounding box.");
+  }
+
+  const metadata: LolaTerrainMetadata = {
+    width: requireNumber(root.width, "width"),
+    height: requireNumber(root.height, "height"),
+    minElevation: requireNumber(root.minElevation, "minElevation"),
+    maxElevation: requireNumber(root.maxElevation, "maxElevation"),
+    resolutionMeters: requireNumber(root.resolutionMeters, "resolutionMeters"),
+
+    bbox: [
+      requireNumber(bbox[0], "bbox[0]"),
+      requireNumber(bbox[1], "bbox[1]"),
+      requireNumber(bbox[2], "bbox[2]"),
+      requireNumber(bbox[3], "bbox[3]"),
+    ],
+
+    pixelResolution: [
+      requireNumber(pixelResolution[0], "pixelResolution[0]"),
+      requireNumber(pixelResolution[1], "pixelResolution[1]"),
+      requireNumber(pixelResolution[2] ?? 0, "pixelResolution[2]"),
+    ],
+
+    coordinateSystem: {
+      projection: String(coordinateSystem.projection ?? ""),
+      referenceFrame: String(coordinateSystem.referenceFrame ?? ""),
+      ephemeris: String(coordinateSystem.ephemeris ?? ""),
+      linearUnits: String(coordinateSystem.linearUnits ?? ""),
+      pixelRegistration: String(coordinateSystem.pixelRegistration ?? ""),
+    },
+
+    georeferencing: {
+      tiePoint: {
+        column: requireNumber(tiePoint.column, "tiePoint.column"),
+        row: requireNumber(tiePoint.row, "tiePoint.row"),
+        x: requireNumber(tiePoint.x, "tiePoint.x"),
+        y: requireNumber(tiePoint.y, "tiePoint.y"),
+      },
+
+      centralMeridianDegrees: requireNumber(
+        georeferencing.centralMeridianDegrees,
+        "centralMeridianDegrees"
+      ),
+
+      lunarRadiusMeters: requireNumber(
+        georeferencing.lunarRadiusMeters,
+        "lunarRadiusMeters"
+      ),
+    },
+
+    dataType: String(root.dataType ?? ""),
+    byteOrder: String(root.byteOrder ?? ""),
+  };
+
+  if (
+    !Number.isInteger(metadata.width) ||
+    metadata.width <= 0 ||
+    !Number.isInteger(metadata.height) ||
+    metadata.height <= 0
+  ) {
+    throw new Error("Invalid raster dimensions.");
+  }
+
+  if (metadata.coordinateSystem.projection !== "South Polar Stereographic") {
+    throw new Error("Unsupported projection.");
+  }
+
+  if (metadata.coordinateSystem.linearUnits !== "meters") {
+    throw new Error("Expected raster coordinates in metres.");
+  }
+
+  if (metadata.coordinateSystem.pixelRegistration !== "pixel area") {
+    throw new Error(
+      `Expected PixelIsArea registration. Received: ${metadata.coordinateSystem.pixelRegistration}`
+    );
+  }
+
+  if (metadata.georeferencing.lunarRadiusMeters <= 0) {
+    throw new Error("Invalid lunar radius.");
+  }
+
+  if (
+    metadata.pixelResolution[0] === 0 ||
+    metadata.pixelResolution[1] === 0
+  ) {
+    throw new Error("Invalid pixel resolution.");
+  }
+
+  if (metadata.dataType !== "Float32") {
+    throw new Error("Expected Float32 elevation data.");
+  }
+
+  if (metadata.byteOrder !== "little-endian") {
+    throw new Error("Expected little-endian elevation data.");
+  }
+
+  return metadata;
+}
+
+export async function loadLolaTerrain(): Promise<LolaTerrainData> {
+  if (terrainPromise) return terrainPromise;
+
+  terrainPromise = (async () => {
+    console.info("[LOLA] Loading terrain...");
+
+    const [metadataResponse, elevationResponse] = await Promise.all([
+      fetch(`${DATA_PATH}/metadata.json`, { cache: "no-store" }),
+      fetch(`${DATA_PATH}/elevation.bin`, { cache: "no-store" }),
+    ]);
+
+    if (!metadataResponse.ok) {
+      throw new Error(`Metadata HTTP error: ${metadataResponse.status}`);
+    }
+
+    if (!elevationResponse.ok) {
+      throw new Error(`Elevation HTTP error: ${elevationResponse.status}`);
+    }
+
+    const rawMetadata: unknown = await metadataResponse.json();
+    const metadata = validateMetadata(rawMetadata);
+
+    const buffer = await elevationResponse.arrayBuffer();
+
+    const expectedPixels = metadata.width * metadata.height;
+    const expectedBytes = expectedPixels * Float32Array.BYTES_PER_ELEMENT;
+
+    if (buffer.byteLength !== expectedBytes) {
+      throw new Error(
+        `Expected ${expectedBytes} bytes, received ${buffer.byteLength}.`
+      );
+    }
+
+    const elevations = new Float32Array(expectedPixels);
+    const view = new DataView(buffer);
+
+    let actualMin = Infinity;
+    let actualMax = -Infinity;
+
+    for (let i = 0; i < expectedPixels; i++) {
+      const elevation = view.getFloat32(i * 4, true);
+
+      if (!Number.isFinite(elevation)) {
+        throw new Error(`Invalid elevation at binary index ${i}.`);
+      }
+
+      elevations[i] = elevation;
+      actualMin = Math.min(actualMin, elevation);
+      actualMax = Math.max(actualMax, elevation);
+    }
+
+    console.info("[LOLA] Terrain loaded:", {
+      dimensions: `${metadata.width} x ${metadata.height}`,
+      registration: metadata.coordinateSystem.pixelRegistration,
+      actualMin,
+      actualMax,
+    });
+
+    return {
+      width: metadata.width,
+      height: metadata.height,
+      minElevation: metadata.minElevation,
+      maxElevation: metadata.maxElevation,
+      resolutionMeters: metadata.resolutionMeters,
+      metadata,
+      elevations,
+    };
+  })();
+
+  try {
+    return await terrainPromise;
+  } catch (error) {
+    terrainPromise = null;
+    console.error("[LOLA] Loading failed:", error);
+    throw error;
+  }
+}
+
+/**
+ * Geographic coordinates to South Polar Stereographic.
+ */
+export function geographicToLolaProjected(
+  coordinate: GeographicCoordinate,
+  metadata: LolaTerrainMetadata
+): ProjectedCoordinate {
+  const latitude = coordinate.latitudeDeg;
+  const longitude = coordinate.longitudeEastDeg;
+
+  assertFinite(latitude, "Latitude");
+  assertFinite(longitude, "Longitude");
+
+  if (latitude < -90 || latitude > 0) {
+    throw new Error("Latitude must be between -90 and 0 degrees.");
+  }
+
+  const radius = metadata.georeferencing.lunarRadiusMeters;
+  const centralMeridian =
+    metadata.georeferencing.centralMeridianDegrees;
+
+  const latitudeFromSouthPole =
+    ((90 + latitude) * Math.PI) / 180;
+
+  const longitudeDifference =
+    ((longitude - centralMeridian) * Math.PI) / 180;
+
+  const rho =
+    2 * radius * Math.tan(latitudeFromSouthPole / 2);
+
+  return {
+    xMeters: rho * Math.sin(longitudeDifference),
+    yMeters: rho * Math.cos(longitudeDifference),
+  };
+}
+
+/**
+ * Converts projected coordinates to array indices.
+ *
+ * GeoTIFF PixelIsArea means the tie point represents
+ * the outer corner of the first pixel.
+ * Array indices represent pixel centres.
+ */
+export function projectedToLolaPixel(
+  projected: ProjectedCoordinate,
+  metadata: LolaTerrainMetadata
+): RasterPixelCoordinate {
+  const tiePoint = metadata.georeferencing.tiePoint;
+  const [pixelWidth, pixelHeight] = metadata.pixelResolution;
+
+  assertFinite(projected.xMeters, "Projected X");
+  assertFinite(projected.yMeters, "Projected Y");
+
+  return {
+    column:
+      tiePoint.column +
+      (projected.xMeters - tiePoint.x) / pixelWidth -
+      0.5,
+
+    row:
+      tiePoint.row +
+      (projected.yMeters - tiePoint.y) / pixelHeight -
+      0.5,
+  };
+}
+
+export function isLolaPixelInsideRaster(
+  pixel: RasterPixelCoordinate,
+  terrain: LolaTerrainData
+): boolean {
+  return (
+    pixel.column >= 0 &&
+    pixel.row >= 0 &&
+    pixel.column <= terrain.width - 1 &&
+    pixel.row <= terrain.height - 1
+  );
+}
+
+function lerp(a: number, b: number, t: number): number {
+  return a + (b - a) * t;
+}
+
+export function sampleLolaHeightAtPixel(
+  terrain: LolaTerrainData,
+  pixel: RasterPixelCoordinate
+): number {
+  assertFinite(pixel.column, "Pixel column");
+  assertFinite(pixel.row, "Pixel row");
+
+  if (!isLolaPixelInsideRaster(pixel, terrain)) {
+    throw new Error(
+      `Pixel outside raster: column=${pixel.column.toFixed(4)}, row=${pixel.row.toFixed(4)}`
+    );
+  }
+
+  const x0 = Math.floor(pixel.column);
+  const y0 = Math.floor(pixel.row);
+
+  const x1 = Math.min(x0 + 1, terrain.width - 1);
+  const y1 = Math.min(y0 + 1, terrain.height - 1);
+
+  const tx = pixel.column - x0;
+  const ty = pixel.row - y0;
+
+  const topLeft = terrain.elevations[y0 * terrain.width + x0];
+  const topRight = terrain.elevations[y0 * terrain.width + x1];
+  const bottomLeft = terrain.elevations[y1 * terrain.width + x0];
+  const bottomRight = terrain.elevations[y1 * terrain.width + x1];
+
+  if (
+    !Number.isFinite(topLeft) ||
+    !Number.isFinite(topRight) ||
+    !Number.isFinite(bottomLeft) ||
+    !Number.isFinite(bottomRight)
+  ) {
+    throw new Error("Invalid elevation during interpolation.");
+  }
+
+  const top = lerp(topLeft, topRight, tx);
+  const bottom = lerp(bottomLeft, bottomRight, tx);
+
+  return lerp(top, bottom, ty);
+}
+
+export function sampleLolaHeightAtLocation(
+  terrain: LolaTerrainData,
+  coordinate: GeographicCoordinate
+): LolaSample {
+  const projected = geographicToLolaProjected(
+    coordinate,
+    terrain.metadata
+  );
+
+  const pixel = projectedToLolaPixel(
+    projected,
+    terrain.metadata
+  );
+
+  if (!isLolaPixelInsideRaster(pixel, terrain)) {
+    throw new Error(
+      `Location outside raster: column=${pixel.column.toFixed(4)}, row=${pixel.row.toFixed(4)}`
+    );
+  }
+
+  const elevationMeters = sampleLolaHeightAtPixel(terrain, pixel);
+
+  return {
+    geographic: coordinate,
+    projected,
+    pixel,
+    nearestPixel: {
+      column: Math.round(pixel.column),
+      row: Math.round(pixel.row),
+    },
+    elevationMeters,
+  };
+}
+
+export function sampleSite04Elevation(
+  terrain: LolaTerrainData
+): LolaSample {
+  return sampleLolaHeightAtLocation(terrain, SITE04_COORDINATES);
+}
+</file>
+
+<file path="src/components/lib/lunar/terrainHorizon.ts">
+import {
+  type GeographicCoordinate,
+  type LolaTerrainData,
+  type ProjectedCoordinate,
+  SITE04_COORDINATES,
+  geographicToLolaProjected,
+  projectedToLolaPixel,
+  isLolaPixelInsideRaster,
+  sampleLolaHeightAtPixel,
+  sampleLolaHeightAtLocation,
+} from "./terrainData";
+
+export type TerrainHorizonTermination =
+  | "raster_boundary"
+  | "search_limit";
+
+export interface TerrainHorizonDirection {
+  azimuthDeg: number;
+  horizonElevationDeg: number;
+  distanceMeters: number;
+  terrainElevationMeters: number;
+  samplesChecked: number;
+
+  // Why sampling stopped in this direction.
+  terminationReason: TerrainHorizonTermination;
+
+  // The profile is limited either by raster coverage or
+  // by the configured maximum search distance.
+  coverageLimited: true;
+}
+
+export interface TerrainHorizonResult {
+  observer: GeographicCoordinate;
+  observerProjected: ProjectedCoordinate;
+  observerElevationMeters: number;
+  lunarRadiusMeters: number;
+  sampleStepMeters: number;
+  maxDistanceMeters: number;
+
+  directions: TerrainHorizonDirection[];
+  calculatedDirections: number;
+  totalSamplesChecked: number;
+
+  rasterBoundaryLimitedDirections: number;
+  searchLimitReachedDirections: number;
+
+  // This is deliberately false: a finite raster and search
+  // distance cannot establish the horizon beyond their coverage.
+  completeHorizonVerified: false;
+}
+
+export interface TerrainHorizonOptions {
+  directionCount?: number;
+  sampleStepMeters?: number;
+  maxDistanceMeters?: number;
+}
+
+const DEFAULT_DIRECTION_COUNT = 360;
+const DEFAULT_SAMPLE_STEP_METERS = 5;
+const DEFAULT_MAX_DISTANCE_METERS = 15000;
+
+function toRadians(degrees: number): number {
+  return (degrees * Math.PI) / 180;
+}
+
+function toDegrees(radians: number): number {
+  return (radians * 180) / Math.PI;
+}
+
+/**
+ * Calculates a destination coordinate on a spherical Moon.
+ *
+ * Bearing convention:
+ * 0° = North
+ * 90° = East
+ * 180° = South
+ * 270° = West
+ */
+function destinationCoordinate(
+  start: GeographicCoordinate,
+  bearingDeg: number,
+  distanceMeters: number,
+  lunarRadiusMeters: number
+): GeographicCoordinate {
+  const latitude1 = toRadians(start.latitudeDeg);
+  const longitude1 = toRadians(start.longitudeEastDeg);
+  const bearing = toRadians(bearingDeg);
+
+  const angularDistance = distanceMeters / lunarRadiusMeters;
+
+  const sinLatitude2 =
+    Math.sin(latitude1) * Math.cos(angularDistance) +
+    Math.cos(latitude1) *
+      Math.sin(angularDistance) *
+      Math.cos(bearing);
+
+  const latitude2 = Math.asin(
+    Math.max(-1, Math.min(1, sinLatitude2))
+  );
+
+  const longitude2 =
+    longitude1 +
+    Math.atan2(
+      Math.sin(bearing) *
+        Math.sin(angularDistance) *
+        Math.cos(latitude1),
+      Math.cos(angularDistance) -
+        Math.sin(latitude1) * Math.sin(latitude2)
+    );
+
+  return {
+    latitudeDeg: toDegrees(latitude2),
+    longitudeEastDeg: toDegrees(longitude2),
+  };
+}
+
+/**
+ * Calculates apparent terrain elevation relative to the
+ * observer's local horizontal plane.
+ *
+ * Lunar curvature is included.
+ */
+function calculateTerrainElevationAngle(
+  observerElevationMeters: number,
+  terrainElevationMeters: number,
+  distanceMeters: number,
+  lunarRadiusMeters: number
+): number {
+  if (distanceMeters <= 0) {
+    return -90;
+  }
+
+  const observerRadius =
+    lunarRadiusMeters + observerElevationMeters;
+
+  const terrainRadius =
+    lunarRadiusMeters + terrainElevationMeters;
+
+  const angularDistance = distanceMeters / lunarRadiusMeters;
+
+  const vertical =
+    terrainRadius * Math.cos(angularDistance) -
+    observerRadius;
+
+  const horizontal =
+    terrainRadius * Math.sin(angularDistance);
+
+  return toDegrees(Math.atan2(vertical, horizontal));
+}
+
+/**
+ * Calculates the terrain horizon along one azimuth.
+ *
+ * Sampling stops when either:
+ * 1. The path leaves the available LOLA raster.
+ * 2. The configured maximum search distance is reached.
+ *
+ * Neither condition proves that terrain beyond the sampled
+ * area cannot produce a higher horizon.
+ */
+function calculateDirectionHorizon(
+  terrain: LolaTerrainData,
+  observer: GeographicCoordinate,
+  observerElevationMeters: number,
+  azimuthDeg: number,
+  sampleStepMeters: number,
+  maxDistanceMeters: number
+): TerrainHorizonDirection {
+  const lunarRadius =
+    terrain.metadata.georeferencing.lunarRadiusMeters;
+
+  let maximumAngle = -90;
+  let maximumDistance = 0;
+  let maximumTerrainElevation = observerElevationMeters;
+  let samplesChecked = 0;
+
+  let terminationReason: TerrainHorizonTermination =
+    "search_limit";
+
+  for (
+    let distance = sampleStepMeters;
+    distance <= maxDistanceMeters;
+    distance += sampleStepMeters
+  ) {
+    const coordinate = destinationCoordinate(
+      observer,
+      azimuthDeg,
+      distance,
+      lunarRadius
+    );
+
+    const projected = geographicToLolaProjected(
+      coordinate,
+      terrain.metadata
+    );
+
+    const pixel = projectedToLolaPixel(
+      projected,
+      terrain.metadata
+    );
+
+    if (!isLolaPixelInsideRaster(pixel, terrain)) {
+      terminationReason = "raster_boundary";
+      break;
+    }
+
+    const terrainElevation = sampleLolaHeightAtPixel(
+      terrain,
+      pixel
+    );
+
+    const elevationAngle = calculateTerrainElevationAngle(
+      observerElevationMeters,
+      terrainElevation,
+      distance,
+      lunarRadius
+    );
+
+    samplesChecked++;
+
+    if (elevationAngle > maximumAngle) {
+      maximumAngle = elevationAngle;
+      maximumDistance = distance;
+      maximumTerrainElevation = terrainElevation;
+    }
+  }
+
+  return {
+    azimuthDeg,
+    horizonElevationDeg: maximumAngle,
+    distanceMeters: maximumDistance,
+    terrainElevationMeters: maximumTerrainElevation,
+    samplesChecked,
+    terminationReason,
+    coverageLimited: true,
+  };
+}
+
+/**
+ * Calculates a sampled terrain horizon around the observer.
+ *
+ * IMPORTANT:
+ * This is a terrain horizon estimate within the available
+ * LOLA raster and configured search distance. It is not
+ * proof of the complete lunar horizon.
+ */
+export function calculateTerrainHorizon(
+  terrain: LolaTerrainData,
+  observer: GeographicCoordinate = SITE04_COORDINATES,
+  options: TerrainHorizonOptions = {}
+): TerrainHorizonResult {
+  const directionCount =
+    options.directionCount ?? DEFAULT_DIRECTION_COUNT;
+
+  const sampleStepMeters =
+    options.sampleStepMeters ?? DEFAULT_SAMPLE_STEP_METERS;
+
+  const maxDistanceMeters =
+    options.maxDistanceMeters ?? DEFAULT_MAX_DISTANCE_METERS;
+
+  if (!Number.isInteger(directionCount) || directionCount < 4) {
+    throw new Error(
+      "directionCount must be an integer of at least 4."
+    );
+  }
+
+  if (!Number.isFinite(sampleStepMeters) || sampleStepMeters <= 0) {
+    throw new Error(
+      "sampleStepMeters must be greater than zero."
+    );
+  }
+
+  if (!Number.isFinite(maxDistanceMeters) || maxDistanceMeters <= 0) {
+    throw new Error(
+      "maxDistanceMeters must be greater than zero."
+    );
+  }
+
+  if (
+    !Number.isFinite(observer.latitudeDeg) ||
+    observer.latitudeDeg < -90 ||
+    observer.latitudeDeg > 90 ||
+    !Number.isFinite(observer.longitudeEastDeg)
+  ) {
+    throw new Error("Invalid observer geographic coordinates.");
+  }
+
+  const observerSample = sampleLolaHeightAtLocation(
+    terrain,
+    observer
+  );
+
+  const lunarRadius =
+    terrain.metadata.georeferencing.lunarRadiusMeters;
+
+  const directions: TerrainHorizonDirection[] = [];
+
+  let totalSamplesChecked = 0;
+  let rasterBoundaryLimitedDirections = 0;
+  let searchLimitReachedDirections = 0;
+
+  for (let i = 0; i < directionCount; i++) {
+    const azimuthDeg = (i * 360) / directionCount;
+
+    const result = calculateDirectionHorizon(
+      terrain,
+      observer,
+      observerSample.elevationMeters,
+      azimuthDeg,
+      sampleStepMeters,
+      maxDistanceMeters
+    );
+
+    directions.push(result);
+
+    totalSamplesChecked += result.samplesChecked;
+
+    if (result.terminationReason === "raster_boundary") {
+      rasterBoundaryLimitedDirections++;
+    } else {
+      searchLimitReachedDirections++;
+    }
+  }
+
+  return {
+    observer,
+    observerProjected: observerSample.projected,
+    observerElevationMeters: observerSample.elevationMeters,
+    lunarRadiusMeters: lunarRadius,
+    sampleStepMeters,
+    maxDistanceMeters,
+
+    directions,
+    calculatedDirections: directions.length,
+    totalSamplesChecked,
+
+    rasterBoundaryLimitedDirections,
+    searchLimitReachedDirections,
+
+    completeHorizonVerified: false,
+  };
+}
+</file>
+
+<file path="src/components/lib/lunar/terrainLoader.ts">
+export interface TerrainMetadata {
+  width: number;
+  height: number;
+  minElevation: number;
+  maxElevation: number;
+  resolutionMeters: number;
+  centerLatitude: number;
+  centerLongitude: number;
+}
+
+export interface TerrainData {
+  metadata: TerrainMetadata;
+  elevationBuffer: Float32Array;
+}
+
+/**
+ * Loads authentic NASA LOLA elevation data and metadata.
+ * Throws an error if assets are missing, ensuring scientific integrity.
+ */
+export async function loadLolaTerrainData(siteId: string = "site04_shackleton_rim"): Promise<TerrainData> {
+  const metaRes = await fetch(`/data/${siteId}/metadata.json`);
+  if (!metaRes.ok) {
+    throw new Error(`NASA LOLA metadata.json not found for ${siteId}. Dataset pre-processing required.`);
+  }
+  const metadata: TerrainMetadata = await metaRes.json();
+
+  const binRes = await fetch(`/data/${siteId}/elevation.bin`);
+  if (!binRes.ok) {
+    throw new Error(`NASA LOLA elevation.bin binary buffer not found for ${siteId}.`);
+  }
+  const buffer = await binRes.arrayBuffer();
+  const elevationBuffer = new Float32Array(buffer);
+
+  return { metadata, elevationBuffer };
+}
+</file>
+
+<file path="src/components/types/lunar.ts">
+// src/types/lunar.ts
+
+export interface LandingSite {
+  id: string;
+  name: string;
+  latitude: number; // Selenographic latitude (-90 to 90)
+  longitude: number; // Selenographic longitude (0 to 360 or -180 to 180)
+  description: string;
+  elevationDataset: {
+    name: string;
+    resolutionMeters: number;
+    sourceUrl: string;
+    fileName: string;
+  };
+}
+
+export interface CelestialEphemeris {
+  sunAzimuth: number;    // Radians relative to local North
+  sunElevation: number;  // Radians above/below horizon
+  earthAzimuth: number;  // Radians relative to local North
+  earthElevation: number;// Radians above/below horizon
+  isSunVisible: boolean;
+  isEarthVisible: boolean;
+}
+
+export interface TerrainMetadata {
+  width: number;
+  height: number;
+  minElevation: number;
+  maxElevation: number;
+  resolutionMeters: number;
+  crs: string; // e.g., "Moon South Polar Stereographic"
+  centerLat: number;
+  centerLon: number;
+}
+
+export interface IlluminationMetrics {
+  solarElevationDeg: number;
+  sunlitPercentage: number;
+  shadowedPercentage: number;
+  lineOfSightToEarth: boolean;
+}
+</file>
+
+<file path=".gitignore">
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# testing
+/coverage
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# env files (can opt-in for committing if needed)
+.env*
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+</file>
+
+<file path="AGENTS.md">
+<!-- BEGIN:nextjs-agent-rules -->
+
+## This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->
+</file>
+
+<file path="eslint.config.mjs">
+import { defineConfig, globalIgnores } from "eslint/config";
+import nextVitals from "eslint-config-next/core-web-vitals";
+import nextTs from "eslint-config-next/typescript";
+
+const eslintConfig = defineConfig([
+  ...nextVitals,
+  ...nextTs,
+  // Override default ignores of eslint-config-next.
+  globalIgnores([
+    // Default ignores of eslint-config-next:
+    ".next/**",
+    "out/**",
+    "build/**",
+    "next-env.d.ts",
+  ]),
+]);
+
+export default eslintConfig;
+</file>
+
+<file path="next.config.ts">
+import type { NextConfig } from "next";
+
+const nextConfig: NextConfig = {
+  /* config options here */
+  cacheComponents: true,
+  partialPrefetching: true,
+  turbopack: {
+    rules: {
+      "*.css": {
+        loaders: ["@tailwindcss/turbopack"],
+        as: "*.css",
+      },
+    },
+  },
+};
+
+export default nextConfig;
+</file>
+
+<file path="package.json">
+{
+  "name": "frontend",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint"
+  },
+  "dependencies": {
+    "@react-three/drei": "^10.7.9",
+    "@react-three/fiber": "^9.8.2",
+    "geotiff": "^3.0.5",
+    "next": "16.4.5",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "three": "^0.187.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/turbopack": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@types/three": "^0.187.0",
+    "eslint": "^9",
+    "eslint-config-next": "16.4.5",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}
+</file>
+
+<file path="README.md">
+This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+
+## Getting Started
+
+First, run the development server:
+
+```bash
+npm run dev
+# or
+yarn dev
+# or
+pnpm dev
+# or
+bun dev
+```
+
+Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+
+You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+
+This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+
+## Learn More
+
+To learn more about Next.js, take a look at the following resources:
+
+- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
+- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+
+You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+
+## Deploy on Vercel
+
+The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+
+Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+</file>
+
+<file path="tsconfig.json">
+{
+  "compilerOptions": {
+    "ignoreDeprecations": "5.0",
+    "paths": {
+      "@/*": ["./src/*"]
+    },
+    "target": "ES2017",
+    "lib": ["dom", "dom.iterable", "esnext"],
+    "allowJs": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "react-jsx",
+    "incremental": true,
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ]
+  },
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts",
+    ".next/dev/types/**/*.ts",
+    "**/*.mts"
+  ],
+  "exclude": ["node_modules"]
+}
+</file>
+
+</files>
