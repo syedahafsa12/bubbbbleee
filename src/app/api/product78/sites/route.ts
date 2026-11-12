@@ -2,6 +2,8 @@ import { connection, NextResponse } from "next/server";
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 
+export const runtime = "nodejs";
+
 import {
   PRODUCT78_SITE_REGISTRY,
   type Product78SiteId,
