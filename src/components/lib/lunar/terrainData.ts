@@ -706,7 +706,7 @@ export function decodeLolaTerrain(
       metadata.noDataValue === "NaN"
         ? Number.isNaN(elevation)
         : typeof metadata.noDataValue === "number"
-          ? elevation === metadata.noDataValue
+          ? elevation === Math.fround(metadata.noDataValue)
           : false;
 
     if (isDeclaredNoData) {
