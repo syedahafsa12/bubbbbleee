@@ -210,19 +210,70 @@ async function main() {
     fail(`Horizon profile length (${profile.length}) does not match directionCount (${terrain.directionCount}).`);
   } else if (terrain) {
     pass(`Terrain horizon profile: ${profile.length} directions at ${terrain.directionSpacingDegrees}° spacing.`);
+
     if (terrain.completeHorizonVerified !== false) {
-      warn("API no longer reports completeHorizonVerified=false. Review the scientific status before displaying it as verified.");
+      fail("completeHorizonVerified must remain false for a local Product78 footprint.");
     } else {
       pass("Horizon correctly remains labelled as not completely verified.");
     }
+
+    if (terrain.siteId !== "site04_shackleton_rim") {
+      fail(`Expected default site04_shackleton_rim; received ${terrain.siteId ?? "missing"}.`);
+    }
+
+    if (terrain.product90?.status !== "disabled") {
+      fail(`Product90 should be disabled on the MVP API path; received ${terrain.product90?.status ?? "missing"}.`);
+    } else {
+      pass("Product90 is disabled and does not gate the Product78 horizon.");
+    }
+
+    if (terrain.product78SamplesChecked <= 0 || terrain.product90SamplesChecked !== 0) {
+      fail("Expected real Product78 samples and zero Product90 samples.");
+    } else {
+      pass(`Product78-only samples: ${terrain.product78SamplesChecked.toLocaleString()}.`);
+    }
+
+    const invalidDirections = profile.filter((direction) =>
+      !Number.isFinite(direction.azimuthDeg) ||
+      !Number.isSafeInteger(direction.sampleCount) ||
+      direction.sampleCount < 0 ||
+      !["partial", "no_data"].includes(direction.coverageStatus) ||
+      typeof direction.terminationReason !== "string" ||
+      direction.terrainBeyondKnownCoverageUnknown !== true ||
+      !(
+        direction.maxTerrainElevationAngleDeg === null ||
+        Number.isFinite(direction.maxTerrainElevationAngleDeg)
+      ) ||
+      !(
+        direction.lastKnownSampleDistanceM === null ||
+        (Number.isFinite(direction.lastKnownSampleDistanceM) &&
+          direction.lastKnownSampleDistanceM >= 0)
+      ) ||
+      (direction.coverageStatus === "no_data" &&
+        (direction.maxTerrainElevationAngleDeg !== null ||
+          direction.lastKnownSampleDistanceM !== null ||
+          direction.source !== null))
+    );
+
+    if (invalidDirections.length > 0) {
+      fail(`${invalidDirections.length} horizon directions violate the partial/unknown coverage contract.`);
+    } else {
+      pass("Every azimuth reports sample count, source, termination, and explicit unknown coverage.");
+    }
+
+    const unsupportedCount = profile.filter(
+      (direction) => direction.coverageStatus === "no_data"
+    ).length;
+
+    console.log(`  Directions with no valid terrain samples: ${unsupportedCount}`);
   } else {
-    warn("Terrain horizon is unavailable for this request.");
+    fail("Product78 terrainModel is missing; a valid local terrain profile is required.");
   }
 
   if (payload.status === "partial") {
-    warn("The API returned partial data. This is a valid response state; inspect the target-specific messages above.");
+    pass("API correctly reports partial coverage; unknown regions are not promoted to open sky.");
   } else {
-    pass("API reports a complete response.");
+    fail("A Product78 local-footprint response must remain partial and unverified.");
   }
 
   console.log("\nSUMMARY");
