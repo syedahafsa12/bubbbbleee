@@ -296,6 +296,43 @@ function disposeArrowHelper(arrow: THREE.ArrowHelper) {
   else coneMaterial.dispose();
 }
 
+function SelectedAzimuthArrow({
+  azimuthDeg,
+  metadata,
+  observerPosition,
+  observerCoordinate,
+}: {
+  azimuthDeg: number;
+  metadata: LolaTerrainMetadata;
+  observerPosition: [number, number, number] | null;
+  observerCoordinate: ObserverCoordinate;
+}) {
+  const arrow = useMemo(() => {
+    if (!observerPosition) return null;
+    const direction = projectedBearingDirection(
+      azimuthDeg,
+      metadata,
+      observerCoordinate
+    );
+    if (!direction) return null;
+
+    return new THREE.ArrowHelper(
+      direction,
+      new THREE.Vector3(...observerPosition),
+      5.2,
+      "#c4a5ff",
+      0.42,
+      0.24
+    );
+  }, [azimuthDeg, metadata, observerPosition, observerCoordinate]);
+
+  useEffect(() => () => {
+    if (arrow) disposeArrowHelper(arrow);
+  }, [arrow]);
+
+  return arrow ? <primitive object={arrow} /> : null;
+}
+
 function CelestialArrow({
   observation,
   metadata,
@@ -388,6 +425,7 @@ function TerrainMesh({
   sun,
   earth,
   observerCoordinate,
+  selectedAzimuthDeg,
 }: {
   geometry: THREE.BufferGeometry;
   observerPosition: [number, number, number] | null;
@@ -396,6 +434,7 @@ function TerrainMesh({
   sun?: CelestialObservation;
   earth?: CelestialObservation;
   observerCoordinate: ObserverCoordinate;
+  selectedAzimuthDeg: number;
 }) {
   const sunDirection = useMemo(
     () => sun ? celestialSceneDirection(sun, metadata, observerCoordinate) : null,
@@ -446,6 +485,12 @@ function TerrainMesh({
         observerCoordinate={observerCoordinate}
         color="#72cce8"
       />
+      <SelectedAzimuthArrow
+        azimuthDeg={selectedAzimuthDeg}
+        metadata={metadata}
+        observerPosition={observerPosition}
+        observerCoordinate={observerCoordinate}
+      />
       {sunLightPosition && sun && sun.elevationDeg > 0 && (
         <directionalLight
           position={sunLightPosition}
@@ -476,10 +521,12 @@ export default function Site04Terrain({
   siteId,
   sun,
   earth,
+  selectedAzimuthDeg,
 }: {
   siteId: Product78SiteId;
   sun?: CelestialObservation;
   earth?: CelestialObservation;
+  selectedAzimuthDeg: number;
 }) {
   const [cameraResetToken, setCameraResetToken] = useState(0);
   const [terrain, setTerrain] = useState<TerrainState>({
@@ -580,6 +627,7 @@ export default function Site04Terrain({
             sun={sun}
             earth={earth}
             observerCoordinate={getProduct78Site(siteId).observer}
+            selectedAzimuthDeg={selectedAzimuthDeg}
           />
         </Canvas>
         <div className="terrain-overlay terrain-overlay-top">
