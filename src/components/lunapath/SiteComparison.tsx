@@ -104,23 +104,15 @@ function VisibilityWindowList({
 }
 
 export default function SiteComparison({ sites, date }: Props) {
-  const [selectedIds, setSelectedIds] = useState<Product78SiteId[]>([]);
+  // The parent keys this component by date and verified-site list, so the
+  // initial selection is derived directly from the currently available sites.
+  const [selectedIds, setSelectedIds] = useState<Product78SiteId[]>(
+    () => sites.slice(0, Math.min(2, sites.length)).map((site) => site.id)
+  );
   const [results, setResults] = useState<ComparisonResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const requestSequence = useRef(0);
-
-  useEffect(() => {
-    requestSequence.current += 1;
-    setLoading(false);
-    setSelectedIds((current) => {
-      const stillReady = current.filter((id) => sites.some((site) => site.id === id));
-      if (stillReady.length >= 2) return stillReady.slice(0, 3);
-      return sites.slice(0, Math.min(2, sites.length)).map((site) => site.id);
-    });
-    setResults([]);
-    setError(null);
-  }, [sites, date]);
 
   useEffect(() => {
     return () => {
@@ -246,7 +238,7 @@ export default function SiteComparison({ sites, date }: Props) {
       ) : (
         <div className="comparison-placeholder">
           <strong>{sites.length === 1 ? "One verified site is currently available." : "No local Product78 datasets are ready."}</strong>
-          <p>Prepare and validate at least one more site's metadata and elevation binary to enable a real 2–3 site comparison. Unprepared registry entries are not included.</p>
+          <p>Prepare and validate at least one more site&apos;s metadata and elevation binary to enable a real 2–3 site comparison. Unprepared registry entries are not included.</p>
         </div>
       )}
 
@@ -292,7 +284,7 @@ export default function SiteComparison({ sites, date }: Props) {
       )}
 
       <p className="comparison-footnote">
-        Comparison values come directly from each selected site's API response. Visibility windows use sampled observation times, not exact interpolated crossing times. A partial horizon is not a complete visibility guarantee.
+        Comparison values come directly from each selected site&apos;s API response. Visibility windows use sampled observation times, not exact interpolated crossing times. A partial horizon is not a complete visibility guarantee.
       </p>
     </section>
   );
