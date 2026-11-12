@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Canvas } from "@react-three/fiber";
+import { useEffect, useMemo, useState } from "react";
+import { Canvas, useThree } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
 import * as THREE from "three";
 import {
@@ -187,15 +187,62 @@ function buildDisplayGeometry(terrain: LolaTerrainData): {
   };
 }
 
+function CameraReset({ resetToken }: { resetToken: number }) {
+  const camera = useThree((state) => state.camera);
+
+  useEffect(() => {
+    camera.position.set(11, 8.5, 12);
+    camera.up.set(0, 1, 0);
+    camera.lookAt(0, 0, 0);
+    camera.updateProjectionMatrix();
+  }, [camera, resetToken]);
+
+  return null;
+}
+
+function TerrainCoverageOutline({ metadata }: { metadata: LolaTerrainMetadata }) {
+  const geometry = useMemo(() => {
+    const [minX, minY, maxX, maxY] = metadata.bbox;
+    const centerX = (minX + maxX) / 2;
+    const centerY = (minY + maxY) / 2;
+    const baseY = metadata.minElevation / 1000 - 0.08;
+    const points = [
+      [minX, minY],
+      [maxX, minY],
+      [maxX, maxY],
+      [minX, maxY],
+    ].map(([x, y]) => new THREE.Vector3(
+      (x - centerX) / 1000,
+      baseY,
+      -(y - centerY) / 1000
+    ));
+
+    return new THREE.BufferGeometry().setFromPoints(points);
+  }, [metadata]);
+
+  useEffect(() => () => geometry.dispose(), [geometry]);
+
+  return (
+    <lineLoop geometry={geometry}>
+      <lineBasicMaterial color="#70d8c6" transparent opacity={0.9} />
+    </lineLoop>
+  );
+}
+
 function TerrainMesh({
   geometry,
   observerPosition,
+  metadata,
+  resetToken,
 }: {
   geometry: THREE.BufferGeometry;
   observerPosition: [number, number, number] | null;
+  metadata: LolaTerrainMetadata;
+  resetToken: number;
 }) {
   return (
     <>
+      <CameraReset resetToken={resetToken} />
       <mesh geometry={geometry} castShadow receiveShadow>
         <meshStandardMaterial
           vertexColors
@@ -216,11 +263,13 @@ function TerrainMesh({
           </mesh>
         </group>
       )}
+      <TerrainCoverageOutline metadata={metadata} />
       <gridHelper
         position={[0, -3.15, 0]}
         args={[26, 26, "#59717a", "#38515b"]}
       />
       <OrbitControls
+        key={resetToken}
         makeDefault
         minDistance={7}
         maxDistance={34}
@@ -233,6 +282,7 @@ function TerrainMesh({
 }
 
 export default function Site04Terrain() {
+  const [cameraResetToken, setCameraResetToken] = useState(0);
   const [terrain, setTerrain] = useState<TerrainState>({
     status: "loading",
     message: "Loading NASA Product78 Site04 terrain…",
@@ -329,16 +379,25 @@ export default function Site04Terrain() {
           <TerrainMesh
             geometry={terrain.geometry}
             observerPosition={terrain.observerPosition}
+            metadata={terrain.metadata}
+            resetToken={cameraResetToken}
           />
         </Canvas>
         <div className="terrain-overlay terrain-overlay-top">
           <span className="scene-chip"><span className="status-dot" /> PRODUCT78 · SITE04</span>
           <span className="scene-chip">5 m source pixels</span>
-          <span className="scene-chip">ORANGE MARKER · OBSERVER</span>
+          <button
+            type="button"
+            className="terrain-view-reset"
+            onClick={() => setCameraResetToken((token) => token + 1)}
+            aria-label="Reset terrain camera view"
+          >
+            RESET VIEW ↺
+          </button>
         </div>
         <div className="terrain-overlay terrain-overlay-bottom">
           <span>Drag to orbit · Scroll to zoom · Right-drag to pan</span>
-          <span>16 × 16 km · south-polar stereographic</span>
+          <span>TEAL OUTLINE · PRODUCT78 RASTER FOOTPRINT</span>
         </div>
       </div>
 
