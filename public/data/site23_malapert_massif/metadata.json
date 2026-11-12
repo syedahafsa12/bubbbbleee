@@ -1,0 +1,41 @@
+{
+  "width": 4200,
+  "height": 4200,
+  "minElevation": 901.9910888671875,
+  "maxElevation": 5173.56298828125,
+  "resolutionMeters": 5,
+  "bbox": [
+    -11000,
+    111000,
+    10000,
+    132000
+  ],
+  "pixelResolution": [
+    5,
+    -5,
+    0
+  ],
+  "coordinateSystem": {
+    "projection": "South Polar Stereographic",
+    "referenceFrame": "MOON_ME",
+    "ephemeris": "DE421",
+    "linearUnits": "meters",
+    "pixelRegistration": "pixel area"
+  },
+  "georeferencing": {
+    "tiePoint": {
+      "column": 0,
+      "row": 0,
+      "x": -11000,
+      "y": 132000
+    },
+    "centralMeridianDegrees": 0,
+    "lunarRadiusMeters": 1737400
+  },
+  "dataType": "Float32",
+  "byteOrder": "little-endian",
+  "noDataValue": "NaN",
+  "noDataPixelCount": 0,
+  "sourceProduct": "NASA LOLA Product78",
+  "sourceFile": "Site23_final_adj_5mpp_surf.tif"
+}
