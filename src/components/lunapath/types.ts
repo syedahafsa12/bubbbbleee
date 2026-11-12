@@ -2,6 +2,43 @@ import type { Product78SiteId } from "@/components/lib/lunar/siteRegistry";
 
 export type ApiStatus = "complete" | "partial";
 
+export type Product78SiteAssetStatus =
+  | "ready"
+  | "not_prepared"
+  | "invalid_metadata"
+  | "invalid_binary_size";
+
+export type Product78SiteStatus = {
+  id: Product78SiteId;
+  archiveSite: string;
+  name: string;
+  dataDirectory: string;
+  observer: {
+    latitudeDeg: number;
+    longitudeEastDeg: number;
+  };
+  source: string;
+  assetStatus: Product78SiteAssetStatus;
+  dimensions?: [number, number];
+  resolutionMeters?: number;
+  binaryBytes?: number;
+  elevationRangeMeters?: [number | null, number | null];
+  noDataPixelCount?: number;
+  referenceFrame?: string | null;
+  ephemeris?: string | null;
+  projection?: string | null;
+  error?: string;
+};
+
+export type Product78SitesResponse = {
+  success: boolean;
+  source?: string;
+  totalSites?: number;
+  readySites?: number;
+  sites?: Product78SiteStatus[];
+  notes?: string[];
+};
+
 /**
  * One azimuth sampled against the local Product78 Site04 raster.
  *
