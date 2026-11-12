@@ -107,6 +107,20 @@ function formatDistance(distanceMeters: number | null): string {
     : "—";
 }
 
+function targetTerrainStatus(observation: CelestialObservation | null) {
+  if (!observation) return "Not returned";
+  if (!observation.terrainVisibility) return "Ephemeris only · terrain unknown";
+  return observation.terrainVisibility.blockedBySampledTerrain
+    ? "Blocked by known local terrain"
+    : "Above sampled terrain · unconfirmed";
+}
+
+function targetClearance(observation: CelestialObservation | null) {
+  return observation?.terrainVisibility
+    ? `${observation.terrainVisibility.clearanceDeg.toFixed(2)}°`
+    : "—";
+}
+
 export default function HorizonScope({
   profile,
   sun,
@@ -213,6 +227,24 @@ export default function HorizonScope({
         <div className="scope-azimuth-row">
           <span>AZIMUTH</span>
           <strong>{selectedAzimuth.toFixed(2)}°</strong>
+        </div>
+        <div className="scope-target-readings">
+          <div className="scope-target-reading">
+            <span className="target-symbol sun-symbol">☼</span>
+            <div>
+              <strong>Sun</strong>
+              <small>{sunPoint ? `${sunPoint.azimuthDeg.toFixed(2)}° AZ · ${sunPoint.elevationDeg.toFixed(2)}° EL` : "No selected observation"}</small>
+              <small>{targetTerrainStatus(sunPoint)} · clearance {targetClearance(sunPoint)}</small>
+            </div>
+          </div>
+          <div className="scope-target-reading">
+            <span className="target-symbol earth-symbol">◉</span>
+            <div>
+              <strong>Earth</strong>
+              <small>{earthPoint ? `${earthPoint.azimuthDeg.toFixed(2)}° AZ · ${earthPoint.elevationDeg.toFixed(2)}° EL` : "No selected observation"}</small>
+              <small>{targetTerrainStatus(earthPoint)} · clearance {targetClearance(earthPoint)}</small>
+            </div>
+          </div>
         </div>
         <div className="scope-stats">
           <div><span>Known directions</span><strong>{knownDirectionCount.toLocaleString()}</strong></div>
