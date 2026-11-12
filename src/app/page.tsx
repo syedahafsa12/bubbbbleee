@@ -311,7 +311,7 @@ export default function Home() {
 
       <section className="status-strip">
         <div className="status-main">
-          <span className={`status-dot ${data?.status === "complete" ? "status-dot-good" : "status-dot-warning"}`} />
+          <span className={`status-dot ${missionData?.status === "complete" ? "status-dot-good" : "status-dot-warning"}`} />
           {statusLabel}
         </div>
         <div className="status-item">
