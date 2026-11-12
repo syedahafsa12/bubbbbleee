@@ -5,6 +5,7 @@ import Site04Terrain from "@/components/lunapath/Site04Terrain";
 import HorizonScope from "@/components/lunapath/HorizonScope";
 import MissionTimeline from "@/components/lunapath/MissionTimeline";
 import GlobalMoonOverview from "@/components/lunapath/GlobalMoonOverview";
+import SiteComparison from "@/components/lunapath/SiteComparison";
 import type {
   HorizonsResponse,
   CelestialTarget,
@@ -528,19 +529,9 @@ export default function Home() {
               <div className="eyebrow">05 / RESULTS</div>
               <h2>Site comparison</h2>
             </div>
-            <span className="panel-badge">{comparisonReady ? "READY FOR 2+ SITES" : "WAITING FOR DATASETS"}</span>
+            <span className="panel-badge">{comparisonReady ? "2–3 SITES" : "WAITING FOR DATASETS"}</span>
           </div>
-          {comparisonReady ? (
-            <div className="comparison-placeholder">
-              <strong>{readySites.length} locally prepared sites are available.</strong>
-              <p>Multi-site ephemeris and terrain comparison can be run against these verified datasets. The current mission result above belongs only to {selectedSite?.name ?? "the selected site"}.</p>
-            </div>
-          ) : (
-            <div className="comparison-placeholder">
-              <strong>One verified site is currently available.</strong>
-              <p>Prepare and validate at least one more local Product78 raster to enable a real 2–3 site comparison. No placeholder metrics are shown.</p>
-            </div>
-          )}
+          <SiteComparison sites={readySites} date={date} />
         </section>
       </div>
 
