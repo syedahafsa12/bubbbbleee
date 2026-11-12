@@ -363,3 +363,15 @@ h1 em { color: var(--teal); font-style: normal; }
   .site-comparison-results { grid-template-columns: 1fr; }
   .comparison-window-columns { grid-template-columns: 1fr; }
 }
+
+.scope-target-readings { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin: 11px 0 13px; }
+.scope-target-reading { display: flex; align-items: flex-start; gap: 7px; min-width: 0; padding: 8px; border: 1px solid rgba(148,178,184,.1); border-radius: 6px; background: rgba(5,17,23,.22); }
+.scope-target-reading .target-symbol { width: 18px; height: 18px; flex: 0 0 auto; font-size: 12px; }
+.scope-target-reading > div { display: grid; gap: 4px; min-width: 0; }
+.scope-target-reading strong { color: #cfddda; font-size: 9px; font-weight: 550; }
+.scope-target-reading small { color: #81969a; font-size: 8px; line-height: 1.45; }
+
+
+@media (max-width: 700px) {
+  .scope-target-readings { grid-template-columns: 1fr; }
+}
