@@ -25,8 +25,6 @@ type TerrainHorizonResult =
 
 type TerrainHorizonDirections = TerrainHorizonResult["directions"];
 
-export const runtime = "nodejs";
-
 const HORIZONS_URL =
   "https://ssd.jpl.nasa.gov/api/horizons.api";
 

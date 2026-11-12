@@ -7,8 +7,6 @@ import {
   type Product78SiteId,
 } from "@/components/lib/lunar/siteRegistry";
 
-export const runtime = "nodejs";
-
 type SiteAssetStatus =
   | "ready"
   | "not_prepared"
