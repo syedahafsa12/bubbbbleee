@@ -68,10 +68,12 @@ Each `terrainModel.horizonProfile[]` entry exposes:
 - `sampleCount`
 - `source` (`product78` or `null`)
 - `coverageStatus` (`partial` or `no_data`)
-- `terminationReason` (`product78_boundary`, `product78_nodata`, or `search_limit` for Product78-only mode)
+- `terminationReason` (`raster_boundary`, `nodata`, or `search_limit` for Product78-only mode)
 - `terrainBeyondKnownCoverageUnknown` (always `true`)
 
 When a direction has no valid samples, its maximum terrain angle, source, and last known distance are `null`. Do not substitute zero.
+
+The API normalizes internal reasons: `product78_boundary` becomes `raster_boundary`, and `product78_nodata` becomes `nodata`. `search_limit` stays a distinct termination reason and is never re-labelled as a raster boundary.
 
 The profile always returns `completeHorizonVerified: false`. A ray that reaches a raster edge or the configured search limit cannot prove what lies beyond its known samples.
 
