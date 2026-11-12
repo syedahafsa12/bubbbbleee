@@ -1110,6 +1110,15 @@ export function sampleLolaHeightAtPixel(
   const neighbours = [topLeft, topRight, bottomLeft, bottomRight];
 
   if (neighbours.some(Number.isNaN)) {
+    if (
+      terrain.metadata.noDataValue === undefined ||
+      terrain.metadata.noDataPixelCount === undefined
+    ) {
+      throw new Error(
+        "Unexpected NaN elevation: the Product78 metadata does not declare a NoData value."
+      );
+    }
+
     throw new LolaNoDataError();
   }
 
