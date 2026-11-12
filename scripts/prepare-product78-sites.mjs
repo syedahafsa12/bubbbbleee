@@ -53,9 +53,25 @@ async function prepareSite(site) {
   const resolution = image.getResolution();
   const origin = image.getOrigin();
   const geoKeys = image.getGeoKeys();
+  const samplesPerPixel = image.getSamplesPerPixel();
+  const sampleFormat = image.getSampleFormat(0);
+  const bitsPerSample = image.getBitsPerSample(0);
 
   assert(width > 0 && height > 0, `${site.archiveSite} has invalid dimensions.`);
+  assert(samplesPerPixel === 1, `${site.archiveSite} must contain exactly one elevation band.`);
+  assert(
+    sampleFormat === 3 && bitsPerSample === 32,
+    `${site.archiveSite} must be single-band Float32 (SampleFormat=3, BitsPerSample=32).`
+  );
+  assert(
+    geoKeys.GTModelTypeGeoKey === undefined || geoKeys.GTModelTypeGeoKey === 1,
+    `${site.archiveSite} does not use projected coordinates.`
+  );
   assert(geoKeys.GTRasterTypeGeoKey === 1, `${site.archiveSite} is not PixelIsArea.`);
+  assert(
+    geoKeys.ProjLinearUnitsGeoKey === undefined || geoKeys.ProjLinearUnitsGeoKey === 9001,
+    `${site.archiveSite} projected coordinates are not in metres.`
+  );
   assert(geoKeys.ProjCoordTransGeoKey === 15, `${site.archiveSite} is not polar stereographic.`);
   assert(Math.abs(Math.abs(resolution[0]) - 5) < 0.001, `${site.archiveSite} X resolution is not 5 m.`);
   assert(Math.abs(Math.abs(resolution[1]) - 5) < 0.001, `${site.archiveSite} Y resolution is not 5 m.`);
