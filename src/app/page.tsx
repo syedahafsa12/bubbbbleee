@@ -13,6 +13,11 @@ import type {
   Product78SitesResponse,
 } from "@/components/lunapath/types";
 import type { Product78SiteId } from "@/components/lib/lunar/siteRegistry";
+import {
+  geographicToLolaProjected,
+  projectedToLolaPixel,
+} from "@/components/lib/lunar/terrainData";
+import type { LolaTerrainMetadata } from "@/components/lib/lunar/terrainData";
 
 function utcToday() {
   return new Date().toISOString().slice(0, 10);
@@ -45,7 +50,7 @@ function Stat({
   );
 }
 
-function isUsableSite(site: Product78SiteStatus): boolean {
+function isUsableSiteRecord(site: Product78SiteStatus): boolean {
   return (
     site.assetStatus === "ready" &&
     Number.isFinite(site.observer.latitudeDeg) &&
@@ -54,6 +59,59 @@ function isUsableSite(site: Product78SiteStatus): boolean {
     Array.isArray(site.dimensions) &&
     site.dimensions.length === 2
   );
+}
+
+/**
+ * Check the registered observer against the site's real Product78 metadata
+ * before exposing it in the selector. Full raster decoding/range validation
+ * still happens in loadLolaTerrainForSite when the viewer opens the dataset.
+ */
+async function verifySiteProjection(site: Product78SiteStatus): Promise<boolean> {
+  try {
+    const response = await fetch(`/data/${site.dataDirectory}/metadata.json`, {
+      cache: "no-store",
+    });
+    if (!response.ok) return false;
+
+    const metadata = await response.json() as LolaTerrainMetadata;
+    const projection = metadata.coordinateSystem?.projection
+      ?.toLowerCase()
+      .replace(/[^a-z]/g, "");
+    const referenceFrame = metadata.coordinateSystem?.referenceFrame;
+    const pixelRegistration = metadata.coordinateSystem?.pixelRegistration
+      ?.toLowerCase()
+      .replace(/[^a-z]/g, "");
+
+    if (
+      metadata.width !== site.dimensions?.[0] ||
+      metadata.height !== site.dimensions?.[1] ||
+      metadata.resolutionMeters !== site.resolutionMeters ||
+      metadata.dataType?.toLowerCase() !== "float32" ||
+      !["littleendian", "le"].includes(
+        metadata.byteOrder?.toLowerCase().replace(/[^a-z]/g, "") ?? ""
+      ) ||
+      projection !== "southpolarstereographic" ||
+      referenceFrame !== "MOON_ME" ||
+      pixelRegistration !== "pixelisarea"
+    ) {
+      return false;
+    }
+
+    const projected = geographicToLolaProjected(site.observer, metadata);
+    const pixel = projectedToLolaPixel(projected, metadata);
+
+    // Same half-pixel edge convention as isLolaPixelInsideRaster.
+    return (
+      Number.isFinite(pixel.column) &&
+      Number.isFinite(pixel.row) &&
+      pixel.column >= -0.5 &&
+      pixel.row >= -0.5 &&
+      pixel.column < metadata.width - 0.5 &&
+      pixel.row < metadata.height - 0.5
+    );
+  } catch {
+    return false;
+  }
 }
 
 export default function Home() {
@@ -138,7 +196,16 @@ export default function Home() {
           throw new Error("The Product78 site catalogue could not be loaded.");
         }
 
-        const usable = payload.sites.filter(isUsableSite);
+        const candidates = payload.sites.filter(isUsableSiteRecord);
+        const verification = await Promise.all(
+          candidates.map(async (site) => ({
+            site,
+            valid: await verifySiteProjection(site),
+          }))
+        );
+        const usable = verification
+          .filter((item) => item.valid)
+          .map((item) => item.site);
         if (!active) return;
 
         setReadySites(usable);
