@@ -14,8 +14,6 @@ import {
   calculateMultiResolutionTerrainHorizon,
 } from "../../../../components/lib/lunar/multiResolutionTerrain.server";
 
-export const runtime = "nodejs";
-
 let terrainPromise: Promise<LolaTerrainData> | null = null;
 
 async function loadProduct78(): Promise<LolaTerrainData> {
