@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import Link from "next/link";
 import Site04Terrain from "@/components/lunapath/Site04Terrain";
 import HorizonScope from "@/components/lunapath/HorizonScope";
 import MissionTimeline from "@/components/lunapath/MissionTimeline";
@@ -23,13 +24,24 @@ function utcToday() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function subscribeToNoExternalChanges() {
+  return () => {};
+}
+
+function getServerDateSnapshot() {
+  return "";
+}
+
+const EMPTY_OBSERVATIONS: CelestialTarget["observations"] = [];
+const EMPTY_TARGET: CelestialTarget = {
+  available: false,
+  observations: EMPTY_OBSERVATIONS,
+  visibilityWindows: [],
+  limbVisibilityWindows: [],
+};
+
 function targetOrEmpty(value: CelestialTarget | undefined): CelestialTarget {
-  return value ?? {
-    available: false,
-    observations: [],
-    visibilityWindows: [],
-    limbVisibilityWindows: [],
-  };
+  return value ?? EMPTY_TARGET;
 }
 
 function Stat({
@@ -119,8 +131,15 @@ async function verifySiteProjection(site: Product78SiteStatus): Promise<boolean>
 }
 
 export default function Home() {
-  // Keep the first server/client render deterministic. The browser date is set after mount.
-  const [date, setDate] = useState("");
+  // useSyncExternalStore keeps the server and hydration snapshots identical,
+  // then reads the browser's UTC date without a setState effect.
+  const browserUtcDate = useSyncExternalStore(
+    subscribeToNoExternalChanges,
+    utcToday,
+    getServerDateSnapshot
+  );
+  const [dateOverride, setDateOverride] = useState<string | null>(null);
+  const date = dateOverride ?? browserUtcDate;
   const [data, setData] = useState<HorizonsResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [requestError, setRequestError] = useState<string | null>(null);
@@ -241,26 +260,24 @@ export default function Home() {
     };
   }, []);
 
-  // Date is intentionally derived only in the browser after hydration.
-  useEffect(() => {
-    setDate(utcToday());
-  }, []);
-
   // Selecting a different prepared site or date loads that site's real API data.
   useEffect(() => {
     // Invalidate any request for the previously selected site/date before
-    // starting the next one.
+    // starting the next one. load() owns its asynchronous loading/error state.
     requestSequence.current += 1;
-    if (!date || !selectedSiteId) {
-      setData(null);
-      setLoading(false);
-      return;
-    }
+    if (!date || !selectedSiteId) return;
     void load(date, selectedSiteId);
   }, [load, date, selectedSiteId, refreshVersion]);
 
-  useEffect(() => {
-    setSelectedAzimuth(0);
+  const selectedAzimuth = selectedSiteId
+    ? azimuthBySite[selectedSiteId] ?? 0
+    : 0;
+  const setSelectedAzimuth = useCallback((azimuthDeg: number) => {
+    if (!selectedSiteId) return;
+    setAzimuthBySite((current) => ({
+      ...current,
+      [selectedSiteId]: azimuthDeg,
+    }));
   }, [selectedSiteId]);
 
   const selectedSite = readySites.find(
@@ -273,8 +290,14 @@ export default function Home() {
   const missionData = isDataForSelectedSite ? data : null;
   const observer = missionData?.observer;
 
-  const sun = targetOrEmpty(missionData?.targets?.sun);
-  const earth = targetOrEmpty(missionData?.targets?.earth);
+  const sun = useMemo(
+    () => targetOrEmpty(missionData?.targets?.sun),
+    [missionData?.targets?.sun]
+  );
+  const earth = useMemo(
+    () => targetOrEmpty(missionData?.targets?.earth),
+    [missionData?.targets?.earth]
+  );
   // A terrain result must match the currently selected site. Old or mismatched
   // payloads are not silently displayed under another site's label.
   const terrainModel =
@@ -320,10 +343,10 @@ export default function Home() {
   return (
     <main className="app-shell">
       <header className="topbar">
-        <a className="brand" href="/" aria-label="LunaPath home">
+        <Link className="brand" href="/" aria-label="LunaPath home">
           <span className="brand-mark"><span /></span>
           <span>LUNAPATH</span>
-        </a>
+        </Link>
         <div className="topbar-center">
           <span className="live-indicator" /> NASA SPACE APPS · CHALLENGE 10
         </div>
@@ -368,7 +391,7 @@ export default function Home() {
               id="mission-date"
               type="date"
               value={date}
-              onChange={(event) => setDate(event.target.value)}
+              onChange={(event) => setDateOverride(event.target.value)}
             />
             <button
               type="button"
@@ -422,7 +445,7 @@ export default function Home() {
       {!sitesLoading && readySites.length === 0 && !sitesError && (
         <div className="request-error">
           <strong>No local Product78 terrain is prepared</strong>
-          <span>Prepare and validate at least one site's metadata and elevation binary before selecting it.</span>
+          <span>Prepare and validate at least one site&apos;s metadata and elevation binary before selecting it.</span>
         </div>
       )}
 
@@ -610,7 +633,7 @@ export default function Home() {
             </div>
             <span className="panel-badge">{comparisonReady ? "2–3 SITES" : "WAITING FOR DATASETS"}</span>
           </div>
-          <SiteComparison sites={readySites} date={date} />
+          <SiteComparison key={`${date}:${readySites.map((site) => site.id).join(",")}`} sites={readySites} date={date} />
         </section>
       </div>
 
