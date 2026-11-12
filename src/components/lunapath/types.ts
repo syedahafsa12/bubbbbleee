@@ -19,7 +19,8 @@ export type TerrainDirection = {
     | "nodata"
     | "outside_raster"
     | "invalid_sample"
-    | "calculation_error";
+    | "calculation_error"
+    | "search_limit";
   terrainBeyondKnownCoverageUnknown: true;
 };
 
@@ -61,7 +62,7 @@ export type CelestialObservation = {
   elevationDeg: number;
   angularDiameterArcsec: number | null;
   horizonsMarker: string | null;
-  terrainVisibility?: TerrainVisibility;
+  terrainVisibility?: TerrainVisibility | null;
 };
 
 export type VisibilityWindow = {
