@@ -25,7 +25,8 @@ function Stat({ label, value, detail }: { label: string; value: string; detail?:
 }
 
 export default function Home() {
-  // Keep the first server/client render deterministic. The browser date is set after mount.\n  const [date, setDate] = useState("");
+  // Keep the first server/client render deterministic. The browser date is set after mount.
+  const [date, setDate] = useState("");
   const [data, setData] = useState<HorizonsResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [requestError, setRequestError] = useState<string | null>(null);
