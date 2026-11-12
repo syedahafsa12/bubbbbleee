@@ -633,6 +633,7 @@ export default function Site04Terrain({
         <div className="terrain-overlay terrain-overlay-top">
           <span className="scene-chip"><span className="status-dot" /> PRODUCT78 · {terrain.archiveSite}</span>
           <span className="scene-chip">{terrain.metadata.resolutionMeters} m source pixels</span>
+          <span className="scene-chip">PURPLE ARROW · {selectedAzimuthDeg.toFixed(1)}° AZIMUTH</span>
           <button
             type="button"
             className="terrain-view-reset"
