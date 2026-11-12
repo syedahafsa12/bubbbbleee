@@ -4,6 +4,8 @@ import path from "node:path";
 
 import {
   decodeLolaTerrain,
+  geographicToLolaProjected,
+  projectedToLolaPixel,
   SITE04_COORDINATES,
   type LolaTerrainData,
 } from "../../../../components/lib/lunar/terrainData";
@@ -82,6 +84,64 @@ export async function GET() {
       }
     );
 
+    // Acceptance test 3: a declared runtime NoData cell must stop its
+    // ray and preserve an unknown result, not create a zero-degree horizon.
+    const noDataTerrain: LolaTerrainData = {
+      ...product78,
+      elevations: product78.elevations.slice(),
+    };
+    const lunarRadius =
+      product78.metadata.georeferencing.lunarRadiusMeters;
+    const angularDistance = 50 / lunarRadius;
+    const latitude1 = (SITE04_COORDINATES.latitudeDeg * Math.PI) / 180;
+    const latitude2 = Math.asin(
+      Math.sin(latitude1) * Math.cos(angularDistance) +
+      Math.cos(latitude1) * Math.sin(angularDistance)
+    );
+    const northSampleCoordinate = {
+      latitudeDeg: (latitude2 * 180) / Math.PI,
+      longitudeEastDeg: SITE04_COORDINATES.longitudeEastDeg,
+    };
+    const northPixel = projectedToLolaPixel(
+      geographicToLolaProjected(
+        northSampleCoordinate,
+        product78.metadata
+      ),
+      product78.metadata
+    );
+    const x0 = Math.max(0, Math.min(product78.width - 1, Math.floor(northPixel.column)));
+    const y0 = Math.max(0, Math.min(product78.height - 1, Math.floor(northPixel.row)));
+    const x1 = Math.min(x0 + 1, product78.width - 1);
+    const y1 = Math.min(y0 + 1, product78.height - 1);
+    for (const [column, row] of [
+      [x0, y0],
+      [x1, y0],
+      [x0, y1],
+      [x1, y1],
+    ]) {
+      noDataTerrain.elevations[row * noDataTerrain.width + column] = Number.NaN;
+    }
+
+    const noDataResult = await calculateMultiResolutionTerrainHorizon(
+      noDataTerrain,
+      SITE04_COORDINATES,
+      {
+        directionCount: 4,
+        sampleStepMeters: 50,
+        regionalSampleStepMeters: 20,
+        maxDistanceMeters: 150,
+        directionConcurrency: 1,
+        enableProduct90: false,
+      }
+    );
+    const northNoDataDirection = noDataResult.directions[0];
+    const noDataIsUnknown =
+      northNoDataDirection.coverageStatus === "no_data" &&
+      northNoDataDirection.terminationReason === "product78_nodata" &&
+      northNoDataDirection.horizonElevationDeg === null &&
+      northNoDataDirection.lastKnownSampleDistanceMeters === null &&
+      northNoDataDirection.terrainBeyondKnownCoverageUnknown === true;
+
     const localOnlyPassed =
       localOnly.calculatedDirections === commonOptions.directionCount &&
       localOnly.product90SamplesChecked === 0 &&
@@ -114,6 +174,7 @@ export async function GET() {
     const success =
       localOnlyPassed &&
       failureIsolationPassed &&
+      noDataIsUnknown &&
       completeHorizonRemainsUnverified;
 
     return Response.json(
@@ -125,7 +186,12 @@ export async function GET() {
         checks: {
           localOnlyPassed,
           failureIsolationPassed,
+          noDataIsUnknown,
           completeHorizonRemainsUnverified,
+        },
+        noDataSimulation: {
+          direction: northNoDataDirection,
+          resultIsUnknown: noDataIsUnknown,
         },
         product78Only: {
           calculatedDirections: localOnly.calculatedDirections,
