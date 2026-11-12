@@ -20,6 +20,8 @@ export interface LolaTerrainMetadata {
   minElevation: number;
   maxElevation: number;
   resolutionMeters: number;
+  noDataValue?: number | "NaN";
+  noDataPixelCount?: number;
   bbox: [number, number, number, number];
   pixelResolution: [number, number, number];
 
@@ -67,7 +69,11 @@ export interface LolaSample {
   elevationMeters: number;
 }
 
-const DATA_PATH = "/data/site04_shackleton_rim";
+import {
+  DEFAULT_PRODUCT78_SITE_ID,
+  getProduct78Site,
+  type Product78SiteId,
+} from "./siteRegistry";
 
 const ELEVATION_RANGE_TOLERANCE_METERS = 0.1;
 const GEOREFERENCE_TOLERANCE_METERS = 0.1;
@@ -77,7 +83,17 @@ export const SITE04_COORDINATES: GeographicCoordinate = {
   longitudeEastDeg: 188.13,
 };
 
-let terrainPromise: Promise<LolaTerrainData> | null = null;
+const terrainPromises = new Map<
+  Product78SiteId,
+  Promise<LolaTerrainData>
+>();
+
+export class LolaNoDataError extends Error {
+  constructor(message = "Product 78 sample intersects a NoData pixel.") {
+    super(message);
+    this.name = "LolaNoDataError";
+  }
+}
 
 /**
  * Validates a finite numeric value.
@@ -293,6 +309,33 @@ function validateMetadata(raw: unknown): LolaTerrainMetadata {
     throw new Error("Invalid bounding box.");
   }
 
+  const rawNoDataValue = root.noDataValue;
+  let noDataValue: number | "NaN" | undefined;
+
+  if (rawNoDataValue === "NaN") {
+    noDataValue = "NaN";
+  } else if (typeof rawNoDataValue === "number" && Number.isFinite(rawNoDataValue)) {
+    noDataValue = rawNoDataValue;
+  } else if (rawNoDataValue !== undefined && rawNoDataValue !== null) {
+    throw new Error("noDataValue must be a finite number or the string 'NaN'.");
+  }
+
+  const noDataPixelCount =
+    root.noDataPixelCount === undefined
+      ? undefined
+      : requireNumber(root.noDataPixelCount, "noDataPixelCount");
+
+  if (
+    noDataPixelCount !== undefined &&
+    (!Number.isSafeInteger(noDataPixelCount) || noDataPixelCount < 0)
+  ) {
+    throw new Error("noDataPixelCount must be a non-negative safe integer.");
+  }
+
+  if ((noDataValue === undefined) !== (noDataPixelCount === undefined)) {
+    throw new Error("noDataValue and noDataPixelCount must be declared together.");
+  }
+
   const metadata: LolaTerrainMetadata = {
     width: requireNumber(root.width, "width"),
     height: requireNumber(root.height, "height"),
@@ -311,6 +354,10 @@ function validateMetadata(raw: unknown): LolaTerrainMetadata {
       root.resolutionMeters,
       "resolutionMeters"
     ),
+
+    ...(noDataValue !== undefined
+      ? { noDataValue, noDataPixelCount }
+      : {}),
 
     bbox: [
       requireNumber(bbox[0], "bbox[0]"),
@@ -640,6 +687,7 @@ export function decodeLolaTerrain(
 
   let actualMin = Infinity;
   let actualMax = -Infinity;
+  let actualNoDataCount = 0;
 
   for (
     let index = 0;
@@ -654,9 +702,22 @@ export function decodeLolaTerrain(
       true
     );
 
+    const isDeclaredNoData =
+      metadata.noDataValue === "NaN"
+        ? Number.isNaN(elevation)
+        : typeof metadata.noDataValue === "number"
+          ? elevation === metadata.noDataValue
+          : false;
+
+    if (isDeclaredNoData) {
+      actualNoDataCount++;
+      elevations[index] = Number.NaN;
+      continue;
+    }
+
     if (!Number.isFinite(elevation)) {
       throw new Error(
-        `Invalid elevation at binary index ${index}.`
+        `Invalid elevation at binary index ${index}; non-finite values must match an explicitly declared NoData value.`
       );
     }
 
@@ -669,6 +730,18 @@ export function decodeLolaTerrain(
     if (elevation > actualMax) {
       actualMax = elevation;
     }
+  }
+
+  if (
+    actualNoDataCount !== (metadata.noDataPixelCount ?? 0)
+  ) {
+    throw new Error(
+      `NoData count mismatch. Metadata declares ${metadata.noDataPixelCount ?? 0}, raster contains ${actualNoDataCount}.`
+    );
+  }
+
+  if (!Number.isFinite(actualMin) || !Number.isFinite(actualMax)) {
+    throw new Error("Terrain raster contains no valid finite elevations.");
   }
 
   if (
@@ -706,83 +779,74 @@ export function decodeLolaTerrain(
 }
 
 /**
- * Loads the Site04 LOLA terrain metadata and binary raster.
+ * Loads one registered Product78 site's metadata and elevation raster.
  *
- * Concurrent callers share the same loading promise.
- * If loading fails, the promise is cleared so a later
- * request can retry.
+ * Concurrent callers for the same site share a promise. Failed loads are
+ * removed from the cache so later requests can retry.
  */
-export async function loadLolaTerrain(): Promise<LolaTerrainData> {
-  if (terrainPromise) {
-    return terrainPromise;
-  }
+export async function loadLolaTerrainForSite(
+  siteId: Product78SiteId = DEFAULT_PRODUCT78_SITE_ID
+): Promise<LolaTerrainData> {
+  const site = getProduct78Site(siteId);
+  const cached = terrainPromises.get(siteId);
 
-  terrainPromise = (async () => {
-    console.info("[LOLA] Loading terrain...");
+  if (cached) return cached;
 
-    const [
-      metadataResponse,
-      elevationResponse,
-    ] = await Promise.all([
-      fetch(`${DATA_PATH}/metadata.json`, {
-        cache: "no-store",
-      }),
+  const pending = (async () => {
+    console.info(`[LOLA] Loading Product78 ${site.archiveSite}...`);
 
-      fetch(`${DATA_PATH}/elevation.bin`, {
-        cache: "no-store",
-      }),
+    const dataPath = `/data/${site.dataDirectory}`;
+    const [metadataResponse, elevationResponse] = await Promise.all([
+      fetch(`${dataPath}/metadata.json`, { cache: "no-store" }),
+      fetch(`${dataPath}/elevation.bin`, { cache: "no-store" }),
     ]);
 
     if (!metadataResponse.ok) {
       throw new Error(
-        `Metadata HTTP error: ${metadataResponse.status}`
+        `Product78 ${site.archiveSite} metadata HTTP error: ${metadataResponse.status}`
       );
     }
 
     if (!elevationResponse.ok) {
       throw new Error(
-        `Elevation HTTP error: ${elevationResponse.status}`
+        `Product78 ${site.archiveSite} elevation HTTP error: ${elevationResponse.status}`
       );
     }
 
-    const rawMetadata: unknown =
-      await metadataResponse.json();
+    const rawMetadata: unknown = await metadataResponse.json();
+    const buffer = await elevationResponse.arrayBuffer();
+    const terrain = decodeLolaTerrain(rawMetadata, new Uint8Array(buffer));
 
-    const buffer =
-      await elevationResponse.arrayBuffer();
-
-    const terrain = decodeLolaTerrain(
-      rawMetadata,
-      new Uint8Array(buffer)
-    );
-
-    console.info("[LOLA] Terrain loaded:", {
+    console.info("[LOLA] Product78 site loaded:", {
+      siteId,
+      archiveSite: site.archiveSite,
       dimensions: `${terrain.width} x ${terrain.height}`,
       resolutionMeters: terrain.resolutionMeters,
-      registration:
-        terrain.metadata.coordinateSystem.pixelRegistration,
-      referenceFrame:
-        terrain.metadata.coordinateSystem.referenceFrame,
-      ephemeris:
-        terrain.metadata.coordinateSystem.ephemeris,
+      noDataPixelCount: terrain.metadata.noDataPixelCount ?? 0,
       binarySizeBytes: buffer.byteLength,
     });
 
     return terrain;
   })();
 
+  terrainPromises.set(siteId, pending);
+
   try {
-    return await terrainPromise;
+    return await pending;
   } catch (error) {
-    terrainPromise = null;
-
-    console.error(
-      "[LOLA] Loading failed:",
-      error
-    );
-
+    if (terrainPromises.get(siteId) === pending) {
+      terrainPromises.delete(siteId);
+    }
+    console.error(`[LOLA] Product78 ${site.archiveSite} load failed:`, error);
     throw error;
   }
+}
+
+/**
+ * Backwards-compatible Site04 loader.
+ */
+export async function loadLolaTerrain(): Promise<LolaTerrainData> {
+  return loadLolaTerrainForSite(DEFAULT_PRODUCT78_SITE_ID);
 }
 
 /**
@@ -1043,14 +1107,15 @@ export function sampleLolaHeightAtPixel(
   const bottomRight =
     terrain.elevations[y1 * terrain.width + x1];
 
-  if (
-    !Number.isFinite(topLeft) ||
-    !Number.isFinite(topRight) ||
-    !Number.isFinite(bottomLeft) ||
-    !Number.isFinite(bottomRight)
-  ) {
+  const neighbours = [topLeft, topRight, bottomLeft, bottomRight];
+
+  if (neighbours.some(Number.isNaN)) {
+    throw new LolaNoDataError();
+  }
+
+  if (!neighbours.every(Number.isFinite)) {
     throw new Error(
-      "Invalid elevation during bilinear interpolation."
+      "Invalid non-finite elevation during bilinear interpolation."
     );
   }
 
