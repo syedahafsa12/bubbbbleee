@@ -70,6 +70,47 @@ export async function GET() {
     // Acceptance test 2: deliberately fail the Product90 raster batch after
     // its metadata has been validated. The completed Product78 baseline must
     // be returned rather than rejecting the entire horizon calculation.
+    let sampleFailureInjected = false;
+    const syntheticProduct90Diagnostics = {
+      source: "synthetic-test-dataset",
+      dataset: {
+        name: "NASA LOLA Product90 synthetic test raster",
+        referenceFrame: "MOON_ME",
+        ephemeris: "DE421",
+        projection: "South Polar Stereographic",
+        linearUnits: "metres",
+      },
+      raster: {
+        width: 30400,
+        height: 30400,
+        originX: -304000,
+        originY: 304000,
+        pixelWidth: 20,
+        pixelHeight: -20,
+        boundingBox: [-304000, -304000, 304000, 304000],
+        pixelIsArea: true,
+        samplesPerPixel: 1,
+        sampleFormat: 3,
+        bitsPerSample: 32,
+        noData: Number.NaN,
+        tileWidth: 256,
+        tileHeight: 256,
+      },
+      geoKeys: {
+        modelType: 1,
+        rasterType: 1,
+        linearUnits: 9001,
+      },
+      validation: {
+        dimensions: true,
+        origin: true,
+        resolution: true,
+        boundingBox: true,
+        pixelRegistration: true,
+        float32Encoding: true,
+      },
+    } as never;
+
     const fallback = await calculateMultiResolutionTerrainHorizon(
       product78,
       SITE04_COORDINATES,
@@ -78,7 +119,9 @@ export async function GET() {
         enableProduct90: true,
       },
       {
+        getDiagnostics: async () => syntheticProduct90Diagnostics,
         sampleElevations: async () => {
+          sampleFailureInjected = true;
           throw new Error("Synthetic Product90 tile 28,31 socket failure");
         },
       }
@@ -158,6 +201,7 @@ export async function GET() {
     const failureIsolationPassed =
       fallback.calculatedDirections === commonOptions.directionCount &&
       fallback.product90Status === "unavailable" &&
+      sampleFailureInjected === true &&
       fallback.product90Error?.includes("Synthetic Product90 tile") === true &&
       fallback.product90SamplesChecked === 0 &&
       fallback.product78SamplesChecked > 0 &&
