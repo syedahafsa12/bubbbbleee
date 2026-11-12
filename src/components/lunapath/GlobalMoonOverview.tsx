@@ -38,7 +38,6 @@ function latLonToSpherePosition(
 
 function MoonGlobe() {
   const [texture, setTexture] = useState<THREE.Texture | null>(null);
-  const [textureFailed, setTextureFailed] = useState(false);
 
   const sitePosition = useMemo(
     () => latLonToSpherePosition(
@@ -72,11 +71,10 @@ function MoonGlobe() {
         loaded.anisotropy = 4;
         loadedTexture = loaded;
         setTexture(loaded);
-        setTextureFailed(false);
       },
       undefined,
       () => {
-        if (active) setTextureFailed(true);
+        console.warn("[MoonOverview] NASA lunar color texture unavailable; using neutral globe fallback.");
       }
     );
 
@@ -131,14 +129,11 @@ function MoonGlobe() {
         rotateSpeed={0.55}
       />
 
-      {textureFailed && null}
     </>
   );
 }
 
 export default function GlobalMoonOverview() {
-  const [textureAvailable, setTextureAvailable] = useState(true);
-
   return (
     <section className="moon-overview" aria-label="Interactive global Moon overview">
       <div className="moon-overview-heading">
@@ -189,7 +184,7 @@ export default function GlobalMoonOverview() {
           </div>
           <div className="moon-map-note">
             <strong>Visual-context map only</strong>
-            <p>The global color texture is from NASA's LROC-based CGI Moon Kit. It is not a scientific elevation model. Local terrain analysis uses the supplied Product78 Site04 raster.</p>
+            <p>The global color texture is from NASA's LROC-based CGI Moon Kit. It is a visual reference, not a scientific elevation model; a neutral globe appears if the texture cannot load. Local terrain analysis uses the supplied Product78 Site04 raster.</p>
             <a href="https://svs.gsfc.nasa.gov/4720/" target="_blank" rel="noreferrer">NASA CGI Moon Kit ↗</a>
           </div>
         </div>
