@@ -134,8 +134,8 @@ type VisibilityWindow<TState extends string = VisibilityState> = {
   endTimeUtc: string;
   durationMinutes: number;
   observationCount: number;
-  startClearanceDeg: number;
-  endClearanceDeg: number;
+  startClearanceDeg: number | null;
+  endClearanceDeg: number | null;
 };
 
 const terrainPromises = new Map<Product78SiteId, Promise<LolaTerrainData>>();
@@ -795,10 +795,10 @@ function calculateVisibilityWindows<TState extends string>(
         endIndex - windowStartIndex + 1,
 
       startClearanceDeg:
-        startObservation.terrainVisibility.clearanceDeg,
+        startObservation.terrainVisibility?.clearanceDeg ?? null,
 
       endClearanceDeg:
-        endObservation.terrainVisibility.clearanceDeg,
+        endObservation.terrainVisibility?.clearanceDeg ?? null,
     });
   }
 
@@ -1143,7 +1143,9 @@ export async function GET(request: NextRequest) {
           };
 
     const terrainAvailable =
-      terrainHorizon !== null;
+      terrainHorizon !== null &&
+      terrainHorizon.product78SamplesChecked +
+        terrainHorizon.product90SamplesChecked > 0;
 
     const bothTargetsAvailable =
       sun !== null && earth !== null;
@@ -1265,7 +1267,7 @@ export async function GET(request: NextRequest) {
 
       "Horizons presence/event marker text is preserved separately and is not interpreted as terrain-adjusted visibility.",
 
-      "Observer altitude is derived from Product 78 when available.",
+      `Observer altitude is derived from Product 78 ${site.archiveSite} when available.`,
 
       "If Product 78 cannot be loaded, a 0 km altitude fallback is sent to JPL and the result must be treated as approximate.",
 
@@ -1274,13 +1276,17 @@ export async function GET(request: NextRequest) {
 
     if (terrainAvailable) {
       notes.push(
-        "Product 78 supplies local high-resolution Shackleton Rim terrain.",
+        `NASA Product 78 supplies local high-resolution ${site.displayName} terrain.`,
 
-        "Product 90 supplies wider regional terrain outside Product 78 coverage.",
+        "Every ray stops at the actual Product78 raster boundary or at the first declared NoData sample.",
+
+        "Terrain beyond known Product78 coverage is unknown; it is never interpreted as open sky.",
 
         "Product 78 is sampled at 5 metre intervals.",
 
-        "Product 90 is sampled at 20 metre intervals.",
+        ...(terrainHorizon && terrainHorizon.product90SamplesChecked > 0
+          ? ["Product90 supplied optional regional samples outside the local Product78 footprint."]
+          : ["Product90 is disabled for this API response and is not required for the terrain result."]),
 
         "No elevation averaging is performed between the datasets.",
 
