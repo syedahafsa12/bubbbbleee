@@ -249,6 +249,7 @@ async function main() {
       "outside_raster",
       "invalid_sample",
       "calculation_error",
+      "search_limit",
     ]);
 
     const seenAzimuths = new Set();
