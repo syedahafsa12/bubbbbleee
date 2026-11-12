@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Site04Terrain from "@/components/lunapath/Site04Terrain";
 import HorizonScope from "@/components/lunapath/HorizonScope";
 import MissionTimeline from "@/components/lunapath/MissionTimeline";
+import GlobalMoonOverview from "@/components/lunapath/GlobalMoonOverview";
 import type { HorizonsResponse, CelestialTarget } from "@/components/lunapath/types";
 
 function utcToday() {
@@ -159,6 +160,8 @@ export default function Home() {
         <Stat label="HORIZON DIRECTIONS" value={profile.length ? profile.length.toLocaleString() : "—"} detail={profile.length ? `${(360 / profile.length).toFixed(2)}° azimuth spacing` : "Terrain unavailable"} />
         <Stat label="HORIZON STATUS" value={terrainModel ? "PARTIAL / UNKNOWN" : "UNAVAILABLE"} detail="Complete 360° horizon is not verified" />
       </section>
+
+      <GlobalMoonOverview />
 
       <div className="dashboard-grid">
         <section className="panel terrain-panel">
