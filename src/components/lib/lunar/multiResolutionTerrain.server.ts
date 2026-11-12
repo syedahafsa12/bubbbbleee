@@ -1081,16 +1081,19 @@ export async function calculateMultiResolutionTerrainHorizon(
         );
     }
 
+    if (!Number.isFinite(regionalSampleStepMeters) || regionalSampleStepMeters <= 0) {
+        throw new Error(
+            "regionalSampleStepMeters must be a finite positive number."
+        );
+    }
+
     if (
-        !Number.isFinite(regionalSampleStepMeters) ||
-        regionalSampleStepMeters <
-        PRODUCT90_RESOLUTION_METERS
+        options.enableProduct90 === true &&
+        regionalSampleStepMeters < PRODUCT90_RESOLUTION_METERS
     ) {
-        if (options.enableProduct90 === true) {
-            throw new Error(
-                "regionalSampleStepMeters must be at least Product 90's 20 m pixel spacing."
-            );
-        }
+        throw new Error(
+            "regionalSampleStepMeters must be at least Product 90's 20 m pixel spacing."
+        );
     }
 
     if (
