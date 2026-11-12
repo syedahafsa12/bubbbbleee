@@ -536,6 +536,7 @@ export default function Home() {
             <span className="panel-badge">10 MIN STEP</span>
           </div>
           <MissionTimeline
+            key={`${selectedSiteId}:${date}`}
             sun={sun}
             earth={earth}
             selectedIndex={selectedIndex}
