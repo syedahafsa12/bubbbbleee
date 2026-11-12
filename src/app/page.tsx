@@ -32,7 +32,7 @@ function getServerDateSnapshot() {
   return "";
 }
 
-const EMPTY_OBSERVATIONS: CelestialTarget["observations"] = [];
+const EMPTY_OBSERVATIONS: NonNullable<CelestialTarget["observations"]> = [];
 const EMPTY_TARGET: CelestialTarget = {
   available: false,
   observations: EMPTY_OBSERVATIONS,
@@ -317,8 +317,8 @@ export default function Home() {
       : null;
   const profile = terrainModel?.horizonProfile ?? [];
 
-  const sunObservations = sun.observations ?? [];
-  const earthObservations = earth.observations ?? [];
+  const sunObservations = sun.observations ?? EMPTY_OBSERVATIONS;
+  const earthObservations = earth.observations ?? EMPTY_OBSERVATIONS;
   const timelineObservations = sunObservations.length
     ? sunObservations
     : earthObservations;
