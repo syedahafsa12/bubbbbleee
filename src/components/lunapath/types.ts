@@ -154,7 +154,7 @@ export function parseUtcTimestamp(value: string): Date | null {
   if (!Number.isNaN(direct.getTime())) return direct;
 
   const match = value.match(
-    /^(\\d{4})-([A-Za-z]{3})-(\\d{2})T(\\d{2}):(\\d{2})(?::(\\d{2})(?:\\.(\\d+))?)?Z$/
+    /^(\d{4})-([A-Za-z]{3})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d+))?)?Z$/
   );
 
   if (!match) return null;
