@@ -289,7 +289,7 @@ async function prepareSite(site) {
     if (!hasDeclaredNoData) return false;
     return normalizedNoDataValue === "NaN"
       ? Number.isNaN(value)
-      : value === normalizedNoDataValue;
+      : value === Math.fround(normalizedNoDataValue);
   };
 
   const rasters = await image.readRasters({ samples: [0] });
