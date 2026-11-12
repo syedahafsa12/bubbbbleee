@@ -610,10 +610,12 @@ function getTerrainHorizonAtAzimuth(
   const upper = profile[upperIndex];
 
   if (
-    !Number.isFinite(lower.horizonElevationDeg) ||
-    !Number.isFinite(upper.horizonElevationDeg) ||
+    lower.horizonElevationDeg === null ||
+    upper.horizonElevationDeg === null ||
     lower.coverageStatus === "no_data" ||
-    upper.coverageStatus === "no_data"
+    upper.coverageStatus === "no_data" ||
+    !Number.isFinite(lower.horizonElevationDeg) ||
+    !Number.isFinite(upper.horizonElevationDeg)
   ) {
     return null;
   }
