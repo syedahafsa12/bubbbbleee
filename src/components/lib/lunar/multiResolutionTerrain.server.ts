@@ -114,6 +114,11 @@ export interface MultiResolutionTerrainHorizonOptions {
 type Product90Diagnostics =
     Awaited<ReturnType<typeof getProduct90Diagnostics>>;
 
+export interface Product90EnhancementDependencies {
+    getDiagnostics?: () => Promise<Product90Diagnostics>;
+    sampleElevations?: typeof sampleProduct90Elevations;
+}
+
 const DEFAULT_DIRECTION_COUNT = 360;
 const DEFAULT_SAMPLE_STEP_METERS = 5;
 const DEFAULT_REGIONAL_SAMPLE_STEP_METERS = 20;
@@ -723,7 +728,9 @@ async function calculateDirectionHorizon(
     sampleStepMeters: number,
     regionalSampleStepMeters: number,
     maxDistanceMeters: number,
-    lunarRadiusMeters: number
+    lunarRadiusMeters: number,
+    sampleRegionalElevations: typeof sampleProduct90Elevations =
+        sampleProduct90Elevations
 ): Promise<MultiResolutionTerrainHorizonDirection> {
     type DirectionPathSample =
         | {
@@ -861,7 +868,7 @@ async function calculateDirectionHorizon(
     // Load and sample all regional coordinates in one batch.
     const regionalElevations =
         regionalCoordinates.length > 0
-            ? await sampleProduct90Elevations(
+            ? await sampleRegionalElevations(
                 regionalCoordinates
             )
             : [];
@@ -1031,7 +1038,8 @@ async function calculateDirectionHorizon(
 export async function calculateMultiResolutionTerrainHorizon(
     product78: LolaTerrainData,
     observer: GeographicCoordinate = SITE04_COORDINATES,
-    options: MultiResolutionTerrainHorizonOptions = {}
+    options: MultiResolutionTerrainHorizonOptions = {},
+    product90Dependencies: Product90EnhancementDependencies = {}
 ): Promise<MultiResolutionTerrainHorizonResult> {
     const directionCount =
         options.directionCount ?? DEFAULT_DIRECTION_COUNT;
@@ -1171,7 +1179,9 @@ export async function calculateMultiResolutionTerrainHorizon(
     // network, tile or sampling failure leaves the Product78 baseline intact.
     if (options.enableProduct90 === true) {
         try {
-            const product90 = await getProduct90Metadata();
+            const product90 = product90Dependencies.getDiagnostics
+                ? await product90Dependencies.getDiagnostics()
+                : await getProduct90Metadata();
             validateDatasetCompatibility(product78, product90);
 
             const enhancedDirections: MultiResolutionTerrainHorizonDirection[] = [];
@@ -1194,7 +1204,9 @@ export async function calculateMultiResolutionTerrainHorizon(
                             sampleStepMeters,
                             regionalSampleStepMeters,
                             maxDistanceMeters,
-                            lunarRadius
+                            lunarRadius,
+                            product90Dependencies.sampleElevations ??
+                                sampleProduct90Elevations
                         );
                     })
                 );
