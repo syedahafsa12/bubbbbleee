@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { HorizonsResponse, Product78SiteStatus } from "./types";
+import type { CelestialTarget, HorizonsResponse, Product78SiteStatus } from "./types";
 import {
   formatDuration,
   formatUtcTime,
@@ -29,11 +29,7 @@ type Props = {
   date: string;
 };
 
-function observationCount(
-  target: HorizonsResponse["targets"] extends infer T
-    ? T extends { sun: infer S } ? S : never
-    : never
-): number {
+function observationCount(target: CelestialTarget | undefined): number {
   return Array.isArray(target?.observations)
     ? target.observations.length
     : 0;
@@ -63,8 +59,8 @@ function buildComparisonResult(
   return {
     site,
     status: payload.status ?? "partial",
-    sunObservationCount: observationCount(sun as never),
-    earthObservationCount: observationCount(earth as never),
+    sunObservationCount: observationCount(sun),
+    earthObservationCount: observationCount(earth),
     knownDirectionCount,
     unknownDirectionCount: terrain
       ? Math.max(0, profile.length - (knownDirectionCount ?? 0))
@@ -115,6 +111,8 @@ export default function SiteComparison({ sites, date }: Props) {
   const requestSequence = useRef(0);
 
   useEffect(() => {
+    requestSequence.current += 1;
+    setLoading(false);
     setSelectedIds((current) => {
       const stillReady = current.filter((id) => sites.some((site) => site.id === id));
       if (stillReady.length >= 2) return stillReady.slice(0, 3);
@@ -131,6 +129,8 @@ export default function SiteComparison({ sites, date }: Props) {
   }, []);
 
   function toggleSite(siteId: Product78SiteId) {
+    requestSequence.current += 1;
+    setLoading(false);
     setSelectedIds((current) => {
       if (current.includes(siteId)) {
         return current.filter((id) => id !== siteId);
