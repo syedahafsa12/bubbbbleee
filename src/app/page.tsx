@@ -183,9 +183,8 @@ export default function Home() {
             <div className="provenance-item"><span>TERRAIN SAMPLING</span><strong>{terrainModel ? `${terrainModel.sampleStepMeters} m local / ${terrainModel.regionalSampleStepMeters} m regional` : "Unavailable"}</strong><small>Maximum search distance: 15 km</small></div>
           </div>
           <div className="coverage-summary">
-            <div className="coverage-summary-head"><strong>Directional horizon coverage</strong><span>{terrainModel ? `${terrainModel.directionCount} directions sampled` : "No profile"}</span></div>
-            <div className="coverage-bar"><span style={{ width: terrainModel ? "100%" : "0%" }} /></div>
-            <p>Directions were calculated, but full lunar horizon verification is not established. A completed profile does not mean complete terrain coverage.</p>
+            <div className="coverage-summary-head"><strong>Directional horizon sampling</strong><span>{terrainModel ? `${terrainModel.directionCount} directions returned` : "No profile"}</span></div>
+            <p>All returned directions are sampled calculations only. Full lunar horizon coverage is not verified, and raster boundaries or NoData may limit individual directions.</p>
           </div>
           <details className="source-notes">
             <summary>Backend interpretation notes</summary>
