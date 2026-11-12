@@ -805,11 +805,21 @@ async function calculateDirectionHorizon(
         let stepAfterSample: number;
 
         if (isLolaPixelInsideRaster(localPixel, product78)) {
-            // Product 78: use existing high-resolution sampling.
-            const elevation = sampleLolaHeightAtPixel(
-                product78,
-                localPixel
-            );
+            // Product 78: stop explicitly at declared NoData. Do not skip
+            // the gap and continue with Product90 behind unknown local terrain.
+            let elevation: number;
+            try {
+                elevation = sampleLolaHeightAtPixel(
+                    product78,
+                    localPixel
+                );
+            } catch (error) {
+                if (error instanceof LolaNoDataError) {
+                    terminationReason = "product78_nodata";
+                    break;
+                }
+                throw error;
+            }
 
             pathSamples.push({
                 source: "product78",
