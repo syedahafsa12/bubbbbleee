@@ -144,7 +144,9 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [requestError, setRequestError] = useState<string | null>(null);
   const [selectedIndex, setSelectedIndex] = useState(0);
-  const [selectedAzimuth, setSelectedAzimuth] = useState(0);
+  const [azimuthBySite, setAzimuthBySite] = useState<
+    Partial<Record<Product78SiteId, number>>
+  >({});
 
   const [readySites, setReadySites] = useState<Product78SiteStatus[]>([]);
   const [sitesLoading, setSitesLoading] = useState(true);
