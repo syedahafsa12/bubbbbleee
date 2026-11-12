@@ -1,13 +1,12 @@
 name: LunaPath backend checks
 
 on:
+  # Run validation after changes reach main, not on every draft/PR push.
+  # This keeps frontend iteration from flooding the repository owner with CI emails.
   push:
     branches:
       - main
-      - backend/product78-only-and-multisite
-  pull_request:
-    branches:
-      - main
+  workflow_dispatch:
 
 permissions:
   contents: read
