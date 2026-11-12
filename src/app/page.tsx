@@ -264,11 +264,19 @@ export default function Home() {
 
   // Selecting a different prepared site or date loads that site's real API data.
   useEffect(() => {
-    // Invalidate any request for the previously selected site/date before
-    // starting the next one. load() owns its asynchronous loading/error state.
-    requestSequence.current += 1;
-    if (!date || !selectedSiteId) return;
-    void load(date, selectedSiteId);
+    let active = true;
+
+    // Defer the stateful loader to a microtask instead of running its
+    // synchronous loading-state updates inside the effect body.
+    queueMicrotask(() => {
+      if (!active || !date || !selectedSiteId) return;
+      void load(date, selectedSiteId);
+    });
+
+    return () => {
+      active = false;
+      requestSequence.current += 1;
+    };
   }, [load, date, selectedSiteId, refreshVersion]);
 
   const selectedAzimuth = selectedSiteId
