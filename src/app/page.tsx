@@ -1,20 +1,58 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import Link from "next/link";
 import Site04Terrain from "@/components/lunapath/Site04Terrain";
 import HorizonScope from "@/components/lunapath/HorizonScope";
 import MissionTimeline from "@/components/lunapath/MissionTimeline";
-import type { HorizonsResponse, CelestialTarget } from "@/components/lunapath/types";
+import GlobalMoonOverview from "@/components/lunapath/GlobalMoonOverview";
+import SiteComparison from "@/components/lunapath/SiteComparison";
+import type {
+  HorizonsResponse,
+  CelestialTarget,
+  Product78SiteStatus,
+  Product78SitesResponse,
+} from "@/components/lunapath/types";
+import type { Product78SiteId } from "@/components/lib/lunar/siteRegistry";
+import {
+  geographicToLolaProjected,
+  projectedToLolaPixel,
+} from "@/components/lib/lunar/terrainData";
+import type { LolaTerrainMetadata } from "@/components/lib/lunar/terrainData";
 
 function utcToday() {
   return new Date().toISOString().slice(0, 10);
 }
 
-function targetOrEmpty(value: CelestialTarget | undefined): CelestialTarget {
-  return value ?? { available: false, observations: [], visibilityWindows: [], limbVisibilityWindows: [] };
+function subscribeToNoExternalChanges() {
+  return () => {};
 }
 
-function Stat({ label, value, detail }: { label: string; value: string; detail?: string }) {
+function getServerDateSnapshot() {
+  return "";
+}
+
+const EMPTY_OBSERVATIONS: CelestialTarget["observations"] = [];
+const EMPTY_TARGET: CelestialTarget = {
+  available: false,
+  observations: EMPTY_OBSERVATIONS,
+  visibilityWindows: [],
+  limbVisibilityWindows: [],
+};
+
+function targetOrEmpty(value: CelestialTarget | undefined): CelestialTarget {
+  return value ?? EMPTY_TARGET;
+}
+
+function Stat({
+  label,
+  value,
+  detail,
+}: {
+  label: string;
+  value: string;
+  detail?: string;
+}) {
   return (
     <div className="stat-card">
       <span className="eyebrow">{label}</span>
@@ -24,33 +62,124 @@ function Stat({ label, value, detail }: { label: string; value: string; detail?:
   );
 }
 
+function isUsableSiteRecord(site: Product78SiteStatus): boolean {
+  return (
+    site.assetStatus === "ready" &&
+    Number.isFinite(site.observer.latitudeDeg) &&
+    Number.isFinite(site.observer.longitudeEastDeg) &&
+    Number.isFinite(site.resolutionMeters) &&
+    Array.isArray(site.dimensions) &&
+    site.dimensions.length === 2
+  );
+}
+
+/**
+ * Check the registered observer against the site's real Product78 metadata
+ * before exposing it in the selector. Full raster decoding/range validation
+ * still happens in loadLolaTerrainForSite when the viewer opens the dataset.
+ */
+async function verifySiteProjection(site: Product78SiteStatus): Promise<boolean> {
+  try {
+    const response = await fetch(`/data/${site.dataDirectory}/metadata.json`, {
+      cache: "no-store",
+    });
+    if (!response.ok) return false;
+
+    const metadata = await response.json() as LolaTerrainMetadata;
+    const projection = metadata.coordinateSystem?.projection
+      ?.toLowerCase()
+      .replace(/[^a-z]/g, "");
+    const referenceFrame = metadata.coordinateSystem?.referenceFrame;
+    const pixelRegistration = metadata.coordinateSystem?.pixelRegistration
+      ?.toLowerCase()
+      .replace(/[^a-z]/g, "");
+    const linearUnits = metadata.coordinateSystem?.linearUnits
+      ?.toLowerCase()
+      .replace(/[^a-z]/g, "");
+
+    if (
+      metadata.width !== site.dimensions?.[0] ||
+      metadata.height !== site.dimensions?.[1] ||
+      metadata.resolutionMeters !== site.resolutionMeters ||
+      metadata.dataType?.toLowerCase() !== "float32" ||
+      !["littleendian", "le"].includes(
+        metadata.byteOrder?.toLowerCase().replace(/[^a-z]/g, "") ?? ""
+      ) ||
+      projection !== "southpolarstereographic" ||
+      referenceFrame !== "MOON_ME" ||
+      !["pixelarea", "pixelisarea"].includes(pixelRegistration ?? "") ||
+      !["meters", "metres", "m"].includes(linearUnits ?? "")
+    ) {
+      return false;
+    }
+
+    const projected = geographicToLolaProjected(site.observer, metadata);
+    const pixel = projectedToLolaPixel(projected, metadata);
+
+    // Same half-pixel edge convention as isLolaPixelInsideRaster.
+    return (
+      Number.isFinite(pixel.column) &&
+      Number.isFinite(pixel.row) &&
+      pixel.column >= -0.5 &&
+      pixel.row >= -0.5 &&
+      pixel.column < metadata.width - 0.5 &&
+      pixel.row < metadata.height - 0.5
+    );
+  } catch {
+    return false;
+  }
+}
+
 export default function Home() {
-  // Keep the first server/client render deterministic. The browser date is set after mount.
-  const [date, setDate] = useState("");
+  // useSyncExternalStore keeps the server and hydration snapshots identical,
+  // then reads the browser's UTC date without a setState effect.
+  const browserUtcDate = useSyncExternalStore(
+    subscribeToNoExternalChanges,
+    utcToday,
+    getServerDateSnapshot
+  );
+  const [dateOverride, setDateOverride] = useState<string | null>(null);
+  const date = dateOverride ?? browserUtcDate;
   const [data, setData] = useState<HorizonsResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [requestError, setRequestError] = useState<string | null>(null);
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [azimuthBySite, setAzimuthBySite] = useState<
+    Partial<Record<Product78SiteId, number>>
+  >({});
+
+  const [readySites, setReadySites] = useState<Product78SiteStatus[]>([]);
+  const [sitesLoading, setSitesLoading] = useState(true);
+  const [sitesError, setSitesError] = useState<string | null>(null);
+  const [selectedSiteId, setSelectedSiteId] = useState<Product78SiteId | "">("");
+  const [refreshVersion, setRefreshVersion] = useState(0);
 
   const requestSequence = useRef(0);
 
-  const load = useCallback(async (requestedDate: string) => {
-    if (!requestedDate) return;
+  const load = useCallback(async (
+    requestedDate: string,
+    requestedSiteId: Product78SiteId
+  ) => {
+    if (!requestedDate || !requestedSiteId) return;
 
     const requestId = ++requestSequence.current;
     setLoading(true);
     setRequestError(null);
-    // Do not leave observations from a previous date beside a new request error.
+    // Never leave an old site's observations beside a new site's error.
     setData(null);
     setSelectedIndex(0);
 
     try {
-      const response = await fetch(`/api/horizons?date=${encodeURIComponent(requestedDate)}`, {
+      const query = new URLSearchParams({
+        date: requestedDate,
+        siteId: requestedSiteId,
+      });
+      const response = await fetch(`/api/horizons?${query.toString()}`, {
         cache: "no-store",
       });
       const payload = (await response.json()) as HorizonsResponse;
 
-      // Ignore an older response if the user has already requested another date.
+      // Ignore an older response if the user has already selected another site/date.
       if (requestId !== requestSequence.current) return;
 
       if (!response.ok || !payload.success) {
@@ -60,7 +189,11 @@ export default function Home() {
       setData(payload);
     } catch (error) {
       if (requestId !== requestSequence.current) return;
-      setRequestError(error instanceof Error ? error.message : "Could not retrieve mission data.");
+      setRequestError(
+        error instanceof Error
+          ? error.message
+          : "Could not retrieve mission data."
+      );
       setData(null);
     } finally {
       if (requestId === requestSequence.current) {
@@ -69,124 +202,366 @@ export default function Home() {
     }
   }, []);
 
-  // Date is intentionally derived only in the browser after hydration.
+  // Read the backend's local-asset catalogue. Only assetStatus=ready sites
+  // with valid observer coordinates are exposed as selectable.
   useEffect(() => {
-    setDate(utcToday());
+    let active = true;
+
+    async function loadSiteCatalogue() {
+      setSitesLoading(true);
+      setSitesError(null);
+
+      try {
+        const response = await fetch("/api/product78/sites", {
+          cache: "no-store",
+        });
+        const payload = (await response.json()) as Product78SitesResponse;
+
+        if (!response.ok || payload.success !== true || !Array.isArray(payload.sites)) {
+          throw new Error("The Product78 site catalogue could not be loaded.");
+        }
+
+        const candidates = payload.sites.filter(isUsableSiteRecord);
+        const verification = await Promise.all(
+          candidates.map(async (site) => ({
+            site,
+            valid: await verifySiteProjection(site),
+          }))
+        );
+        const usable = verification
+          .filter((item) => item.valid)
+          .map((item) => item.site);
+        if (!active) return;
+
+        setReadySites(usable);
+        setSelectedSiteId((current) => {
+          if (usable.some((site) => site.id === current)) return current;
+          const defaultSite = usable.find(
+            (site) => site.id === "site04_shackleton_rim"
+          );
+          return defaultSite?.id ?? usable[0]?.id ?? "";
+        });
+      } catch (error) {
+        if (!active) return;
+        setSitesError(
+          error instanceof Error
+            ? error.message
+            : "Could not check local Product78 assets."
+        );
+        setReadySites([]);
+        setSelectedSiteId("");
+      } finally {
+        if (active) setSitesLoading(false);
+      }
+    }
+
+    void loadSiteCatalogue();
+
+    return () => {
+      active = false;
+    };
   }, []);
 
+  // Selecting a different prepared site or date loads that site's real API data.
   useEffect(() => {
-    if (!date) return;
-    void load(date);
-  }, [load, date]);
+    // Invalidate any request for the previously selected site/date before
+    // starting the next one. load() owns its asynchronous loading/error state.
+    requestSequence.current += 1;
+    if (!date || !selectedSiteId) return;
+    void load(date, selectedSiteId);
+  }, [load, date, selectedSiteId, refreshVersion]);
 
-  const sun = targetOrEmpty(data?.targets?.sun);
-  const earth = targetOrEmpty(data?.targets?.earth);
-  // Ignore legacy mixed-resolution payloads. The visualization accepts
-  // only the Product78 Site04 partial-terrain contract.
+  const selectedAzimuth = selectedSiteId
+    ? azimuthBySite[selectedSiteId] ?? 0
+    : 0;
+  const setSelectedAzimuth = useCallback((azimuthDeg: number) => {
+    if (!selectedSiteId) return;
+    setAzimuthBySite((current) => ({
+      ...current,
+      [selectedSiteId]: azimuthDeg,
+    }));
+  }, [selectedSiteId]);
+
+  const selectedSite = readySites.find(
+    (site) => site.id === selectedSiteId
+  ) ?? null;
+
+  const isDataForSelectedSite =
+    Boolean(selectedSite) &&
+    data?.observer?.name === selectedSite?.name;
+  const missionData = isDataForSelectedSite ? data : null;
+  const observer = missionData?.observer;
+
+  const sun = useMemo(
+    () => targetOrEmpty(missionData?.targets?.sun),
+    [missionData?.targets?.sun]
+  );
+  const earth = useMemo(
+    () => targetOrEmpty(missionData?.targets?.earth),
+    [missionData?.targets?.earth]
+  );
+  // A terrain result must match the currently selected site. Old or mismatched
+  // payloads are not silently displayed under another site's label.
   const terrainModel =
-    data?.terrainModel?.source === "product78"
-      ? data.terrainModel
+    missionData?.terrainModel?.source === "product78" &&
+    missionData.terrainModel.siteId === selectedSiteId
+      ? missionData.terrainModel
       : null;
   const profile = terrainModel?.horizonProfile ?? [];
+
   const sunObservations = sun.observations ?? [];
   const earthObservations = earth.observations ?? [];
-  const timelineObservations = sunObservations.length ? sunObservations : earthObservations;
-  const selectedObservation = timelineObservations[Math.min(selectedIndex, Math.max(0, timelineObservations.length - 1))];
+  const timelineObservations = sunObservations.length
+    ? sunObservations
+    : earthObservations;
+  const selectedObservation = timelineObservations[
+    Math.min(selectedIndex, Math.max(0, timelineObservations.length - 1))
+  ];
 
   const selectedSun = useMemo(
-    () => selectedObservation ? sunObservations.filter((item) => item.timeUtc === selectedObservation.timeUtc) : [],
+    () => selectedObservation
+      ? sunObservations.filter((item) => item.timeUtc === selectedObservation.timeUtc)
+      : [],
     [selectedObservation, sunObservations]
   );
   const selectedEarth = useMemo(
-    () => selectedObservation ? earthObservations.filter((item) => item.timeUtc === selectedObservation.timeUtc) : [],
+    () => selectedObservation
+      ? earthObservations.filter((item) => item.timeUtc === selectedObservation.timeUtc)
+      : [],
     [selectedObservation, earthObservations]
   );
 
-  const statusLabel = data?.status === "complete" ? "DATA RETURNED" : data?.status === "partial" ? "PARTIAL DATA" : "WAITING FOR DATA";
-  const observer = data?.observer;
+  const statusLabel =
+    missionData?.status === "complete"
+      ? "DATA RETURNED"
+      : missionData?.status === "partial"
+        ? "PARTIAL DATA"
+        : loading
+          ? "LOADING MISSION DATA"
+          : "WAITING FOR DATA";
+
+  const comparisonReady = readySites.length >= 2;
 
   return (
     <main className="app-shell">
       <header className="topbar">
-        <a className="brand" href="/" aria-label="LunaPath home">
+        <Link className="brand" href="/" aria-label="LunaPath home">
           <span className="brand-mark"><span /></span>
           <span>LUNAPATH</span>
-        </a>
-        <div className="topbar-center"><span className="live-indicator" /> NASA SPACE APPS · CHALLENGE 10</div>
-        <div className="topbar-right"><span className="topbar-label">MISSION CONSOLE</span><span className="topbar-version">SITE04 / BUILD 0.1</span></div>
+        </Link>
+        <div className="topbar-center">
+          <span className="live-indicator" /> NASA SPACE APPS · CHALLENGE 10
+        </div>
+        <div className="topbar-right">
+          <span className="topbar-label">MISSION CONSOLE</span>
+          <span className="topbar-version">PRODUCT78 · BUILD 0.2</span>
+        </div>
       </header>
 
       <section className="page-heading">
         <div>
           <div className="eyebrow page-kicker">LUNAR SOUTH POLE · LANDING SITE ANALYSIS</div>
           <h1>Find the light.<br /><em>Know the horizon.</em></h1>
-          <p className="page-subtitle">Explore Shackleton Rim terrain and inspect when the Sun and Earth rise above the sampled local horizon.</p>
+          <p className="page-subtitle">
+            Explore verified Product78 landing-site terrain and inspect the Sun and Earth against the known local horizon.
+          </p>
         </div>
+
         <div className="mission-controls">
+          <label htmlFor="mission-site">LANDING SITE <span>PRODUCT78</span></label>
+          <select
+            id="mission-site"
+            className="mission-site-select"
+            value={selectedSiteId}
+            onChange={(event) => setSelectedSiteId(event.target.value as Product78SiteId | "")}
+            disabled={sitesLoading || readySites.length === 0}
+          >
+            {sitesLoading && <option value="">Checking local terrain assets…</option>}
+            {!sitesLoading && readySites.length === 0 && (
+              <option value="">No prepared Product78 sites</option>
+            )}
+            {readySites.map((site) => (
+              <option key={site.id} value={site.id}>
+                {site.name} · {site.archiveSite}
+              </option>
+            ))}
+          </select>
+
           <label htmlFor="mission-date">MISSION DATE <span>UTC</span></label>
           <div className="date-control">
-            <input id="mission-date" type="date" value={date} onChange={(event) => setDate(event.target.value)} />
-            <button type="button" onClick={() => void load(date)} disabled={loading || !date}>
-              {loading ? <><span className="button-spinner" /> LOADING</> : "LOAD DAY ↗"}
+            <input
+              id="mission-date"
+              type="date"
+              value={date}
+              onChange={(event) => setDateOverride(event.target.value)}
+            />
+            <button
+              type="button"
+              onClick={() => setRefreshVersion((version) => version + 1)}
+              disabled={loading || !date || !selectedSiteId}
+            >
+              {loading
+                ? <><span className="button-spinner" /> LOADING</>
+                : "LOAD DAY ↗"}
             </button>
           </div>
-          <div className="control-note">24-hour window · 10-minute observations</div>
+          <div className="control-note">
+            24-hour window · 10-minute observations · {sitesLoading
+              ? "Checking terrain readiness…"
+              : `${readySites.length} locally ready ${readySites.length === 1 ? "site" : "sites"}`}
+          </div>
         </div>
       </section>
 
       <section className="status-strip">
-        <div className="status-main"><span className={`status-dot ${data?.status === "complete" ? "status-dot-good" : "status-dot-warning"}`} />{statusLabel}</div>
-        <div className="status-item"><span>OBSERVER</span><strong>SHACKLETON RIM · SITE04</strong></div>
-        <div className="status-item"><span>COORDINATES</span><strong>{observer ? `${observer.latitude.toFixed(4)}° / ${observer.longitudeEast.toFixed(2)}°E` : "—"}</strong></div>
-        <div className="status-item"><span>DATA SOURCES</span><strong>NASA LOLA PRODUCT78 + JPL HORIZONS</strong></div>
+        <div className="status-main">
+          <span className={`status-dot ${missionData?.status === "complete" ? "status-dot-good" : "status-dot-warning"}`} />
+          {statusLabel}
+        </div>
+        <div className="status-item">
+          <span>OBSERVER</span>
+          <strong>{selectedSite ? `${selectedSite.name.toUpperCase()} · ${selectedSite.archiveSite}` : "NO VERIFIED SITE"}</strong>
+        </div>
+        <div className="status-item">
+          <span>COORDINATES</span>
+          <strong>
+            {selectedSite
+              ? `${Math.abs(selectedSite.observer.latitudeDeg).toFixed(4)}° ${selectedSite.observer.latitudeDeg < 0 ? "S" : "N"} / ${selectedSite.observer.longitudeEastDeg.toFixed(2)}°E`
+              : "—"}
+          </strong>
+        </div>
+        <div className="status-item">
+          <span>DATA SOURCES</span>
+          <strong>NASA LOLA PRODUCT78 + JPL HORIZONS</strong>
+        </div>
       </section>
 
-      {requestError && (
-        <div className="request-error"><strong>Mission data unavailable</strong><span>{requestError}</span><button onClick={() => void load(date)}>RETRY</button></div>
+      {sitesError && (
+        <div className="request-error">
+          <strong>Site availability unavailable</strong>
+          <span>{sitesError}</span>
+          <button type="button" onClick={() => window.location.reload()}>RETRY</button>
+        </div>
       )}
 
-      {data?.status === "partial" && (
+      {!sitesLoading && readySites.length === 0 && !sitesError && (
+        <div className="request-error">
+          <strong>No local Product78 terrain is prepared</strong>
+          <span>Prepare and validate at least one site&apos;s metadata and elevation binary before selecting it.</span>
+        </div>
+      )}
+
+      {requestError && (
+        <div className="request-error">
+          <strong>Mission data unavailable</strong>
+          <span>{requestError}</span>
+          <button type="button" onClick={() => setRefreshVersion((version) => version + 1)}>
+            RETRY
+          </button>
+        </div>
+      )}
+
+      {missionData?.status === "partial" && (
         <div className="partial-banner">
           <span className="status-dot status-dot-warning" />
-          <div><strong>Partial mission data</strong><span>Some target or terrain data is unavailable. The panels below show only the observations actually returned.</span></div>
+          <div>
+            <strong>Partial mission data</strong>
+            <span>
+              Some target or terrain samples are unavailable. Unknown terrain is not treated as open sky.
+            </span>
+          </div>
           <span className="partial-tag">PARTIAL</span>
         </div>
       )}
 
       <section className="stats-grid">
-        <Stat label="SUN OBSERVATIONS" value={sunObservations.length ? sunObservations.length.toString() : "—"} detail={sunObservations.length ? "10-minute samples" : "Not returned"} />
-        <Stat label="EARTH OBSERVATIONS" value={earthObservations.length ? earthObservations.length.toString() : "—"} detail={earthObservations.length ? "10-minute samples" : "Not returned"} />
-        <Stat label="HORIZON DIRECTIONS" value={profile.length ? profile.length.toLocaleString() : "—"} detail={profile.length ? `${(360 / profile.length).toFixed(2)}° azimuth spacing` : "Terrain unavailable"} />
-        <Stat label="HORIZON STATUS" value={terrainModel ? "PARTIAL / UNKNOWN" : "UNAVAILABLE"} detail="Complete 360° horizon is not verified" />
+        <Stat
+          label="SUN OBSERVATIONS"
+          value={sunObservations.length ? sunObservations.length.toString() : "—"}
+          detail={sunObservations.length ? "10-minute JPL samples" : "Not returned"}
+        />
+        <Stat
+          label="EARTH OBSERVATIONS"
+          value={earthObservations.length ? earthObservations.length.toString() : "—"}
+          detail={earthObservations.length ? "10-minute JPL samples" : "Not returned"}
+        />
+        <Stat
+          label="HORIZON DIRECTIONS"
+          value={profile.length ? profile.length.toLocaleString() : "—"}
+          detail={profile.length ? `${(360 / profile.length).toFixed(2)}° azimuth spacing` : "Terrain unavailable"}
+        />
+        <Stat
+          label="HORIZON STATUS"
+          value={terrainModel ? "PARTIAL / UNKNOWN" : "UNAVAILABLE"}
+          detail="Complete 360° horizon is not verified"
+        />
       </section>
+
+      <GlobalMoonOverview sites={readySites} selectedSite={selectedSite} />
 
       <div className="dashboard-grid">
         <section className="panel terrain-panel">
           <div className="panel-header">
-            <div><div className="eyebrow">01 / LOCAL TOPOGRAPHY</div><h2>Shackleton Rim <span>· 3D terrain</span></h2></div>
+            <div>
+              <div className="eyebrow">01 / LOCAL TOPOGRAPHY</div>
+              <h2>{selectedSite?.name ?? "Product78 terrain"} <span>· 3D terrain</span></h2>
+            </div>
             <span className="panel-badge">PRODUCT 78</span>
           </div>
-          <Site04Terrain />
+          {selectedSite ? (
+            <Site04Terrain
+              key={selectedSite.id}
+              siteId={selectedSite.id}
+              sun={selectedSun[0]}
+              earth={selectedEarth[0]}
+              selectedAzimuthDeg={selectedAzimuth}
+            />
+          ) : (
+            <div className="empty-panel">
+              <span className="empty-icon">◌</span>
+              <strong>Terrain viewer waiting for a verified site</strong>
+              <p>Only locally prepared Product78 datasets can be opened.</p>
+            </div>
+          )}
         </section>
 
         <section className="panel scope-panel">
           <div className="panel-header">
-            <div><div className="eyebrow">02 / 360° OBSTRUCTION PROFILE</div><h2>Horizon Scope</h2></div>
+            <div>
+              <div className="eyebrow">02 / 360° OBSTRUCTION PROFILE</div>
+              <h2>Horizon Scope</h2>
+            </div>
             <span className="panel-badge panel-badge-warning">INCOMPLETE</span>
           </div>
-          {profile.length ? (
-            <HorizonScope profile={profile} sun={selectedSun} earth={selectedEarth} />
+          {profile.length && selectedSite ? (
+            <HorizonScope
+              profile={profile}
+              sun={selectedSun}
+              earth={selectedEarth}
+              archiveSite={selectedSite.archiveSite}
+              siteName={selectedSite.name}
+              selectedAzimuth={selectedAzimuth}
+              onSelectedAzimuthChange={setSelectedAzimuth}
+            />
           ) : (
-            <div className="empty-panel"><span className="empty-icon">◌</span><strong>Terrain horizon not available</strong><p>Ephemeris observations may still be available without terrain obstruction assessment.</p></div>
+            <div className="empty-panel">
+              <span className="empty-icon">◌</span>
+              <strong>Partial terrain horizon not available</strong>
+              <p>JPL observations can remain available while local terrain coverage is unavailable.</p>
+            </div>
           )}
         </section>
 
         <section className="panel timeline-panel">
           <div className="panel-header">
-            <div><div className="eyebrow">03 / 24-HOUR OBSERVATION WINDOW</div><h2>Mission timeline <span>· UTC</span></h2></div>
+            <div>
+              <div className="eyebrow">03 / 24-HOUR OBSERVATION WINDOW</div>
+              <h2>Mission timeline <span>· UTC</span></h2>
+            </div>
             <span className="panel-badge">10 MIN STEP</span>
           </div>
           <MissionTimeline
+            key={`${selectedSiteId}:${date}`}
             sun={sun}
             earth={earth}
             selectedIndex={selectedIndex}
@@ -196,29 +571,80 @@ export default function Home() {
 
         <section className="panel provenance-panel">
           <div className="panel-header">
-            <div><div className="eyebrow">04 / DATA TRACEABILITY</div><h2>Scientific provenance</h2></div>
+            <div>
+              <div className="eyebrow">04 / DATA TRACEABILITY</div>
+              <h2>Scientific provenance</h2>
+            </div>
             <span className="panel-badge">SOURCE NOTES</span>
           </div>
           <div className="provenance-grid">
-            <div className="provenance-item"><span>LOCAL TERRAIN</span><strong>NASA LOLA · Product 78</strong><small>Site04 · 5 m source pixels</small></div>
-            <div className="provenance-item"><span>EPHEMERIS</span><strong>NASA / JPL Horizons</strong><small>Airless apparent coordinates</small></div>
-            <div className="provenance-item"><span>REFERENCE FRAME</span><strong>{terrainModel?.referenceFrame ?? "MOON_ME (terrain metadata)"}</strong><small>Ephemeris reference: {terrainModel?.ephemeris ?? "DE421"}</small></div>
-            <div className="provenance-item"><span>OBSERVER ELEVATION</span><strong>{observer?.elevationMeters !== null && observer?.elevationMeters !== undefined ? `${observer.elevationMeters.toFixed(2)} m` : "Unavailable"}</strong><small>{observer?.elevationSource ?? "Awaiting terrain metadata"}</small></div>
-            <div className="provenance-item"><span>TERRAIN SAMPLING</span><strong>{terrainModel ? `${terrainModel.resolutionMeters} m source raster` : "Site04 · 5 m source raster"}</strong><small>Only directions with valid Product78 samples are drawn</small></div>
+            <div className="provenance-item">
+              <span>LOCAL TERRAIN</span>
+              <strong>NASA LOLA · Product 78</strong>
+              <small>{selectedSite ? `${selectedSite.archiveSite} · ${selectedSite.resolutionMeters} m source pixels` : "No prepared site selected"}</small>
+            </div>
+            <div className="provenance-item">
+              <span>EPHEMERIS</span>
+              <strong>NASA / JPL Horizons</strong>
+              <small>Airless apparent coordinates</small>
+            </div>
+            <div className="provenance-item">
+              <span>REFERENCE FRAME</span>
+              <strong>{terrainModel?.referenceFrame ?? "MOON_ME (terrain metadata)"}</strong>
+              <small>Ephemeris reference: {terrainModel?.ephemeris ?? "DE421"}</small>
+            </div>
+            <div className="provenance-item">
+              <span>OBSERVER ELEVATION</span>
+              <strong>
+                {observer?.elevationMeters !== null && observer?.elevationMeters !== undefined
+                  ? `${observer.elevationMeters.toFixed(2)} m`
+                  : "Unavailable"}
+              </strong>
+              <small>{observer?.elevationSource ?? "Awaiting terrain metadata"}</small>
+            </div>
+            <div className="provenance-item">
+              <span>TERRAIN SAMPLING</span>
+              <strong>{terrainModel ? `${terrainModel.resolutionMeters} m source raster` : selectedSite ? `${selectedSite.resolutionMeters} m source raster` : "Unavailable"}</strong>
+              <small>Only directions with valid Product78 samples are drawn</small>
+            </div>
           </div>
           <div className="coverage-summary">
-            <div className="coverage-summary-head"><strong>Directional horizon sampling</strong><span>{profile.length ? `${profile.length} azimuth directions` : "No profile"}</span></div>
-            <p>Known terrain is shown only where valid Product78 samples exist. All uncovered directions remain UNKNOWN; missing terrain is never treated as open sky. The complete 360° horizon is not verified.</p>
+            <div className="coverage-summary-head">
+              <strong>Directional horizon sampling</strong>
+              <span>{profile.length ? `${profile.length} azimuth directions` : "No profile"}</span>
+            </div>
+            <p>
+              Known terrain is shown only where valid Product78 samples exist. All uncovered directions remain UNKNOWN; missing terrain is never treated as open sky. The complete 360° horizon is not verified.
+            </p>
           </div>
           <details className="source-notes">
             <summary>Backend interpretation notes</summary>
-            <ul>{(data?.notes ?? ["Load a mission date to retrieve backend calculation notes."]).map((note, index) => <li key={index}>{note}</li>)}</ul>
+            <ul>
+              {(missionData?.notes ?? ["Load a mission date to retrieve backend calculation notes."]).map((note, index) => (
+                <li key={index}>{note}</li>
+              ))}
+            </ul>
           </details>
+        </section>
+
+        <section className="panel site-comparison-panel">
+          <div className="panel-header">
+            <div>
+              <div className="eyebrow">05 / RESULTS</div>
+              <h2>Site comparison</h2>
+            </div>
+            <span className="panel-badge">{comparisonReady ? "2–3 SITES" : "WAITING FOR DATASETS"}</span>
+          </div>
+          <SiteComparison key={`${date}:${readySites.map((site) => site.id).join(",")}`} sites={readySites} date={date} />
         </section>
       </div>
 
       <footer className="footer">
-        <div><span className="brand-mark brand-mark-small"><span /></span><strong>LUNAPATH</strong><span>NASA SPACE APPS CHALLENGE 2026</span></div>
+        <div>
+          <span className="brand-mark brand-mark-small"><span /></span>
+          <strong>LUNAPATH</strong>
+          <span>NASA SPACE APPS CHALLENGE 2026</span>
+        </div>
         <p>Decision support visualization · Not a landing safety certification</p>
       </footer>
     </main>
