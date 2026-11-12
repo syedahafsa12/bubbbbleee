@@ -2,12 +2,12 @@ import { connection, NextResponse } from "next/server";
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 
-export const runtime = "nodejs";
-
 import {
   PRODUCT78_SITE_REGISTRY,
   type Product78SiteId,
 } from "@/components/lib/lunar/siteRegistry";
+
+export const runtime = "nodejs";
 
 type SiteAssetStatus =
   | "ready"
