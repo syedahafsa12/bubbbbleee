@@ -360,8 +360,7 @@ function CelestialArrow({
       0.3
     );
   }, [
-    observation?.azimuthDeg,
-    observation?.elevationDeg,
+    observation,
     observerPosition,
     metadata,
     observerCoordinate,
@@ -438,7 +437,7 @@ function TerrainMesh({
 }) {
   const sunDirection = useMemo(
     () => sun ? celestialSceneDirection(sun, metadata, observerCoordinate) : null,
-    [sun?.azimuthDeg, sun?.elevationDeg, metadata, observerCoordinate]
+    [sun, metadata, observerCoordinate]
   );
   const sunLightPosition = sunDirection && observerPosition
     ? [
