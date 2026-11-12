@@ -366,7 +366,8 @@ function isInsideProduct90Raster(
  */
 export async function sampleMultiResolutionElevation(
     product78: LolaTerrainData,
-    projected: ProjectedCoordinate
+    projected: ProjectedCoordinate,
+    options: { enableProduct90?: boolean } = {}
 ): Promise<MultiResolutionElevationSample | null> {
     assertFinite(projected.xMeters, "Projected X");
     assertFinite(projected.yMeters, "Projected Y");
@@ -395,7 +396,12 @@ export async function sampleMultiResolutionElevation(
         };
     }
 
+    if (options.enableProduct90 !== true) {
+        return null;
+    }
+
     const diagnostics = await getProduct90Metadata();
+    validateDatasetCompatibility(product78, diagnostics);
 
     if (
         !isInsideProduct90Raster(
@@ -1119,8 +1125,42 @@ export async function calculateMultiResolutionTerrainHorizon(
         );
     }
 
+    const localMetadata = product78.metadata;
+    const localCoordinateSystem = localMetadata.coordinateSystem;
+
+    if (
+        normalizeMetadataValue(localCoordinateSystem.referenceFrame) !== "moonme" ||
+        normalizeMetadataValue(localCoordinateSystem.ephemeris) !== "de421"
+    ) {
+        throw new Error(
+            "Product78 must use the MOON_ME reference frame and DE421 ephemeris."
+        );
+    }
+
+    if (
+        !approximatelyEqual(
+            Math.abs(localMetadata.pixelResolution[0]),
+            PRODUCT78_RESOLUTION_METERS,
+            0.001
+        ) ||
+        !approximatelyEqual(
+            Math.abs(localMetadata.pixelResolution[1]),
+            PRODUCT78_RESOLUTION_METERS,
+            0.001
+        ) ||
+        !approximatelyEqual(
+            localMetadata.resolutionMeters,
+            PRODUCT78_RESOLUTION_METERS,
+            0.001
+        )
+    ) {
+        throw new Error(
+            "Product78 horizon calculation requires the validated 5 m/pixel raster."
+        );
+    }
+
     const lunarRadius =
-        product78.metadata.georeferencing.lunarRadiusMeters;
+        localMetadata.georeferencing.lunarRadiusMeters;
 
     if (!Number.isFinite(lunarRadius) || lunarRadius <= 0) {
         throw new Error(
