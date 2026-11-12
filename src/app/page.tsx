@@ -81,7 +81,13 @@ export default function Home() {
 
   const sun = targetOrEmpty(data?.targets?.sun);
   const earth = targetOrEmpty(data?.targets?.earth);
-  const profile = data?.terrainModel?.horizonProfile ?? [];
+  // Ignore legacy mixed-resolution payloads. The visualization accepts
+  // only the Product78 Site04 partial-terrain contract.
+  const terrainModel =
+    data?.terrainModel?.source === "product78"
+      ? data.terrainModel
+      : null;
+  const profile = terrainModel?.horizonProfile ?? [];
   const sunObservations = sun.observations ?? [];
   const earthObservations = earth.observations ?? [];
   const timelineObservations = sunObservations.length ? sunObservations : earthObservations;
@@ -98,7 +104,6 @@ export default function Home() {
 
   const statusLabel = data?.status === "complete" ? "DATA RETURNED" : data?.status === "partial" ? "PARTIAL DATA" : "WAITING FOR DATA";
   const observer = data?.observer;
-  const terrainModel = data?.terrainModel;
 
   return (
     <main className="app-shell">
