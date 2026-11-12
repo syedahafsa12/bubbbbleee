@@ -223,7 +223,7 @@ export default function GlobalMoonOverview({ sites, selectedSite }: Props) {
 
           <div className="moon-map-note">
             <strong>Visual-context map only</strong>
-            <p>The global color texture is from NASA's LROC-based CGI Moon Kit. It is a visual reference, not a scientific elevation model; a neutral globe appears if the texture cannot load. Local terrain analysis uses the selected Product78 raster.</p>
+            <p>The global color texture is from NASA&apos;s LROC-based CGI Moon Kit. It is a visual reference, not a scientific elevation model; a neutral globe appears if the texture cannot load. Local terrain analysis uses the selected Product78 raster.</p>
             <a href="https://svs.gsfc.nasa.gov/4720/" target="_blank" rel="noreferrer">NASA CGI Moon Kit ↗</a>
           </div>
         </div>
