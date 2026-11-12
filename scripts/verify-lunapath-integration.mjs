@@ -233,6 +233,8 @@ async function main() {
 
   if (process.exitCode === 1) {
     console.error("\nIntegration check found failures.");
+  } else if (payload.status === "partial") {
+    console.warn("\nFrontend contract checks completed, but the API response is partial. Review unavailable-target warnings; this is not a full mission-data pass.");
   } else {
     console.log("\nIntegration contract check passed. Visual interaction still needs browser testing.");
   }
