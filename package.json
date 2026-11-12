@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test:integration": "node scripts/verify-lunapath-integration.mjs"
+    "test:integration": "node scripts/verify-lunapath-integration.mjs",
+    "prepare:product78": "node scripts/prepare-product78-sites.mjs"
   },
   "dependencies": {
     "@react-three/drei": "^10.7.9",
