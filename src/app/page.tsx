@@ -81,7 +81,13 @@ export default function Home() {
 
   const sun = targetOrEmpty(data?.targets?.sun);
   const earth = targetOrEmpty(data?.targets?.earth);
-  const profile = data?.terrainModel?.horizonProfile ?? [];
+  // Ignore legacy mixed-resolution payloads. The visualization accepts
+  // only the Product78 Site04 partial-terrain contract.
+  const terrainModel =
+    data?.terrainModel?.source === "product78"
+      ? data.terrainModel
+      : null;
+  const profile = terrainModel?.horizonProfile ?? [];
   const sunObservations = sun.observations ?? [];
   const earthObservations = earth.observations ?? [];
   const timelineObservations = sunObservations.length ? sunObservations : earthObservations;
@@ -98,7 +104,6 @@ export default function Home() {
 
   const statusLabel = data?.status === "complete" ? "DATA RETURNED" : data?.status === "partial" ? "PARTIAL DATA" : "WAITING FOR DATA";
   const observer = data?.observer;
-  const terrainModel = data?.terrainModel;
 
   return (
     <main className="app-shell">
@@ -133,7 +138,7 @@ export default function Home() {
         <div className="status-main"><span className={`status-dot ${data?.status === "complete" ? "status-dot-good" : "status-dot-warning"}`} />{statusLabel}</div>
         <div className="status-item"><span>OBSERVER</span><strong>SHACKLETON RIM · SITE04</strong></div>
         <div className="status-item"><span>COORDINATES</span><strong>{observer ? `${observer.latitude.toFixed(4)}° / ${observer.longitudeEast.toFixed(2)}°E` : "—"}</strong></div>
-        <div className="status-item"><span>DATA SOURCES</span><strong>NASA LOLA + JPL HORIZONS</strong></div>
+        <div className="status-item"><span>DATA SOURCES</span><strong>NASA LOLA PRODUCT78 + JPL HORIZONS</strong></div>
       </section>
 
       {requestError && (
@@ -151,8 +156,8 @@ export default function Home() {
       <section className="stats-grid">
         <Stat label="SUN OBSERVATIONS" value={sunObservations.length ? sunObservations.length.toString() : "—"} detail={sunObservations.length ? "10-minute samples" : "Not returned"} />
         <Stat label="EARTH OBSERVATIONS" value={earthObservations.length ? earthObservations.length.toString() : "—"} detail={earthObservations.length ? "10-minute samples" : "Not returned"} />
-        <Stat label="HORIZON DIRECTIONS" value={profile.length ? profile.length.toLocaleString() : "—"} detail={terrainModel ? `${terrainModel.directionSpacingDegrees.toFixed(2)}° spacing` : "Terrain unavailable"} />
-        <Stat label="HORIZON STATUS" value={terrainModel?.completeHorizonVerified ? "VERIFIED" : "INCOMPLETE"} detail="Sampled terrain only" />
+        <Stat label="HORIZON DIRECTIONS" value={profile.length ? profile.length.toLocaleString() : "—"} detail={profile.length ? `${(360 / profile.length).toFixed(2)}° azimuth spacing` : "Terrain unavailable"} />
+        <Stat label="HORIZON STATUS" value={terrainModel ? "PARTIAL / UNKNOWN" : "UNAVAILABLE"} detail="Complete 360° horizon is not verified" />
       </section>
 
       <div className="dashboard-grid">
@@ -196,15 +201,14 @@ export default function Home() {
           </div>
           <div className="provenance-grid">
             <div className="provenance-item"><span>LOCAL TERRAIN</span><strong>NASA LOLA · Product 78</strong><small>Site04 · 5 m source pixels</small></div>
-            <div className="provenance-item"><span>REGIONAL TERRAIN</span><strong>NASA LOLA · Product 90</strong><small>20 m sampling interval</small></div>
             <div className="provenance-item"><span>EPHEMERIS</span><strong>NASA / JPL Horizons</strong><small>Airless apparent coordinates</small></div>
             <div className="provenance-item"><span>REFERENCE FRAME</span><strong>{terrainModel?.referenceFrame ?? "MOON_ME (terrain metadata)"}</strong><small>Ephemeris reference: {terrainModel?.ephemeris ?? "DE421"}</small></div>
             <div className="provenance-item"><span>OBSERVER ELEVATION</span><strong>{observer?.elevationMeters !== null && observer?.elevationMeters !== undefined ? `${observer.elevationMeters.toFixed(2)} m` : "Unavailable"}</strong><small>{observer?.elevationSource ?? "Awaiting terrain metadata"}</small></div>
-            <div className="provenance-item"><span>TERRAIN SAMPLING</span><strong>{terrainModel ? `${terrainModel.sampleStepMeters} m local / ${terrainModel.regionalSampleStepMeters} m regional` : "Unavailable"}</strong><small>Maximum search distance: 15 km</small></div>
+            <div className="provenance-item"><span>TERRAIN SAMPLING</span><strong>{terrainModel ? `${terrainModel.resolutionMeters} m source raster` : "Site04 · 5 m source raster"}</strong><small>Only directions with valid Product78 samples are drawn</small></div>
           </div>
           <div className="coverage-summary">
-            <div className="coverage-summary-head"><strong>Directional horizon sampling</strong><span>{terrainModel ? `${terrainModel.directionCount} directions returned` : "No profile"}</span></div>
-            <p>All returned directions are sampled calculations only. Full lunar horizon coverage is not verified, and raster boundaries or NoData may limit individual directions.</p>
+            <div className="coverage-summary-head"><strong>Directional horizon sampling</strong><span>{profile.length ? `${profile.length} azimuth directions` : "No profile"}</span></div>
+            <p>Known terrain is shown only where valid Product78 samples exist. All uncovered directions remain UNKNOWN; missing terrain is never treated as open sky. The complete 360° horizon is not verified.</p>
           </div>
           <details className="source-notes">
             <summary>Backend interpretation notes</summary>

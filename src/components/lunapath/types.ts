@@ -1,16 +1,44 @@
 export type ApiStatus = "complete" | "partial";
 
-export type HorizonDirection = {
+/**
+ * One azimuth sampled against the local Product78 Site04 raster.
+ *
+ * A missing angle is UNKNOWN, never a zero-degree/open-sky horizon.
+ * "partial" describes valid local samples only; terrain beyond the last
+ * known sample remains unknown.
+ */
+export type TerrainDirection = {
   azimuthDeg: number;
-  horizonElevationDeg: number;
-  distanceMeters: number;
-  terrainElevationMeters: number;
-  horizonSource: "product78" | "product90";
-  horizonResolutionMeters: number;
-  samplesChecked: number;
-  product78SamplesChecked: number;
-  product90SamplesChecked: number;
-  terminationReason: "search_limit" | "product90_boundary" | "product90_nodata" | string;
+  maxTerrainElevationAngleDeg: number | null;
+  lastKnownSampleDistanceM: number | null;
+  sampleCount: number;
+  source: "product78" | null;
+  coverageStatus: "partial" | "no_data";
+  terminationReason:
+    | "raster_boundary"
+    | "nodata"
+    | "outside_raster"
+    | "invalid_sample"
+    | "calculation_error";
+  terrainBeyondKnownCoverageUnknown: true;
+};
+
+/**
+ * Site04 Product78-only terrain model.
+ *
+ * This is intentionally a partial model. Product90 is not part of the
+ * frontend contract, and no missing direction may be treated as clear sky.
+ */
+export type TerrainModel = {
+  status: "partial";
+  source: "product78";
+  siteId: "site04_shackleton_rim";
+  resolutionMeters: number;
+  completeHorizonVerified: false;
+  horizonProfile: TerrainDirection[];
+  referenceFrame?: string;
+  ephemeris?: string;
+  observerElevationMeters?: number | null;
 };
 
 export type TerrainVisibility = {
@@ -64,31 +92,6 @@ export type CelestialTarget = {
   raw?: unknown;
 };
 
-export type TerrainModel = {
-  source: string;
-  cache: string;
-  sources: {
-    local: { name: string; resolutionMeters: number };
-    regional: { name: string; resolutionMeters: number };
-  };
-  referenceFrame: string;
-  ephemeris: string;
-  observerElevationMeters: number | null;
-  sampleStepMeters: number;
-  regionalSampleStepMeters: number;
-  directionCount: number;
-  directionSpacingDegrees: number;
-  totalSamplesChecked: number;
-  product78SamplesChecked: number;
-  product90SamplesChecked: number;
-  rasterBoundaryLimitedDirections: number;
-  product90CoverageBoundaryLimitedDirections: number;
-  product90NoDataTerminatedDirections: number;
-  searchLimitReachedDirections: number;
-  completeHorizonVerified: false;
-  horizonProfile: HorizonDirection[];
-};
-
 export type HorizonsResponse = {
   success: boolean;
   status?: ApiStatus;
@@ -126,7 +129,7 @@ export type HorizonsResponse = {
   };
   terrainAnalysis?: {
     status: string;
-    cache: string;
+    cache?: string;
     error: string | null;
   };
   terrainModel?: TerrainModel | null;
@@ -180,7 +183,6 @@ export function parseUtcTimestamp(value: string): Date | null {
     milliseconds
   ));
 
-  // Reject overflow dates such as 2026-Feb-31 rather than normalizing them.
   if (
     parsed.getUTCFullYear() !== Number(year) ||
     parsed.getUTCMonth() !== monthNumber ||

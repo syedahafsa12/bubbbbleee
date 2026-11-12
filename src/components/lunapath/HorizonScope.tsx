@@ -1,11 +1,11 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { CelestialObservation, HorizonDirection } from "./types";
+import type { CelestialObservation, TerrainDirection } from "./types";
 import { normalizeAzimuth } from "./types";
 
 type Props = {
-  profile: HorizonDirection[];
+  profile: TerrainDirection[];
   sun?: CelestialObservation[];
   earth?: CelestialObservation[];
 };
@@ -18,16 +18,73 @@ function polarPoint(azimuth: number, radius: number, cx: number, cy: number) {
   };
 }
 
-function profilePath(profile: HorizonDirection[], cx: number, cy: number, radius: number) {
-  const sorted = [...profile].sort((a, b) => normalizeAzimuth(a.azimuthDeg) - normalizeAzimuth(b.azimuthDeg));
-  if (!sorted.length) return "";
-  const points = sorted.map((item) => {
-    const elevation = Math.max(-5, Math.min(65, item.horizonElevationDeg));
-    const radial = radius * (0.42 + ((elevation + 5) / 70) * 0.58);
-    return polarPoint(item.azimuthDeg, radial, cx, cy);
-  });
-  // Explicitly close the 0°/360° seam to avoid a visual gap at North.
-  return points.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x.toFixed(2)} ${point.y.toFixed(2)}`).join(" ") + " Z";
+function hasKnownTerrain(direction: TerrainDirection): boolean {
+  return (
+    direction.coverageStatus === "partial" &&
+    direction.source === "product78" &&
+    typeof direction.maxTerrainElevationAngleDeg === "number" &&
+    Number.isFinite(direction.maxTerrainElevationAngleDeg)
+  );
+}
+
+/**
+ * Build separate open polylines for consecutive known Product78 samples.
+ * Unknown directions break the line; no path is closed or interpolated
+ * across missing terrain.
+ */
+function profilePaths(
+  profile: TerrainDirection[],
+  cx: number,
+  cy: number,
+  radius: number
+): string[] {
+  const sorted = [...profile].sort(
+    (a, b) => normalizeAzimuth(a.azimuthDeg) - normalizeAzimuth(b.azimuthDeg)
+  );
+
+  if (!sorted.length) return [];
+
+  const expectedSpacing = 360 / sorted.length;
+  const groups: TerrainDirection[][] = [];
+  let current: TerrainDirection[] = [];
+
+  for (const direction of sorted) {
+    if (!hasKnownTerrain(direction)) {
+      if (current.length) groups.push(current);
+      current = [];
+      continue;
+    }
+
+    const previous = current[current.length - 1];
+    const gap = previous
+      ? normalizeAzimuth(direction.azimuthDeg - previous.azimuthDeg)
+      : expectedSpacing;
+
+    if (previous && (gap <= 0 || gap > expectedSpacing * 1.5)) {
+      groups.push(current);
+      current = [];
+    }
+
+    current.push(direction);
+  }
+
+  if (current.length) groups.push(current);
+
+  return groups
+    .filter((group) => group.length >= 2)
+    .map((group) =>
+      group
+        .map((item, index) => {
+          const elevation = Math.max(
+            -5,
+            Math.min(65, item.maxTerrainElevationAngleDeg as number)
+          );
+          const radial = radius * (0.42 + ((elevation + 5) / 70) * 0.58);
+          const point = polarPoint(item.azimuthDeg, radial, cx, cy);
+          return `${index === 0 ? "M" : "L"} ${point.x.toFixed(2)} ${point.y.toFixed(2)}`;
+        })
+        .join(" ")
+    );
 }
 
 function latestTargetPoint(observations: CelestialObservation[] | undefined) {
@@ -40,13 +97,23 @@ function latestTargetPoint(observations: CelestialObservation[] | undefined) {
   };
 }
 
+function formatDistance(distanceMeters: number | null): string {
+  return typeof distanceMeters === "number" && Number.isFinite(distanceMeters)
+    ? `${(distanceMeters / 1000).toFixed(2)} km`
+    : "—";
+}
+
 export default function HorizonScope({ profile, sun, earth }: Props) {
   const [selectedAzimuth, setSelectedAzimuth] = useState(0);
   const cx = 160;
   const cy = 150;
   const radius = 112;
 
-  const path = useMemo(() => profilePath(profile, cx, cy, radius), [profile]);
+  const paths = useMemo(
+    () => profilePaths(profile, cx, cy, radius),
+    [profile]
+  );
+
   const selected = useMemo(() => {
     if (!profile.length) return null;
     return profile.reduce((best, item) => {
@@ -56,14 +123,17 @@ export default function HorizonScope({ profile, sun, earth }: Props) {
     }, profile[0]);
   }, [profile, selectedAzimuth]);
 
+  const knownDirectionCount = profile.filter(hasKnownTerrain).length;
+  const unknownDirectionCount = Math.max(0, profile.length - knownDirectionCount);
   const sunPoint = latestTargetPoint(sun);
   const earthPoint = latestTargetPoint(earth);
-  const coverageComplete = false;
+
+  const selectedIsKnown = selected ? hasKnownTerrain(selected) : false;
 
   return (
     <div className="scope-layout">
       <div className="scope-visual">
-        <svg viewBox="0 0 320 300" role="img" aria-label="Polar terrain horizon profile, north at top and azimuth increasing clockwise">
+        <svg viewBox="0 0 320 300" role="img" aria-label="Partial polar terrain horizon profile. Known Product78 terrain is shown only where samples exist; all other directions are unknown. North is at top and azimuth increases clockwise.">
           <circle cx={cx} cy={cy} r={radius} className="scope-ring" />
           <circle cx={cx} cy={cy} r={radius * 0.72} className="scope-ring scope-ring-dashed" />
           <circle cx={cx} cy={cy} r={radius * 0.42} className="scope-ring scope-ring-dashed" />
@@ -73,7 +143,24 @@ export default function HorizonScope({ profile, sun, earth }: Props) {
           <text x="300" y={cy + 4} textAnchor="middle" className="scope-cardinal">E</text>
           <text x={cx} y="291" textAnchor="middle" className="scope-cardinal">S</text>
           <text x="20" y={cy + 4} textAnchor="middle" className="scope-cardinal">W</text>
-          {path && <path d={path} className="scope-terrain-path" />}
+          <circle
+            cx={cx}
+            cy={cy}
+            r={radius * 0.94}
+            fill="none"
+            stroke="#83939a"
+            strokeDasharray="3 5"
+            strokeWidth="1.4"
+            opacity="0.65"
+          />
+          {paths.map((path, index) => (
+            <path
+              key={`known-terrain-${index}`}
+              d={path}
+              className="scope-terrain-path"
+              fill="none"
+            />
+          ))}
           {sunPoint && (() => {
             const p = polarPoint(sunPoint.azimuthDeg, radius * sunPoint.radial, cx, cy);
             return <circle cx={p.x} cy={p.y} r="5.5" className="scope-sun-point" />;
@@ -90,16 +177,18 @@ export default function HorizonScope({ profile, sun, earth }: Props) {
           />
           <text x={cx} y={cy + 4} textAnchor="middle" className="scope-center-label">SITE04</text>
           <text x={cx} y={cy + 19} textAnchor="middle" className="scope-center-sub">SHACKLETON RIM</text>
+          <text x={cx} y={cy + 37} textAnchor="middle" fontSize="7" letterSpacing="0.7" fill="#9aa8ae">UNKNOWN OUTSIDE COVERAGE</text>
         </svg>
         <div className="scope-legend">
-          <span><i className="legend-terrain" /> Terrain horizon</span>
+          <span><i className="legend-terrain" /> Known Product78 terrain</span>
           <span><i className="legend-sun" /> Sun</span>
           <span><i className="legend-earth" /> Earth</span>
+          <span><i className="scope-unknown-swatch" /> Unknown coverage</span>
         </div>
       </div>
       <div className="scope-details">
-        <div className="scope-warning"><span className="status-dot status-dot-warning" /> SAMPLED HORIZON · NOT FULLY VERIFIED</div>
-        <p className="muted small">Select an azimuth to inspect the nearest sampled terrain direction.</p>
+        <div className="scope-warning"><span className="status-dot status-dot-warning" /> PARTIAL LOCAL HORIZON · NOT VERIFIED</div>
+        <p className="muted small">Select an azimuth to inspect the nearest Product78 sample direction.</p>
         <input
           aria-label="Inspect horizon azimuth"
           className="azimuth-slider"
@@ -114,19 +203,32 @@ export default function HorizonScope({ profile, sun, earth }: Props) {
           <span>AZIMUTH</span>
           <strong>{selectedAzimuth.toFixed(2)}°</strong>
         </div>
-        {selected ? (
+        <div className="scope-stats">
+          <div><span>Known directions</span><strong>{knownDirectionCount.toLocaleString()}</strong></div>
+          <div><span>Unknown directions</span><strong>{unknownDirectionCount.toLocaleString()}</strong></div>
+        </div>
+        {selected && selectedIsKnown ? (
           <div className="scope-stats">
-            <div><span>Horizon angle</span><strong>{selected.horizonElevationDeg.toFixed(2)}°</strong></div>
-            <div><span>Distance sampled</span><strong>{(selected.distanceMeters / 1000).toFixed(2)} km</strong></div>
-            <div><span>Terrain source</span><strong>{selected.horizonSource.toUpperCase()}</strong></div>
-            <div><span>Source resolution</span><strong>{selected.horizonResolutionMeters} m</strong></div>
-            <div><span>Samples checked</span><strong>{selected.samplesChecked.toLocaleString()}</strong></div>
-            <div><span>Termination</span><strong>{selected.terminationReason.replaceAll("_", " ")}</strong></div>
+            <div><span>Maximum sampled terrain angle</span><strong>{selected.maxTerrainElevationAngleDeg!.toFixed(2)}°</strong></div>
+            <div><span>Last known sample</span><strong>{formatDistance(selected.lastKnownSampleDistanceM)}</strong></div>
+            <div><span>Terrain source</span><strong>NASA LOLA PRODUCT78</strong></div>
+            <div><span>Source resolution</span><strong>5 m</strong></div>
+            <div><span>Samples checked</span><strong>{selected.sampleCount.toLocaleString()}</strong></div>
+            <div><span>Sampling stopped</span><strong>{selected.terminationReason.replaceAll("_", " ")}</strong></div>
           </div>
         ) : (
-          <p className="muted small">No horizon profile was returned.</p>
+          <div className="scope-stats scope-stats-unknown">
+            <div><span>Selected direction</span><strong>UNKNOWN</strong></div>
+            <p>No valid Product78 terrain samples are available for this direction. This does not mean the horizon is clear.</p>
+            {selected && (
+              <>
+                <div><span>Samples checked</span><strong>{selected.sampleCount.toLocaleString()}</strong></div>
+                <div><span>Sampling stopped</span><strong>{selected.terminationReason.replaceAll("_", " ")}</strong></div>
+              </>
+            )}
+          </div>
         )}
-        <p className="scope-footnote">The polar ring is a directional profile, not a camera view. A missing or limited terrain direction is never interpreted as open sky.</p>
+        <p className="scope-footnote">Only known Product78 samples are drawn. Uncovered terrain beyond the raster boundary remains UNKNOWN; no continuous horizon is inferred across missing directions.</p>
       </div>
     </div>
   );
