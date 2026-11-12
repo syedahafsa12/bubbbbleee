@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Canvas } from "@react-three/fiber";
-import { Grid, OrbitControls } from "@react-three/drei";
+import { OrbitControls } from "@react-three/drei";
 import * as THREE from "three";
 
 type Site04Metadata = {
@@ -172,18 +172,9 @@ function TerrainMesh({ geometry }: { geometry: THREE.BufferGeometry }) {
           side={THREE.DoubleSide}
         />
       </mesh>
-      <Grid
+      <gridHelper
         position={[0, -3.15, 0]}
-        args={[26, 26]}
-        cellSize={1}
-        cellThickness={0.35}
-        sectionSize={4}
-        sectionThickness={0.75}
-        fadeDistance={32}
-        fadeStrength={1.5}
-        infiniteGrid={false}
-        cellColor="#38515b"
-        sectionColor="#59717a"
+        args={[26, 26, "#59717a", "#38515b"]}
       />
       <OrbitControls
         makeDefault
@@ -312,6 +303,7 @@ export default function Site04Terrain() {
           camera={{ position: [11, 8.5, 12], fov: 42, near: 0.1, far: 100 }}
           dpr={[1, 1.6]}
           gl={{ antialias: true, alpha: false }}
+          shadows
         >
           <color attach="background" args={["#08131b"]} />
           <ambientLight intensity={1.35} />
