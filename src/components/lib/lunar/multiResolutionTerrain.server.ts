@@ -895,6 +895,7 @@ async function calculateDirectionHorizon(
     let samplesChecked = 0;
     let product78SamplesChecked = 0;
     let product90SamplesChecked = 0;
+    let lastKnownSampleDistanceMeters: number | null = null;
 
     // Process the samples in original distance order.
     for (const pathSample of pathSamples) {
@@ -947,6 +948,7 @@ async function calculateDirectionHorizon(
             );
 
         samplesChecked++;
+        lastKnownSampleDistanceMeters = pathSample.distanceMeters;
 
         if (source === "product78") {
             product78SamplesChecked++;
@@ -1009,10 +1011,7 @@ async function calculateDirectionHorizon(
         horizonSource,
         horizonResolutionMeters,
 
-        lastKnownSampleDistanceMeters:
-            pathSamples.length > 0
-                ? pathSamples[pathSamples.length - 1].distanceMeters
-                : null,
+        lastKnownSampleDistanceMeters,
         coverageStatus: samplesChecked > 0 ? "partial" : "no_data",
         terrainBeyondKnownCoverageUnknown: true,
 
