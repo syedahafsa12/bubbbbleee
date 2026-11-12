@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import type { CelestialObservation, CelestialTarget, VisibilityWindow } from "./types";
 import { formatDuration, formatUtcTime, getWindowLabel, parseUtcTimestamp } from "./types";
 
@@ -41,6 +42,7 @@ function WindowList({ title, windows }: { title: string; windows?: VisibilityWin
 }
 
 export default function MissionTimeline({ sun, earth, selectedIndex, onSelectedIndexChange }: Props) {
+  const [isPlaying, setIsPlaying] = useState(false);
   const sunObservations = sun.observations ?? [];
   const earthObservations = earth.observations ?? [];
   const observations = sunObservations.length ? sunObservations : earthObservations;
@@ -63,6 +65,44 @@ export default function MissionTimeline({ sun, earth, selectedIndex, onSelectedI
     if (currentTime === undefined || previousTime === undefined) return true;
     return currentTime - previousTime > expectedIntervalMs + 1000;
   });
+
+  // Each playback step advances by one actual JPL observation. It does not
+  // synthesize intermediate timestamps or celestial positions.
+  useEffect(() => {
+    if (!isPlaying || observations.length < 2) return;
+
+    const timeoutId = window.setTimeout(() => {
+      if (safeIndex >= maxIndex) {
+        setIsPlaying(false);
+        return;
+      }
+
+      onSelectedIndexChange(safeIndex + 1);
+    }, 800);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [isPlaying, observations.length, safeIndex, maxIndex, onSelectedIndexChange]);
+
+  function togglePlayback() {
+    if (isPlaying) {
+      setIsPlaying(false);
+      return;
+    }
+
+    if (observations.length < 2) return;
+    if (safeIndex >= maxIndex) onSelectedIndexChange(0);
+    setIsPlaying(true);
+  }
+
+  function resetTimeline() {
+    setIsPlaying(false);
+    onSelectedIndexChange(0);
+  }
+
+  function handleSliderChange(nextIndex: number) {
+    setIsPlaying(false);
+    onSelectedIndexChange(nextIndex);
+  }
 
   return (
     <div className="timeline-content">
@@ -88,11 +128,36 @@ export default function MissionTimeline({ sun, earth, selectedIndex, onSelectedI
             max={maxIndex}
             step="1"
             value={safeIndex}
-            onChange={(event) => onSelectedIndexChange(Number(event.target.value))}
+            onChange={(event) => handleSliderChange(Number(event.target.value))}
           />
           <div className="timeline-range-labels">
             <span>{formatUtcTime(observations[0].timeUtc)}</span>
             <span>{formatUtcTime(observations[maxIndex].timeUtc)}</span>
+          </div>
+          <div className="timeline-transport" aria-label="Timeline playback controls">
+            <button
+              type="button"
+              className="timeline-transport-primary"
+              onClick={togglePlayback}
+              disabled={observations.length < 2}
+              aria-label={isPlaying ? "Pause timeline" : "Play timeline"}
+            >
+              <span aria-hidden="true">{isPlaying ? "Ⅱ" : "▶"}</span>
+              {isPlaying ? "PAUSE" : "PLAY"}
+            </button>
+            <button
+              type="button"
+              className="timeline-transport-secondary"
+              onClick={resetTimeline}
+              disabled={observations.length === 0 || (safeIndex === 0 && !isPlaying)}
+              aria-label="Reset timeline to first observation"
+            >
+              <span aria-hidden="true">↺</span>
+              RESET
+            </button>
+            <span className="timeline-playback-note">
+              {isPlaying ? "Advancing through actual JPL samples" : "10-minute observation steps"}
+            </span>
           </div>
         </>
       ) : (
