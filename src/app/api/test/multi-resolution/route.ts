@@ -1,4 +1,3 @@
-
 import { connection } from "next/server";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
@@ -32,7 +31,7 @@ async function loadProduct78(): Promise<LolaTerrainData> {
 
       return decodeLolaTerrain(
         JSON.parse(metadataText) as unknown,
-        binary
+        new Uint8Array(binary)
       );
     })().catch((error: unknown) => {
       terrainPromise = null;
@@ -47,143 +46,120 @@ export async function GET() {
   await connection();
 
   try {
-    console.log("[Multi-resolution Test] Starting...");
-
-    // Load the existing high-resolution Product 78 dataset.
     const product78 = await loadProduct78();
+    const commonOptions = {
+      directionCount: 16,
+      sampleStepMeters: 5,
+      regionalSampleStepMeters: 20,
+      maxDistanceMeters: 15000,
+      directionConcurrency: 2,
+    };
 
-    // Test 16 directions before running the full calculation.
-    const result =
-      await calculateMultiResolutionTerrainHorizon(
-        product78,
-        SITE04_COORDINATES,
-        {
-          directionCount: 16,
-          sampleStepMeters: 5,
-          regionalSampleStepMeters: 20,
-          maxDistanceMeters: 15000,
-          directionConcurrency: 2,
-        }
-      );
+    // Acceptance test 1: Product78 must run without touching Product90.
+    const localOnly = await calculateMultiResolutionTerrainHorizon(
+      product78,
+      SITE04_COORDINATES,
+      {
+        ...commonOptions,
+        enableProduct90: false,
+      }
+    );
 
-    const bothDatasetsUsed =
-      result.product78SamplesChecked > 0 &&
-      result.product90SamplesChecked > 0;
+    // Acceptance test 2: deliberately fail the Product90 raster batch after
+    // its metadata has been validated. The completed Product78 baseline must
+    // be returned rather than rejecting the entire horizon calculation.
+    const fallback = await calculateMultiResolutionTerrainHorizon(
+      product78,
+      SITE04_COORDINATES,
+      {
+        ...commonOptions,
+        enableProduct90: true,
+      },
+      {
+        sampleElevations: async () => {
+          throw new Error("Synthetic Product90 tile 28,31 socket failure");
+        },
+      }
+    );
 
-    const allDirectionsCalculated =
-      result.calculatedDirections === 16 &&
-      result.directions.every(
-        (direction) => direction.samplesChecked > 0
-      );
-
-    const finiteResults =
-      result.directions.every(
+    const localOnlyPassed =
+      localOnly.calculatedDirections === commonOptions.directionCount &&
+      localOnly.product90SamplesChecked === 0 &&
+      localOnly.product90Status === "disabled" &&
+      localOnly.product78SamplesChecked > 0 &&
+      localOnly.directions.every(
         (direction) =>
-          Number.isFinite(direction.horizonElevationDeg) &&
-          Number.isFinite(direction.distanceMeters) &&
-          Number.isFinite(direction.terrainElevationMeters)
+          direction.samplesChecked > 0 &&
+          direction.coverageStatus === "partial" &&
+          direction.terrainBeyondKnownCoverageUnknown === true &&
+          direction.terminationReason === "product78_boundary"
       );
+
+    const failureIsolationPassed =
+      fallback.calculatedDirections === commonOptions.directionCount &&
+      fallback.product90Status === "unavailable" &&
+      fallback.product90Error?.includes("Synthetic Product90 tile") === true &&
+      fallback.product90SamplesChecked === 0 &&
+      fallback.product78SamplesChecked > 0 &&
+      fallback.directions.every(
+        (direction) =>
+          direction.samplesChecked > 0 &&
+          direction.terrainBeyondKnownCoverageUnknown === true
+      );
+
+    const completeHorizonRemainsUnverified =
+      localOnly.completeHorizonVerified === false &&
+      fallback.completeHorizonVerified === false;
 
     const success =
-      bothDatasetsUsed &&
-      allDirectionsCalculated &&
-      finiteResults;
+      localOnlyPassed &&
+      failureIsolationPassed &&
+      completeHorizonRemainsUnverified;
 
     return Response.json(
       {
         success,
-
         message: success
-          ? "Multi-resolution terrain smoke test passed."
-          : "Multi-resolution terrain test needs investigation.",
-
-        observer: {
-          geographic: result.observer,
-          projected: result.observerProjected,
-          elevationMeters: result.observerElevationMeters,
+          ? "Product78-only and Product90 failure-isolation tests passed."
+          : "Product78 fallback tests need investigation.",
+        checks: {
+          localOnlyPassed,
+          failureIsolationPassed,
+          completeHorizonRemainsUnverified,
         },
-
-        configuration: {
-          directionsRequested: 16,
-          localSampleStepMeters: 5,
-          regionalSampleStepMeters: 20,
-          maximumDistanceMeters: 15000,
-          directionConcurrency: 2,
-        },
-
-        results: {
-          calculatedDirections: result.calculatedDirections,
-          totalSamplesChecked: result.totalSamplesChecked,
-
-          product78SamplesChecked:
-            result.product78SamplesChecked,
-
-          product90SamplesChecked:
-            result.product90SamplesChecked,
-
-          bothDatasetsUsed,
-
-          rasterBoundaryLimitedDirections:
-            result.rasterBoundaryLimitedDirections,
-
-          product90CoverageBoundaryLimitedDirections:
-            result.product90CoverageBoundaryLimitedDirections,
-
-          product90NoDataTerminatedDirections:
-            result.product90NoDataTerminatedDirections,
-
+        product78Only: {
+          calculatedDirections: localOnly.calculatedDirections,
+          totalSamplesChecked: localOnly.totalSamplesChecked,
+          product78SamplesChecked: localOnly.product78SamplesChecked,
+          product90SamplesChecked: localOnly.product90SamplesChecked,
+          product90Status: localOnly.product90Status,
+          product78BoundaryLimitedDirections:
+            localOnly.product78BoundaryLimitedDirections,
+          product78NoDataTerminatedDirections:
+            localOnly.product78NoDataTerminatedDirections,
           searchLimitReachedDirections:
-            result.searchLimitReachedDirections,
-
-          completeHorizonVerified:
-            result.completeHorizonVerified,
-
-          finiteResults,
-          allDirectionsCalculated,
+            localOnly.searchLimitReachedDirections,
+          completeHorizonVerified: localOnly.completeHorizonVerified,
+          directions: localOnly.directions,
         },
-
-        directions: result.directions.map((direction) => ({
-          azimuthDeg: direction.azimuthDeg,
-
-          horizonElevationDeg:
-            direction.horizonElevationDeg,
-
-          distanceMeters:
-            direction.distanceMeters,
-
-          horizonSource:
-            direction.horizonSource,
-
-          horizonResolutionMeters:
-            direction.horizonResolutionMeters,
-
-          product78SamplesChecked:
-            direction.product78SamplesChecked,
-
-          product90SamplesChecked:
-            direction.product90SamplesChecked,
-
-          terminationReason:
-            direction.terminationReason,
-        })),
+        simulatedProduct90Failure: {
+          product90Status: fallback.product90Status,
+          product90Error: fallback.product90Error,
+          product78SamplesChecked: fallback.product78SamplesChecked,
+          product90SamplesChecked: fallback.product90SamplesChecked,
+          calculatedDirections: fallback.calculatedDirections,
+          completeHorizonVerified: fallback.completeHorizonVerified,
+          directions: fallback.directions,
+        },
       },
-      {
-        status: success ? 200 : 500,
-      }
+      { status: success ? 200 : 500 }
     );
   } catch (error) {
-    console.error(
-      "[Multi-resolution Test] Failed:",
-      error
-    );
-
+    console.error("[Product78 fallback tests] Failed:", error);
     return Response.json(
       {
         success: false,
-        error:
-          error instanceof Error
-            ? error.message
-            : String(error),
+        error: error instanceof Error ? error.message : String(error),
       },
       { status: 500 }
     );
