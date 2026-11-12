@@ -11,7 +11,7 @@ export interface Product78Site {
 }
 
 /**
- * Six standard Product78 south-polar candidate regions selected for the current
+ * Seven standard Product78 south-polar candidate regions selected for the current
  * LunaPath implementation. Coordinates are selenographic and east-positive.
  */
 export const PRODUCT78_SITE_REGISTRY = {
