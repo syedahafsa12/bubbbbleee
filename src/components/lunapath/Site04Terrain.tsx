@@ -6,15 +6,23 @@ import { OrbitControls } from "@react-three/drei";
 import * as THREE from "three";
 import {
   geographicToLolaProjected,
-  loadLolaTerrain,
+  loadLolaTerrainForSite,
   sampleLolaHeightAtLocation,
-  SITE04_COORDINATES,
 } from "@/components/lib/lunar/terrainData";
+import {
+  getProduct78Site,
+  type Product78SiteId,
+} from "@/components/lib/lunar/siteRegistry";
 import type {
   LolaTerrainData,
   LolaTerrainMetadata,
 } from "@/components/lib/lunar/terrainData";
 import type { CelestialObservation } from "./types";
+
+type ObserverCoordinate = {
+  latitudeDeg: number;
+  longitudeEastDeg: number;
+};
 
 type TerrainState =
   | { status: "loading"; message: string }
@@ -27,6 +35,9 @@ type TerrainState =
       validCells: number;
       totalCells: number;
       observerPosition: [number, number, number] | null;
+      siteName: string;
+      archiveSite: string;
+      siteId: Product78SiteId;
     };
 
 const DISPLAY_STRIDE_PIXELS = 8;
@@ -40,7 +51,10 @@ const DISPLAY_STRIDE_PIXELS = 8;
  * tie point and pixel resolution, not from treating latitude/longitude as
  * a flat Cartesian grid.
  */
-function buildDisplayGeometry(terrain: LolaTerrainData): {
+function buildDisplayGeometry(
+  terrain: LolaTerrainData,
+  observerCoordinate: ObserverCoordinate
+): {
   geometry: THREE.BufferGeometry;
   displayResolutionMeters: number;
   validCells: number;
@@ -163,10 +177,10 @@ function buildDisplayGeometry(terrain: LolaTerrainData): {
   try {
     const observer = sampleLolaHeightAtLocation(
       terrain,
-      SITE04_COORDINATES
+      observerCoordinate
     );
     const projectedObserver = geographicToLolaProjected(
-      SITE04_COORDINATES,
+      observerCoordinate,
       metadata
     );
 
@@ -190,10 +204,11 @@ function buildDisplayGeometry(terrain: LolaTerrainData): {
 
 function projectedBearingDirection(
   azimuthDeg: number,
-  metadata: LolaTerrainMetadata
+  metadata: LolaTerrainMetadata,
+  observerCoordinate: ObserverCoordinate
 ): THREE.Vector3 | null {
-  const latitude = SITE04_COORDINATES.latitudeDeg;
-  const longitude = SITE04_COORDINATES.longitudeEastDeg;
+  const latitude = observerCoordinate.latitudeDeg;
+  const longitude = observerCoordinate.longitudeEastDeg;
   const radius = metadata.georeferencing.lunarRadiusMeters;
   const latitudeRadians = THREE.MathUtils.degToRad(latitude);
   const cosLatitude = Math.cos(latitudeRadians);
@@ -211,7 +226,7 @@ function projectedBearingDirection(
     THREE.MathUtils.radToDeg(basisStepMeters / (radius * cosLatitude));
 
   try {
-    const origin = geographicToLolaProjected(SITE04_COORDINATES, metadata);
+    const origin = geographicToLolaProjected(observerCoordinate, metadata);
     const north = geographicToLolaProjected(
       { latitudeDeg: northLatitude, longitudeEastDeg: longitude },
       metadata
@@ -246,11 +261,13 @@ function projectedBearingDirection(
 
 function celestialSceneDirection(
   observation: CelestialObservation,
-  metadata: LolaTerrainMetadata
+  metadata: LolaTerrainMetadata,
+  observerCoordinate: ObserverCoordinate
 ): THREE.Vector3 | null {
   const horizontal = projectedBearingDirection(
     observation.azimuthDeg,
-    metadata
+    metadata,
+    observerCoordinate
   );
   if (!horizontal) return null;
 
@@ -284,15 +301,17 @@ function CelestialArrow({
   metadata,
   observerPosition,
   color,
+  observerCoordinate,
 }: {
   observation?: CelestialObservation;
   metadata: LolaTerrainMetadata;
   observerPosition: [number, number, number] | null;
+  observerCoordinate: ObserverCoordinate;
   color: string;
 }) {
   const arrow = useMemo(() => {
     if (!observation || !observerPosition) return null;
-    const direction = celestialSceneDirection(observation, metadata);
+    const direction = celestialSceneDirection(observation, metadata, observerCoordinate);
     if (!direction) return null;
 
     return new THREE.ArrowHelper(
@@ -308,6 +327,7 @@ function CelestialArrow({
     observation?.elevationDeg,
     observerPosition,
     metadata,
+    observerCoordinate,
     color,
   ]);
 
@@ -367,6 +387,7 @@ function TerrainMesh({
   resetToken,
   sun,
   earth,
+  observerCoordinate,
 }: {
   geometry: THREE.BufferGeometry;
   observerPosition: [number, number, number] | null;
@@ -374,10 +395,11 @@ function TerrainMesh({
   resetToken: number;
   sun?: CelestialObservation;
   earth?: CelestialObservation;
+  observerCoordinate: ObserverCoordinate;
 }) {
   const sunDirection = useMemo(
-    () => sun ? celestialSceneDirection(sun, metadata) : null,
-    [sun?.azimuthDeg, sun?.elevationDeg, metadata]
+    () => sun ? celestialSceneDirection(sun, metadata, observerCoordinate) : null,
+    [sun?.azimuthDeg, sun?.elevationDeg, metadata, observerCoordinate]
   );
   const sunLightPosition = sunDirection && observerPosition
     ? [
@@ -414,12 +436,14 @@ function TerrainMesh({
         observation={sun}
         metadata={metadata}
         observerPosition={observerPosition}
+        observerCoordinate={observerCoordinate}
         color="#f1b65d"
       />
       <CelestialArrow
         observation={earth}
         metadata={metadata}
         observerPosition={observerPosition}
+        observerCoordinate={observerCoordinate}
         color="#72cce8"
       />
       {sunLightPosition && (
@@ -448,7 +472,15 @@ function TerrainMesh({
   );
 }
 
-export default function Site04Terrain({ sun, earth }: { sun?: CelestialObservation; earth?: CelestialObservation }) {
+export default function Site04Terrain({
+  siteId,
+  sun,
+  earth,
+}: {
+  siteId: Product78SiteId;
+  sun?: CelestialObservation;
+  earth?: CelestialObservation;
+}) {
   const [cameraResetToken, setCameraResetToken] = useState(0);
   const [terrain, setTerrain] = useState<TerrainState>({
     status: "loading",
@@ -461,10 +493,16 @@ export default function Site04Terrain({ sun, earth }: { sun?: CelestialObservati
 
     async function loadTerrain() {
       try {
+        const site = getProduct78Site(siteId);
+        setTerrain({
+          status: "loading",
+          message: `Loading NASA Product78 ${site.archiveSite} terrain…`,
+        });
+
         // Reuse the validated Product78 loader; do not decode elevation.bin
         // a second time inside the visualization component.
-        const terrainData = await loadLolaTerrain();
-        const result = buildDisplayGeometry(terrainData);
+        const terrainData = await loadLolaTerrainForSite(siteId);
+        const result = buildDisplayGeometry(terrainData, site.observer);
         createdGeometry = result.geometry;
 
         if (!active) {
@@ -480,6 +518,9 @@ export default function Site04Terrain({ sun, earth }: { sun?: CelestialObservati
           validCells: result.validCells,
           totalCells: result.totalCells,
           observerPosition: result.observerPosition,
+          siteName: site.displayName,
+          archiveSite: site.archiveSite,
+          siteId,
         });
       } catch (error) {
         if (!active) return;
@@ -497,7 +538,7 @@ export default function Site04Terrain({ sun, earth }: { sun?: CelestialObservati
       active = false;
       createdGeometry?.dispose();
     };
-  }, []);
+  }, [siteId]);
 
   if (terrain.status === "loading") {
     return (
@@ -543,6 +584,7 @@ export default function Site04Terrain({ sun, earth }: { sun?: CelestialObservati
             resetToken={cameraResetToken}
             sun={sun}
             earth={earth}
+            observerCoordinate={getProduct78Site(siteId).observer}
           />
         </Canvas>
         <div className="terrain-overlay terrain-overlay-top">
@@ -584,7 +626,7 @@ export default function Site04Terrain({ sun, earth }: { sun?: CelestialObservati
       <p className="terrain-footnote">
         The display mesh samples every 8th raster pixel (about 40 m); the original NASA Product78 raster remains at 5 m/pixel.
         Horizontal placement uses the metadata tie point and south-polar stereographic pixel resolution.
-        Vertical scale is 1×. The orange marker identifies the Site04 observer. Amber and cyan arrows show the selected JPL Sun and Earth directions; Sun lighting follows the selected Sun direction when its elevation is above the local horizon.
+        Vertical scale is 1×. The orange marker identifies the {terrain.siteName} observer. Amber and cyan arrows show the selected JPL Sun and Earth directions; Sun lighting follows the selected Sun direction when its elevation is above the local horizon.
       </p>
     </div>
   );
