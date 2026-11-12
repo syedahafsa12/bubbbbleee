@@ -76,8 +76,6 @@ function buildDisplayGeometry(terrain: LolaTerrainData): {
   const centerProjectedY =
     tiePoint.y + (centerRow - tiePoint.row) * pixelHeight;
 
-  let validVertices = 0;
-
   for (let row = 0; row < rows; row += 1) {
     const sourceRow = Math.min(row * stride, terrain.height - 1);
 
@@ -109,7 +107,6 @@ function buildDisplayGeometry(terrain: LolaTerrainData): {
       valid[vertexIndex] = isValid ? 1 : 0;
 
       if (isValid) {
-        validVertices += 1;
         const t = THREE.MathUtils.clamp(
           (elevation - metadata.minElevation) /
             (metadata.maxElevation - metadata.minElevation),
