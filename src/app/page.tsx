@@ -81,6 +81,9 @@ async function verifySiteProjection(site: Product78SiteStatus): Promise<boolean>
     const pixelRegistration = metadata.coordinateSystem?.pixelRegistration
       ?.toLowerCase()
       .replace(/[^a-z]/g, "");
+    const linearUnits = metadata.coordinateSystem?.linearUnits
+      ?.toLowerCase()
+      .replace(/[^a-z]/g, "");
 
     if (
       metadata.width !== site.dimensions?.[0] ||
@@ -92,7 +95,8 @@ async function verifySiteProjection(site: Product78SiteStatus): Promise<boolean>
       ) ||
       projection !== "southpolarstereographic" ||
       referenceFrame !== "MOON_ME" ||
-      pixelRegistration !== "pixelisarea"
+      !["pixelarea", "pixelisarea"].includes(pixelRegistration ?? "") ||
+      !["meters", "metres", "m"].includes(linearUnits ?? "")
     ) {
       return false;
     }
