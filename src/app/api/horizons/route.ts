@@ -1163,7 +1163,7 @@ export async function GET(request: NextRequest) {
     const isPartial =
       !terrainAvailable ||
       !bothTargetsAvailable ||
-      terrainHorizon?.completeHorizonVerified !== true ||
+      terrainHorizon?.completeHorizonVerified === false ||
       terrainHorizon?.directions.some(
         (direction) => direction.coverageStatus === "no_data"
       ) === true;
