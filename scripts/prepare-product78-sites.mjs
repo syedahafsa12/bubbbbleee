@@ -8,8 +8,10 @@ const TEMP_ROOT = await mkdtemp(path.join(os.tmpdir(), "lunapath-product78-"));
 
 const SITES = [
   { archiveSite: "Site01", dataDirectory: "site01_connecting_ridge" },
+  { archiveSite: "Site06", dataDirectory: "site06_nobile_rim_1" },
   { archiveSite: "Site07", dataDirectory: "site07_peak_near_shackleton" },
   { archiveSite: "Site11", dataDirectory: "site11_de_gerlache_rim" },
+  { archiveSite: "Site20", dataDirectory: "site20_leibnitz_beta_plateau" },
   { archiveSite: "Site23", dataDirectory: "site23_malapert_massif" },
 ];
 
@@ -164,7 +166,7 @@ try {
     await prepareSite(site);
   }
 
-  console.log("\nAll four additional Product78 sites were converted successfully.");
+  console.log("\nAll six additional standard Product78 sites were converted successfully.");
   console.log("Original TIFF downloads were stored only in the OS temporary directory.");
 } finally {
   await rm(TEMP_ROOT, { recursive: true, force: true });
