@@ -11,7 +11,7 @@ export interface Product78Site {
 }
 
 /**
- * Five Product78 south-polar candidate regions selected for the current
+ * Six standard Product78 south-polar candidate regions selected for the current
  * LunaPath implementation. Coordinates are selenographic and east-positive.
  */
 export const PRODUCT78_SITE_REGISTRY = {
@@ -31,6 +31,14 @@ export const PRODUCT78_SITE_REGISTRY = {
     observer: { latitudeDeg: -89.7668, longitudeEastDeg: 188.13 },
     sourceUrl: "https://pgda.gsfc.nasa.gov/products/78",
   },
+  site06_nobile_rim_1: {
+    id: "site06_nobile_rim_1",
+    archiveSite: "Site06",
+    displayName: "Nobile Rim 1",
+    dataDirectory: "site06_nobile_rim_1",
+    observer: { latitudeDeg: -85.4381, longitudeEastDeg: 37.36667 },
+    sourceUrl: "https://pgda.gsfc.nasa.gov/products/78",
+  },
   site07_peak_near_shackleton: {
     id: "site07_peak_near_shackleton",
     archiveSite: "Site07",
@@ -45,6 +53,14 @@ export const PRODUCT78_SITE_REGISTRY = {
     displayName: "de Gerlache Rim",
     dataDirectory: "site11_de_gerlache_rim",
     observer: { latitudeDeg: -88.6834, longitudeEastDeg: 292.0679 },
+    sourceUrl: "https://pgda.gsfc.nasa.gov/products/78",
+  },
+  site20_leibnitz_beta_plateau: {
+    id: "site20_leibnitz_beta_plateau",
+    archiveSite: "Site20",
+    displayName: "Leibnitz Beta Plateau",
+    dataDirectory: "site20_leibnitz_beta_plateau",
+    observer: { latitudeDeg: -85.4266, longitudeEastDeg: 31.74276 },
     sourceUrl: "https://pgda.gsfc.nasa.gov/products/78",
   },
   site23_malapert_massif: {
