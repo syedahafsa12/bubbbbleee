@@ -585,7 +585,7 @@ function calculateTerrainElevationAngle(
  * Product90. Each ray stops at the first actual Product78 footprint boundary
  * or declared NoData sample. Previously sampled terrain is preserved.
  */
-async function calculateProduct78DirectionHorizon(
+function calculateProduct78DirectionHorizon(
     product78: LolaTerrainData,
     observer: GeographicCoordinate,
     observerElevationMeters: number,
@@ -593,7 +593,7 @@ async function calculateProduct78DirectionHorizon(
     sampleStepMeters: number,
     maxDistanceMeters: number,
     lunarRadiusMeters: number
-): Promise<MultiResolutionTerrainHorizonDirection> {
+): MultiResolutionTerrainHorizonDirection {
     let maximumAngle = -Infinity;
     let maximumDistance: number | null = null;
     let maximumTerrainElevation: number | null = null;
