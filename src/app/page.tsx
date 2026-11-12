@@ -188,14 +188,20 @@ export default function Home() {
     (site) => site.id === selectedSiteId
   ) ?? null;
 
-  const sun = targetOrEmpty(data?.targets?.sun);
-  const earth = targetOrEmpty(data?.targets?.earth);
+  const isDataForSelectedSite =
+    Boolean(selectedSite) &&
+    data?.observer?.name === selectedSite?.name;
+  const missionData = isDataForSelectedSite ? data : null;
+  const observer = missionData?.observer;
+
+  const sun = targetOrEmpty(missionData?.targets?.sun);
+  const earth = targetOrEmpty(missionData?.targets?.earth);
   // A terrain result must match the currently selected site. Old or mismatched
   // payloads are not silently displayed under another site's label.
   const terrainModel =
-    data?.terrainModel?.source === "product78" &&
-    data.terrainModel.siteId === selectedSiteId
-      ? data.terrainModel
+    missionData?.terrainModel?.source === "product78" &&
+    missionData.terrainModel.siteId === selectedSiteId
+      ? missionData.terrainModel
       : null;
   const profile = terrainModel?.horizonProfile ?? [];
 
@@ -222,9 +228,9 @@ export default function Home() {
   );
 
   const statusLabel =
-    data?.status === "complete"
+    missionData?.status === "complete"
       ? "DATA RETURNED"
-      : data?.status === "partial"
+      : missionData?.status === "partial"
         ? "PARTIAL DATA"
         : loading
           ? "LOADING MISSION DATA"
@@ -351,7 +357,7 @@ export default function Home() {
         </div>
       )}
 
-      {data?.status === "partial" && (
+      {missionData?.status === "partial" && (
         <div className="partial-banner">
           <span className="status-dot status-dot-warning" />
           <div>
@@ -509,7 +515,7 @@ export default function Home() {
           <details className="source-notes">
             <summary>Backend interpretation notes</summary>
             <ul>
-              {(data?.notes ?? ["Load a mission date to retrieve backend calculation notes."]).map((note, index) => (
+              {(missionData?.notes ?? ["Load a mission date to retrieve backend calculation notes."]).map((note, index) => (
                 <li key={index}>{note}</li>
               ))}
             </ul>
