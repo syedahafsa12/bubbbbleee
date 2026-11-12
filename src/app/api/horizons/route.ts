@@ -1049,7 +1049,7 @@ export async function GET(request: NextRequest) {
     if (terrain) {
       try {
         const wasAlreadyCached =
-          terrainHorizonPromise !== null;
+          terrainHorizonPromises.has(siteId);
 
         terrainHorizon =
           await getCachedTerrainHorizon(
