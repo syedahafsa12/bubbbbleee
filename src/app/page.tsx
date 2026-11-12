@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Site04Terrain from "@/components/lunapath/Site04Terrain";
 import HorizonScope from "@/components/lunapath/HorizonScope";
 import MissionTimeline from "@/components/lunapath/MissionTimeline";
@@ -25,15 +25,24 @@ function Stat({ label, value, detail }: { label: string; value: string; detail?:
 }
 
 export default function Home() {
-  const [date, setDate] = useState(utcToday);
+  // Keep the first server/client render deterministic. The browser date is set after mount.
+  const [date, setDate] = useState("");
   const [data, setData] = useState<HorizonsResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [requestError, setRequestError] = useState<string | null>(null);
   const [selectedIndex, setSelectedIndex] = useState(0);
 
+  const requestSequence = useRef(0);
+
   const load = useCallback(async (requestedDate: string) => {
+    if (!requestedDate) return;
+
+    const requestId = ++requestSequence.current;
     setLoading(true);
     setRequestError(null);
+    // Do not leave observations from a previous date beside a new request error.
+    setData(null);
+    setSelectedIndex(0);
 
     try {
       const response = await fetch(`/api/horizons?date=${encodeURIComponent(requestedDate)}`, {
@@ -41,21 +50,32 @@ export default function Home() {
       });
       const payload = (await response.json()) as HorizonsResponse;
 
+      // Ignore an older response if the user has already requested another date.
+      if (requestId !== requestSequence.current) return;
+
       if (!response.ok || !payload.success) {
         throw new Error(payload.error ?? `Horizons request failed (${response.status}).`);
       }
 
       setData(payload);
-      setSelectedIndex(0);
     } catch (error) {
+      if (requestId !== requestSequence.current) return;
       setRequestError(error instanceof Error ? error.message : "Could not retrieve mission data.");
       setData(null);
     } finally {
-      setLoading(false);
+      if (requestId === requestSequence.current) {
+        setLoading(false);
+      }
     }
   }, []);
 
+  // Date is intentionally derived only in the browser after hydration.
   useEffect(() => {
+    setDate(utcToday());
+  }, []);
+
+  useEffect(() => {
+    if (!date) return;
     void load(date);
   }, [load, date]);
 
