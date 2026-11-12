@@ -120,7 +120,7 @@ export default function SiteComparison({ sites, date }: Props) {
     });
     setResults([]);
     setError(null);
-  }, [sites]);
+  }, [sites, date]);
 
   useEffect(() => {
     return () => {
