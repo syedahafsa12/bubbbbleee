@@ -207,7 +207,7 @@ export default function Home() {
             <div className="provenance-item"><span>TERRAIN SAMPLING</span><strong>{terrainModel ? `${terrainModel.resolutionMeters} m source raster` : "Site04 · 5 m source raster"}</strong><small>Only directions with valid Product78 samples are drawn</small></div>
           </div>
           <div className="coverage-summary">
-            <div className="coverage-summary-head"><strong>Directional horizon sampling</strong><span>{terrainModel ? `${terrainModel.directionCount} directions returned` : "No profile"}</span></div>
+            <div className="coverage-summary-head"><strong>Directional horizon sampling</strong><span>{profile.length ? `${profile.length} azimuth directions` : "No profile"}</span></div>
             <p>Known terrain is shown only where valid Product78 samples exist. All uncovered directions remain UNKNOWN; missing terrain is never treated as open sky. The complete 360° horizon is not verified.</p>
           </div>
           <details className="source-notes">
