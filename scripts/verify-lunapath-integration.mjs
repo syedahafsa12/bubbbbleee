@@ -210,9 +210,12 @@ async function main() {
   }
 
   const terrain = payload.terrainModel;
-  const profile = Array.isArray(terrain?.horizonProfile)
-    ? terrain.horizonProfile
-    : [];
+  // Only count the target Product78 profile. Legacy mixed-source profile
+  // values are deliberately ignored by the frontend.
+  const profile =
+    terrain?.source === "product78" && Array.isArray(terrain?.horizonProfile)
+      ? terrain.horizonProfile
+      : [];
 
   let knownDirectionCount = 0;
   let unknownDirectionCount = 0;
