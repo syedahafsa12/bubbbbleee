@@ -584,7 +584,7 @@ export default function Site04Terrain({ sun, earth }: { sun?: CelestialObservati
       <p className="terrain-footnote">
         The display mesh samples every 8th raster pixel (about 40 m); the original NASA Product78 raster remains at 5 m/pixel.
         Horizontal placement uses the metadata tie point and south-polar stereographic pixel resolution.
-        Vertical scale is 1×. The orange marker identifies the Site04 observer location.
+        Vertical scale is 1×. The orange marker identifies the Site04 observer. Amber and cyan arrows show the selected JPL Sun and Earth directions; Sun lighting follows the selected Sun direction when its elevation is above the local horizon.
       </p>
     </div>
   );
