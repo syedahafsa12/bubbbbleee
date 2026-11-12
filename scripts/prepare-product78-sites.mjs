@@ -68,7 +68,18 @@ async function prepareSite(site) {
   );
 
   const noDataTag = image.getGDALNoData();
-  const hasNaNNoDataTag = Number.isNaN(noDataTag);
+  const hasDeclaredNoData =
+    typeof noDataTag === "number" &&
+    (Number.isNaN(noDataTag) || Number.isFinite(noDataTag));
+  const normalizedNoDataValue =
+    Number.isNaN(noDataTag) ? "NaN" : noDataTag;
+  const isDeclaredNoData = (value) => {
+    if (!hasDeclaredNoData) return false;
+    return normalizedNoDataValue === "NaN"
+      ? Number.isNaN(value)
+      : value === normalizedNoDataValue;
+  };
+
   const rasters = await image.readRasters({ samples: [0] });
   const source = rasters[0];
   assert(source.length === width * height, `${site.archiveSite} raster dimensions do not match sample count.`);
@@ -84,8 +95,9 @@ async function prepareSite(site) {
   for (let index = 0; index < source.length; index++) {
     const value = source[index];
 
-    if (Number.isNaN(value) && hasNaNNoDataTag) {
+    if (isDeclaredNoData(value)) {
       noDataPixelCount++;
+      // Normalize every declared NoData sentinel to IEEE NaN in the binary.
       elevationBuffer.writeFloatLE(Number.NaN, index * 4);
       continue;
     }
@@ -126,7 +138,9 @@ async function prepareSite(site) {
     },
     dataType: "Float32",
     byteOrder: "little-endian",
-    ...(hasNaNNoDataTag ? { noDataValue: "NaN", noDataPixelCount } : {}),
+    ...(hasDeclaredNoData
+      ? { noDataValue: "NaN", noDataPixelCount }
+      : {}),
     source: {
       provider: "NASA PDS Geosciences Node / PGDA",
       product: "78",
