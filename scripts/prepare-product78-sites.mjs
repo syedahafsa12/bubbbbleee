@@ -6,14 +6,74 @@ import path from "node:path";
 const ROOT = process.cwd();
 const TEMP_ROOT = await mkdtemp(path.join(os.tmpdir(), "lunapath-product78-"));
 
-const SITES = [
+const ALL_SITES = [
   { archiveSite: "Site01", dataDirectory: "site01_connecting_ridge" },
   { archiveSite: "Site06", dataDirectory: "site06_nobile_rim_1" },
   { archiveSite: "Site07", dataDirectory: "site07_peak_near_shackleton" },
   { archiveSite: "Site11", dataDirectory: "site11_de_gerlache_rim" },
   { archiveSite: "Site20", dataDirectory: "site20_leibnitz_beta_plateau" },
   { archiveSite: "Site23", dataDirectory: "site23_malapert_massif" },
+  { archiveSite: "Site20v2", dataDirectory: "site20v2_leibnitz_beta_plateau_extended" },
+  { archiveSite: "Site42", dataDirectory: "site42_de_gerlache_kocher_massif" },
+  { archiveSite: "Haworth", dataDirectory: "haworth" },
+  { archiveSite: "Shoemaker", dataDirectory: "shoemaker" },
+  { archiveSite: "DM1", dataDirectory: "dm1_amundsen_rim" },
+  { archiveSite: "DM2", dataDirectory: "dm2_nobile_rim_2" },
+  { archiveSite: "SL2", dataDirectory: "sl2_de_gerlache_rim_2" },
+  { archiveSite: "SL3", dataDirectory: "sl3_connecting_ridge_extension" },
+  { archiveSite: "NPA", dataDirectory: "npa_cabeus_exterior_wall_1" },
+  { archiveSite: "NPB", dataDirectory: "npb_amundsen_1" },
+  { archiveSite: "NPC", dataDirectory: "npc_idelson_l_crater_1" },
+  { archiveSite: "NPD", dataDirectory: "npd_malapert_crater_1" },
+  { archiveSite: "LM1", dataDirectory: "lm1_shackleton_rim_b" },
+  { archiveSite: "LM2", dataDirectory: "lm2_shoemaker_rim_a" },
+  { archiveSite: "LM3", dataDirectory: "lm3_shoemaker_rim_b" },
+  { archiveSite: "LM4", dataDirectory: "lm4_shoemaker_rim_c" },
+  { archiveSite: "LM5", dataDirectory: "lm5_shoemaker_rim_d" },
+  { archiveSite: "LM6", dataDirectory: "lm6_shoemaker_rim_e" },
+  { archiveSite: "LM7", dataDirectory: "lm7_faustini_rim_a" },
+  { archiveSite: "LM8", dataDirectory: "lm8_shoemaker_rim_f" },
 ];
+
+const DEFAULT_SITES = ALL_SITES.filter((site) =>
+  ["Site01", "Site06", "Site07", "Site11", "Site20", "Site23"].includes(site.archiveSite)
+);
+
+const requestedSites = process.argv.slice(2);
+const selectedSites =
+  requestedSites.length === 0
+    ? DEFAULT_SITES
+    : requestedSites.includes("--all")
+      ? ALL_SITES
+      : ALL_SITES.filter((site) =>
+          requestedSites.includes(site.archiveSite) ||
+          requestedSites.includes(site.dataDirectory)
+        );
+
+const unknownSiteArguments = requestedSites.filter(
+  (argument) =>
+    argument !== "--all" &&
+    !ALL_SITES.some(
+      (site) =>
+        site.archiveSite === argument ||
+        site.dataDirectory === argument
+    )
+);
+
+if (unknownSiteArguments.length > 0) {
+  throw new Error(
+    `Unknown Product78 site argument(s): ${unknownSiteArguments.join(", ")}. Use an archive site code (e.g. Site11), a data directory ID, or --all.`
+  );
+}
+
+assert(
+  selectedSites.length > 0,
+  "No Product78 sites selected. Pass --all or one or more archive site codes."
+);
+
+console.log(
+  `Preparing ${selectedSites.length} Product78 site(s): ${selectedSites.map((site) => site.archiveSite).join(", ")}`
+);
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -192,11 +252,11 @@ async function prepareSite(site) {
 }
 
 try {
-  for (const site of SITES) {
+  for (const site of selectedSites) {
     await prepareSite(site);
   }
 
-  console.log("\nAll six additional standard Product78 sites were converted successfully.");
+  console.log(`\nAll ${selectedSites.length} selected Product78 site(s) were converted successfully.`);
   console.log("Original TIFF downloads were stored only in the OS temporary directory.");
 } finally {
   await rm(TEMP_ROOT, { recursive: true, force: true });
