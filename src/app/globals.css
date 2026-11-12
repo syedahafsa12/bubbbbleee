@@ -301,3 +301,19 @@ h1 em { color: var(--teal); font-style: normal; }
   .moon-globe-wrap { height: 300px; }
   .moon-site-details { padding: 10px 3px 2px; }
 }
+
+.mission-site-select { width: 100%; min-height: 38px; margin: 0 0 14px; padding: 9px 11px; border: 1px solid #29424a; border-radius: 6px; color: #e6f0f0; background: #08151b; color-scheme: dark; font-size: 11px; }
+.mission-site-select:disabled { opacity: .55; cursor: not-allowed; }
+.mission-site-select:focus-visible, .date-control input:focus-visible, .azimuth-slider:focus-visible, .timeline-slider:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+.site-comparison-panel { grid-column: 1 / -1; }
+.comparison-placeholder { margin: 0 18px 18px; padding: 16px; border: 1px dashed rgba(148,178,184,.22); border-radius: 7px; background: rgba(5,17,23,.24); }
+.comparison-placeholder strong { color: #cbd9d7; font-size: 11px; font-weight: 550; }
+.comparison-placeholder p { margin: 7px 0 0; color: #81969a; font-size: 10px; line-height: 1.6; }
+.moon-prepared-sites { display: grid; gap: 8px; padding-top: 5px; }
+.moon-prepared-site-list { display: grid; gap: 5px; max-height: 130px; overflow: auto; }
+.moon-prepared-site { display: flex; align-items: center; gap: 9px; padding: 6px 8px; border: 1px solid rgba(148,178,184,.1); border-radius: 5px; background: rgba(5,16,22,.3); }
+.moon-prepared-site span { min-width: 36px; color: #76cbbc; font: 8px monospace; }
+.moon-prepared-site strong { color: #93a8ab; font-size: 9px; font-weight: 450; }
+.moon-prepared-site.is-selected { border-color: rgba(243,163,75,.4); background: rgba(243,163,75,.07); }
+.moon-prepared-site.is-selected span { color: #f3a34b; }
+.moon-prepared-site.is-selected strong { color: #d9e4e1; }
