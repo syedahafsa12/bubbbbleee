@@ -156,14 +156,22 @@ export async function GET() {
     const y0 = Math.max(0, Math.min(product78.height - 1, Math.floor(northPixel.row)));
     const x1 = Math.min(x0 + 1, product78.width - 1);
     const y1 = Math.min(y0 + 1, product78.height - 1);
+    const noDataIndices = new Set<number>();
     for (const [column, row] of [
       [x0, y0],
       [x1, y0],
       [x0, y1],
       [x1, y1],
     ]) {
-      noDataTerrain.elevations[row * noDataTerrain.width + column] = Number.NaN;
+      const pixelIndex = row * noDataTerrain.width + column;
+      noDataIndices.add(pixelIndex);
+      noDataTerrain.elevations[pixelIndex] = Number.NaN;
     }
+    noDataTerrain.metadata = {
+      ...noDataTerrain.metadata,
+      noDataValue: "NaN",
+      noDataPixelCount: noDataIndices.size,
+    };
 
     const noDataResult = await calculateMultiResolutionTerrainHorizon(
       noDataTerrain,
