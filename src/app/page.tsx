@@ -57,7 +57,7 @@ export default function Home() {
 
   useEffect(() => {
     void load(date);
-  }, [load]);
+  }, [load, date]);
 
   const sun = targetOrEmpty(data?.targets?.sun);
   const earth = targetOrEmpty(data?.targets?.earth);
