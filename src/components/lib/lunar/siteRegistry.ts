@@ -11,8 +11,9 @@ export interface Product78Site {
 }
 
 /**
- * Twenty-seven Product78 south-polar regions and candidate site footprints listed by NASA PGDA.
- * LunaPath implementation. Coordinates are selenographic and east-positive.
+ * All 27 Product78 site datasets listed by NASA PGDA.
+ * Coordinates are selenographic and normalized to east-positive longitude.
+ * A registry entry does not imply that its local raster has been prepared.
  */
 export const PRODUCT78_SITE_REGISTRY = {
   site01_connecting_ridge: {
