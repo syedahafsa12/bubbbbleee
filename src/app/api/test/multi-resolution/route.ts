@@ -72,7 +72,7 @@ export async function GET() {
     // Acceptance test 2: deliberately fail the Product90 raster batch after
     // its metadata has been validated. The completed Product78 baseline must
     // be returned rather than rejecting the entire horizon calculation.
-    let sampleFailureInjected = false;
+    const sampleFailureState: { injected: boolean } = { injected: false };
     const syntheticProduct90Diagnostics = {
       source: "synthetic-test-dataset",
       dataset: {
@@ -123,7 +123,7 @@ export async function GET() {
       {
         getDiagnostics: async () => syntheticProduct90Diagnostics,
         sampleElevations: async () => {
-          sampleFailureInjected = true;
+          sampleFailureState.injected = true;
           throw new Error("Synthetic Product90 tile 28,31 socket failure");
         },
       }
@@ -211,7 +211,7 @@ export async function GET() {
     const failureIsolationPassed =
       fallback.calculatedDirections === commonOptions.directionCount &&
       fallback.product90Status === "unavailable" &&
-      sampleFailureInjected === true &&
+      sampleFailureState.injected === true &&
       fallback.product90Error?.includes("Synthetic Product90 tile") === true &&
       fallback.product90SamplesChecked === 0 &&
       fallback.product78SamplesChecked > 0 &&
