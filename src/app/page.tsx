@@ -48,8 +48,8 @@ function Stat({
 function isUsableSite(site: Product78SiteStatus): boolean {
   return (
     site.assetStatus === "ready" &&
-    Number.isFinite(site.observer?.latitudeDeg) &&
-    Number.isFinite(site.observer?.longitudeEastDeg) &&
+    Number.isFinite(site.observer.latitudeDeg) &&
+    Number.isFinite(site.observer.longitudeEastDeg) &&
     Number.isFinite(site.resolutionMeters) &&
     Array.isArray(site.dimensions) &&
     site.dimensions.length === 2
@@ -177,7 +177,14 @@ export default function Home() {
 
   // Selecting a different prepared site or date loads that site's real API data.
   useEffect(() => {
-    if (!date || !selectedSiteId) return;
+    // Invalidate any request for the previously selected site/date before
+    // starting the next one.
+    requestSequence.current += 1;
+    if (!date || !selectedSiteId) {
+      setData(null);
+      setLoading(false);
+      return;
+    }
     void load(date, selectedSiteId);
   }, [load, date, selectedSiteId, refreshVersion]);
 
