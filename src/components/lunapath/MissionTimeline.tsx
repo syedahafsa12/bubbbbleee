@@ -1,7 +1,7 @@
 "use client";
 
 import type { CelestialObservation, CelestialTarget, VisibilityWindow } from "./types";
-import { formatDuration, formatUtcTime, getWindowLabel } from "./types";
+import { formatDuration, formatUtcTime, getWindowLabel, parseUtcTimestamp } from "./types";
 
 type Props = {
   sun: CelestialTarget;
@@ -56,7 +56,12 @@ export default function MissionTimeline({ sun, earth, selectedIndex, onSelectedI
   const expectedIntervalMs = 10 * 60 * 1000;
   const hasGaps = observations.some((item, index) => {
     if (index === 0) return false;
-    return new Date(item.timeUtc).getTime() - new Date(observations[index - 1].timeUtc).getTime() > expectedIntervalMs + 1000;
+    const currentTime = parseUtcTimestamp(item.timeUtc)?.getTime();
+    const previousTime = parseUtcTimestamp(observations[index - 1].timeUtc)?.getTime();
+
+    // An unparseable timestamp is a data-quality gap, not continuous time.
+    if (currentTime === undefined || previousTime === undefined) return true;
+    return currentTime - previousTime > expectedIntervalMs + 1000;
   });
 
   return (
