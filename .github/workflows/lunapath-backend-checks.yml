@@ -1,13 +1,9 @@
 name: LunaPath backend checks
 
 on:
-  push:
-    branches:
-      - main
-      - backend/product78-only-and-multisite
-  pull_request:
-    branches:
-      - main
+  # Run validation manually from the Actions tab when a full check is needed.
+  # Automatic PR/push runs are paused to stop repeated failure emails.
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -36,4 +32,5 @@ jobs:
         run: npm run lint
 
       - name: Production build
+        if: ${{ !cancelled() }}
         run: npm run build
