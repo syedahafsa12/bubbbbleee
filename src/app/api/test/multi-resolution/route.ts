@@ -1,10 +1,11 @@
-
 import { connection } from "next/server";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
 import {
   decodeLolaTerrain,
+  geographicToLolaProjected,
+  projectedToLolaPixel,
   SITE04_COORDINATES,
   type LolaTerrainData,
 } from "../../../../components/lib/lunar/terrainData";
@@ -12,6 +13,8 @@ import {
 import {
   calculateMultiResolutionTerrainHorizon,
 } from "../../../../components/lib/lunar/multiResolutionTerrain.server";
+
+export const runtime = "nodejs";
 
 let terrainPromise: Promise<LolaTerrainData> | null = null;
 
@@ -32,7 +35,7 @@ async function loadProduct78(): Promise<LolaTerrainData> {
 
       return decodeLolaTerrain(
         JSON.parse(metadataText) as unknown,
-        binary
+        new Uint8Array(binary)
       );
     })().catch((error: unknown) => {
       terrainPromise = null;
@@ -47,143 +50,236 @@ export async function GET() {
   await connection();
 
   try {
-    console.log("[Multi-resolution Test] Starting...");
-
-    // Load the existing high-resolution Product 78 dataset.
     const product78 = await loadProduct78();
+    const commonOptions = {
+      directionCount: 16,
+      sampleStepMeters: 5,
+      regionalSampleStepMeters: 20,
+      maxDistanceMeters: 15000,
+      directionConcurrency: 2,
+    };
 
-    // Test 16 directions before running the full calculation.
-    const result =
-      await calculateMultiResolutionTerrainHorizon(
-        product78,
-        SITE04_COORDINATES,
-        {
-          directionCount: 16,
-          sampleStepMeters: 5,
-          regionalSampleStepMeters: 20,
-          maxDistanceMeters: 15000,
-          directionConcurrency: 2,
-        }
-      );
+    // Acceptance test 1: Product78 must run without touching Product90.
+    const localOnly = await calculateMultiResolutionTerrainHorizon(
+      product78,
+      SITE04_COORDINATES,
+      {
+        ...commonOptions,
+        enableProduct90: false,
+      }
+    );
 
-    const bothDatasetsUsed =
-      result.product78SamplesChecked > 0 &&
-      result.product90SamplesChecked > 0;
+    // Acceptance test 2: deliberately fail the Product90 raster batch after
+    // its metadata has been validated. The completed Product78 baseline must
+    // be returned rather than rejecting the entire horizon calculation.
+    let sampleFailureInjected = false;
+    const syntheticProduct90Diagnostics = {
+      source: "synthetic-test-dataset",
+      dataset: {
+        name: "NASA LOLA Product90 synthetic test raster",
+        referenceFrame: "MOON_ME",
+        ephemeris: "DE421",
+        projection: "South Polar Stereographic",
+        linearUnits: "metres",
+      },
+      raster: {
+        width: 30400,
+        height: 30400,
+        originX: -304000,
+        originY: 304000,
+        pixelWidth: 20,
+        pixelHeight: -20,
+        boundingBox: [-304000, -304000, 304000, 304000],
+        pixelIsArea: true,
+        samplesPerPixel: 1,
+        sampleFormat: 3,
+        bitsPerSample: 32,
+        noData: Number.NaN,
+        tileWidth: 256,
+        tileHeight: 256,
+      },
+      geoKeys: {
+        modelType: 1,
+        rasterType: 1,
+        linearUnits: 9001,
+      },
+      validation: {
+        dimensions: true,
+        origin: true,
+        resolution: true,
+        boundingBox: true,
+        pixelRegistration: true,
+        float32Encoding: true,
+      },
+    } as never;
 
-    const allDirectionsCalculated =
-      result.calculatedDirections === 16 &&
-      result.directions.every(
-        (direction) => direction.samplesChecked > 0
-      );
+    const fallback = await calculateMultiResolutionTerrainHorizon(
+      product78,
+      SITE04_COORDINATES,
+      {
+        ...commonOptions,
+        enableProduct90: true,
+      },
+      {
+        getDiagnostics: async () => syntheticProduct90Diagnostics,
+        sampleElevations: async () => {
+          sampleFailureInjected = true;
+          throw new Error("Synthetic Product90 tile 28,31 socket failure");
+        },
+      }
+    );
 
-    const finiteResults =
-      result.directions.every(
+    // Acceptance test 3: a declared runtime NoData cell must stop its
+    // ray and preserve an unknown result, not create a zero-degree horizon.
+    const noDataTerrain: LolaTerrainData = {
+      ...product78,
+      elevations: product78.elevations.slice(),
+    };
+    const lunarRadius =
+      product78.metadata.georeferencing.lunarRadiusMeters;
+    const angularDistance = 50 / lunarRadius;
+    const latitude1 = (SITE04_COORDINATES.latitudeDeg * Math.PI) / 180;
+    const latitude2 = Math.asin(
+      Math.sin(latitude1) * Math.cos(angularDistance) +
+      Math.cos(latitude1) * Math.sin(angularDistance)
+    );
+    const northSampleCoordinate = {
+      latitudeDeg: (latitude2 * 180) / Math.PI,
+      longitudeEastDeg: SITE04_COORDINATES.longitudeEastDeg,
+    };
+    const northPixel = projectedToLolaPixel(
+      geographicToLolaProjected(
+        northSampleCoordinate,
+        product78.metadata
+      ),
+      product78.metadata
+    );
+    const x0 = Math.max(0, Math.min(product78.width - 1, Math.floor(northPixel.column)));
+    const y0 = Math.max(0, Math.min(product78.height - 1, Math.floor(northPixel.row)));
+    const x1 = Math.min(x0 + 1, product78.width - 1);
+    const y1 = Math.min(y0 + 1, product78.height - 1);
+    const noDataIndices = new Set<number>();
+    for (const [column, row] of [
+      [x0, y0],
+      [x1, y0],
+      [x0, y1],
+      [x1, y1],
+    ]) {
+      const pixelIndex = row * noDataTerrain.width + column;
+      noDataIndices.add(pixelIndex);
+      noDataTerrain.elevations[pixelIndex] = Number.NaN;
+    }
+    noDataTerrain.metadata = {
+      ...noDataTerrain.metadata,
+      noDataValue: "NaN",
+      noDataPixelCount: noDataIndices.size,
+    };
+
+    const noDataResult = await calculateMultiResolutionTerrainHorizon(
+      noDataTerrain,
+      SITE04_COORDINATES,
+      {
+        directionCount: 4,
+        sampleStepMeters: 50,
+        regionalSampleStepMeters: 20,
+        maxDistanceMeters: 150,
+        directionConcurrency: 1,
+        enableProduct90: false,
+      }
+    );
+    const northNoDataDirection = noDataResult.directions[0];
+    const noDataIsUnknown =
+      northNoDataDirection.coverageStatus === "no_data" &&
+      northNoDataDirection.terminationReason === "product78_nodata" &&
+      northNoDataDirection.horizonElevationDeg === null &&
+      northNoDataDirection.lastKnownSampleDistanceMeters === null &&
+      northNoDataDirection.terrainBeyondKnownCoverageUnknown === true;
+
+    const localOnlyPassed =
+      localOnly.calculatedDirections === commonOptions.directionCount &&
+      localOnly.product90SamplesChecked === 0 &&
+      localOnly.product90Status === "disabled" &&
+      localOnly.product78SamplesChecked > 0 &&
+      localOnly.directions.every(
         (direction) =>
-          Number.isFinite(direction.horizonElevationDeg) &&
-          Number.isFinite(direction.distanceMeters) &&
-          Number.isFinite(direction.terrainElevationMeters)
+          direction.samplesChecked > 0 &&
+          direction.coverageStatus === "partial" &&
+          direction.terrainBeyondKnownCoverageUnknown === true &&
+          direction.terminationReason === "product78_boundary"
       );
+
+    const failureIsolationPassed =
+      fallback.calculatedDirections === commonOptions.directionCount &&
+      fallback.product90Status === "unavailable" &&
+      sampleFailureInjected === true &&
+      fallback.product90Error?.includes("Synthetic Product90 tile") === true &&
+      fallback.product90SamplesChecked === 0 &&
+      fallback.product78SamplesChecked > 0 &&
+      fallback.directions.every(
+        (direction) =>
+          direction.samplesChecked > 0 &&
+          direction.terrainBeyondKnownCoverageUnknown === true
+      );
+
+    const completeHorizonRemainsUnverified =
+      localOnly.completeHorizonVerified === false &&
+      fallback.completeHorizonVerified === false;
 
     const success =
-      bothDatasetsUsed &&
-      allDirectionsCalculated &&
-      finiteResults;
+      localOnlyPassed &&
+      failureIsolationPassed &&
+      noDataIsUnknown &&
+      completeHorizonRemainsUnverified;
 
     return Response.json(
       {
         success,
-
         message: success
-          ? "Multi-resolution terrain smoke test passed."
-          : "Multi-resolution terrain test needs investigation.",
-
-        observer: {
-          geographic: result.observer,
-          projected: result.observerProjected,
-          elevationMeters: result.observerElevationMeters,
+          ? "Product78-only and Product90 failure-isolation tests passed."
+          : "Product78 fallback tests need investigation.",
+        checks: {
+          localOnlyPassed,
+          failureIsolationPassed,
+          noDataIsUnknown,
+          completeHorizonRemainsUnverified,
         },
-
-        configuration: {
-          directionsRequested: 16,
-          localSampleStepMeters: 5,
-          regionalSampleStepMeters: 20,
-          maximumDistanceMeters: 15000,
-          directionConcurrency: 2,
+        noDataSimulation: {
+          direction: northNoDataDirection,
+          resultIsUnknown: noDataIsUnknown,
         },
-
-        results: {
-          calculatedDirections: result.calculatedDirections,
-          totalSamplesChecked: result.totalSamplesChecked,
-
-          product78SamplesChecked:
-            result.product78SamplesChecked,
-
-          product90SamplesChecked:
-            result.product90SamplesChecked,
-
-          bothDatasetsUsed,
-
-          rasterBoundaryLimitedDirections:
-            result.rasterBoundaryLimitedDirections,
-
-          product90CoverageBoundaryLimitedDirections:
-            result.product90CoverageBoundaryLimitedDirections,
-
-          product90NoDataTerminatedDirections:
-            result.product90NoDataTerminatedDirections,
-
+        product78Only: {
+          calculatedDirections: localOnly.calculatedDirections,
+          totalSamplesChecked: localOnly.totalSamplesChecked,
+          product78SamplesChecked: localOnly.product78SamplesChecked,
+          product90SamplesChecked: localOnly.product90SamplesChecked,
+          product90Status: localOnly.product90Status,
+          product78BoundaryLimitedDirections:
+            localOnly.product78BoundaryLimitedDirections,
+          product78NoDataTerminatedDirections:
+            localOnly.product78NoDataTerminatedDirections,
           searchLimitReachedDirections:
-            result.searchLimitReachedDirections,
-
-          completeHorizonVerified:
-            result.completeHorizonVerified,
-
-          finiteResults,
-          allDirectionsCalculated,
+            localOnly.searchLimitReachedDirections,
+          completeHorizonVerified: localOnly.completeHorizonVerified,
+          directions: localOnly.directions,
         },
-
-        directions: result.directions.map((direction) => ({
-          azimuthDeg: direction.azimuthDeg,
-
-          horizonElevationDeg:
-            direction.horizonElevationDeg,
-
-          distanceMeters:
-            direction.distanceMeters,
-
-          horizonSource:
-            direction.horizonSource,
-
-          horizonResolutionMeters:
-            direction.horizonResolutionMeters,
-
-          product78SamplesChecked:
-            direction.product78SamplesChecked,
-
-          product90SamplesChecked:
-            direction.product90SamplesChecked,
-
-          terminationReason:
-            direction.terminationReason,
-        })),
+        simulatedProduct90Failure: {
+          product90Status: fallback.product90Status,
+          product90Error: fallback.product90Error,
+          product78SamplesChecked: fallback.product78SamplesChecked,
+          product90SamplesChecked: fallback.product90SamplesChecked,
+          calculatedDirections: fallback.calculatedDirections,
+          completeHorizonVerified: fallback.completeHorizonVerified,
+          directions: fallback.directions,
+        },
       },
-      {
-        status: success ? 200 : 500,
-      }
+      { status: success ? 200 : 500 }
     );
   } catch (error) {
-    console.error(
-      "[Multi-resolution Test] Failed:",
-      error
-    );
-
+    console.error("[Product78 fallback tests] Failed:", error);
     return Response.json(
       {
         success: false,
-        error:
-          error instanceof Error
-            ? error.message
-            : String(error),
+        error: error instanceof Error ? error.message : String(error),
       },
       { status: 500 }
     );
