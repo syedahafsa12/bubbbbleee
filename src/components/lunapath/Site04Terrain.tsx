@@ -190,7 +190,7 @@ function buildDisplayGeometry(
       -(projectedObserver.yMeters - centerProjectedY) / 1000,
     ];
   } catch (error) {
-    console.warn("[LOLA] Site04 observer marker is outside valid raster coverage:", error);
+    console.warn("[LOLA] Selected observer marker is outside valid raster coverage:", error);
   }
 
   return {
@@ -446,11 +446,11 @@ function TerrainMesh({
         observerCoordinate={observerCoordinate}
         color="#72cce8"
       />
-      {sunLightPosition && (
+      {sunLightPosition && sun && sun.elevationDeg > 0 && (
         <directionalLight
           position={sunLightPosition}
-          intensity={sun && sun.elevationDeg > 0 ? 2.3 : 0.08}
-          castShadow={Boolean(sun && sun.elevationDeg > 0)}
+          intensity={2.3}
+          castShadow
           shadow-mapSize-width={1024}
           shadow-mapSize-height={1024}
         />
@@ -484,7 +484,7 @@ export default function Site04Terrain({
   const [cameraResetToken, setCameraResetToken] = useState(0);
   const [terrain, setTerrain] = useState<TerrainState>({
     status: "loading",
-    message: "Loading NASA Product78 Site04 terrain…",
+    message: "Loading Product78 terrain…",
   });
 
   useEffect(() => {
@@ -527,7 +527,7 @@ export default function Site04Terrain({
 
         setTerrain({
           status: "error",
-          message: error instanceof Error ? error.message : "Could not load Site04 terrain.",
+          message: error instanceof Error ? error.message : "Could not load the selected Product78 terrain.",
         });
       }
     }
@@ -561,10 +561,6 @@ export default function Site04Terrain({
     );
   }
 
-  const coveragePercent = Math.round(
-    (terrain.validCells / Math.max(1, terrain.totalCells)) * 100
-  );
-
   return (
     <div className="terrain-viewer-wrap">
       <div className="terrain-canvas">
@@ -576,7 +572,6 @@ export default function Site04Terrain({
         >
           <color attach="background" args={["#08131b"]} />
           <ambientLight intensity={1.15} />
-          <directionalLight position={[8, 4, -9]} intensity={0.35} />
           <TerrainMesh
             geometry={terrain.geometry}
             observerPosition={terrain.observerPosition}
@@ -588,8 +583,8 @@ export default function Site04Terrain({
           />
         </Canvas>
         <div className="terrain-overlay terrain-overlay-top">
-          <span className="scene-chip"><span className="status-dot" /> PRODUCT78 · SITE04</span>
-          <span className="scene-chip">5 m source pixels</span>
+          <span className="scene-chip"><span className="status-dot" /> PRODUCT78 · {terrain.archiveSite}</span>
+          <span className="scene-chip">{terrain.metadata.resolutionMeters} m source pixels</span>
           <button
             type="button"
             className="terrain-view-reset"
@@ -626,7 +621,7 @@ export default function Site04Terrain({
       <p className="terrain-footnote">
         The display mesh samples every 8th raster pixel (about 40 m); the original NASA Product78 raster remains at 5 m/pixel.
         Horizontal placement uses the metadata tie point and south-polar stereographic pixel resolution.
-        Vertical scale is 1×. The orange marker identifies the {terrain.siteName} observer. Amber and cyan arrows show the selected JPL Sun and Earth directions; Sun lighting follows the selected Sun direction when its elevation is above the local horizon.
+        Vertical scale is 1×. The orange marker identifies the {terrain.siteName} observer. Amber and cyan arrows show the selected JPL Sun and Earth directions; direct Sun lighting is shown only when the selected Sun elevation is above the local horizon.
       </p>
     </div>
   );
