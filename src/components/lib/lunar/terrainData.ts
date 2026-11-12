@@ -1,4 +1,10 @@
 
+import {
+  DEFAULT_PRODUCT78_SITE_ID,
+  getProduct78Site,
+  type Product78SiteId,
+} from "./siteRegistry";
+
 export interface GeographicCoordinate {
   latitudeDeg: number;
   longitudeEastDeg: number;
@@ -68,12 +74,6 @@ export interface LolaSample {
   };
   elevationMeters: number;
 }
-
-import {
-  DEFAULT_PRODUCT78_SITE_ID,
-  getProduct78Site,
-  type Product78SiteId,
-} from "./siteRegistry";
 
 const ELEVATION_RANGE_TOLERANCE_METERS = 0.1;
 const GEOREFERENCE_TOLERANCE_METERS = 0.1;
