@@ -1142,11 +1142,49 @@ export async function calculateMultiResolutionTerrainHorizon(
     const localCoordinateSystem = localMetadata.coordinateSystem;
 
     if (
+        normalizeMetadataValue(localCoordinateSystem.projection) !==
+            "southpolarstereographic"
+    ) {
+        throw new Error(
+            "Product78 must use South Polar Stereographic projection."
+        );
+    }
+
+    if (
         normalizeMetadataValue(localCoordinateSystem.referenceFrame) !== "moonme" ||
         normalizeMetadataValue(localCoordinateSystem.ephemeris) !== "de421"
     ) {
         throw new Error(
             "Product78 must use the MOON_ME reference frame and DE421 ephemeris."
+        );
+    }
+
+    const localUnits = normalizeMetadataValue(localCoordinateSystem.linearUnits);
+    if (!["m", "meter", "meters", "metre", "metres"].includes(localUnits)) {
+        throw new Error("Product78 projected coordinates must use metres.");
+    }
+
+    const localPixelRegistration = normalizeMetadataValue(
+        localCoordinateSystem.pixelRegistration
+    );
+    if (
+        localPixelRegistration !== "pixelarea" &&
+        localPixelRegistration !== "pixelisarea"
+    ) {
+        throw new Error("Product78 must use PixelIsArea registration.");
+    }
+
+    if (
+        !Number.isSafeInteger(product78.width) ||
+        !Number.isSafeInteger(product78.height) ||
+        product78.width <= 0 ||
+        product78.height <= 0 ||
+        localMetadata.width !== product78.width ||
+        localMetadata.height !== product78.height ||
+        product78.elevations.length !== product78.width * product78.height
+    ) {
+        throw new Error(
+            "Product78 elevation array dimensions do not match validated metadata."
         );
     }
 
