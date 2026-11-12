@@ -1,4 +1,10 @@
 
+import {
+  DEFAULT_PRODUCT78_SITE_ID,
+  getProduct78Site,
+  type Product78SiteId,
+} from "./siteRegistry";
+
 export interface GeographicCoordinate {
   latitudeDeg: number;
   longitudeEastDeg: number;
@@ -68,12 +74,6 @@ export interface LolaSample {
   };
   elevationMeters: number;
 }
-
-import {
-  DEFAULT_PRODUCT78_SITE_ID,
-  getProduct78Site,
-  type Product78SiteId,
-} from "./siteRegistry";
 
 const ELEVATION_RANGE_TOLERANCE_METERS = 0.1;
 const GEOREFERENCE_TOLERANCE_METERS = 0.1;
@@ -706,7 +706,7 @@ export function decodeLolaTerrain(
       metadata.noDataValue === "NaN"
         ? Number.isNaN(elevation)
         : typeof metadata.noDataValue === "number"
-          ? elevation === metadata.noDataValue
+          ? elevation === Math.fround(metadata.noDataValue)
           : false;
 
     if (isDeclaredNoData) {
@@ -1110,6 +1110,15 @@ export function sampleLolaHeightAtPixel(
   const neighbours = [topLeft, topRight, bottomLeft, bottomRight];
 
   if (neighbours.some(Number.isNaN)) {
+    if (
+      terrain.metadata.noDataValue === undefined ||
+      terrain.metadata.noDataPixelCount === undefined
+    ) {
+      throw new Error(
+        "Unexpected NaN elevation: the Product78 metadata does not declare a NoData value."
+      );
+    }
+
     throw new LolaNoDataError();
   }
 
