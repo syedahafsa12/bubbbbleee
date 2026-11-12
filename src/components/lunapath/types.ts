@@ -40,7 +40,7 @@ export type Product78SitesResponse = {
 };
 
 /**
- * One azimuth sampled against the local Product78 Site04 raster.
+ * One azimuth sampled against the selected local Product78 raster.
  *
  * A missing angle is UNKNOWN, never a zero-degree/open-sky horizon.
  * "partial" describes valid local samples only; terrain beyond the last
@@ -64,7 +64,7 @@ export type TerrainDirection = {
 };
 
 /**
- * Site04 Product78-only terrain model.
+ * Product78-only terrain model for the selected, locally prepared site.
  *
  * This is intentionally a partial model. Product90 is not part of the
  * frontend contract, and no missing direction may be treated as clear sky.
