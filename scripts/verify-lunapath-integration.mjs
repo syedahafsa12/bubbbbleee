@@ -79,7 +79,7 @@ function validateObservations(name, target, targetStatus) {
 
   if (targetStatus !== "available") {
     warn(`${name}: ${targetStatus ?? "status missing"}${target?.error ? ` — ${target.error}` : ""}`);
-    return observations.length;
+    return observations.filter((item) => item !== null && item !== undefined).length;
   }
 
   let invalidCount = 0;
