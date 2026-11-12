@@ -123,7 +123,7 @@ h1 em { color: var(--teal); font-style: normal; }
 .scope-ring-dashed { stroke-dasharray: 3 5; }
 .scope-axis { stroke: rgba(141,175,180,.13); stroke-width: 1; }
 .scope-cardinal { fill: #7e999e; font: 9px monospace; }
-.scope-terrain-path { fill: rgba(108,224,192,.18); stroke: #6ce0c0; stroke-width: 1.8; stroke-linejoin: round; }
+.scope-terrain-path { fill: none; stroke: #6ce0c0; stroke-width: 1.8; stroke-linejoin: round; stroke-linecap: round; }
 .scope-sun-point { fill: #f1c16e; stroke: #f1c16e; stroke-width: 1.5; filter: drop-shadow(0 0 4px rgba(241,193,110,.7)); }
 .scope-earth-point { fill: #81cde4; stroke: #81cde4; stroke-width: 1.5; filter: drop-shadow(0 0 4px rgba(129,205,228,.7)); }
 .scope-cursor-point { fill: #f4f7f1; stroke: #0b1a20; stroke-width: 2; }
@@ -135,6 +135,9 @@ h1 em { color: var(--teal); font-style: normal; }
 .legend-terrain { background: var(--teal); }
 .legend-sun { background: #f1c16e; }
 .legend-earth { background: #81cde4; }
+.scope-unknown-swatch { background: transparent; border: 1px dashed #83939a; border-radius: 2px !important; }
+.scope-stats-unknown { border: 1px dashed rgba(131,147,154,.35); border-radius: 8px; padding: 9px; background: rgba(131,147,154,.05); }
+.scope-stats-unknown > p { margin: 0; color: #9aa8ae; font-size: 9px; line-height: 1.5; }
 .scope-details { min-width: 0; padding: 8px 0 0 8px; }
 .scope-warning { color: var(--amber); font: 8px monospace; letter-spacing: .06em; white-space: nowrap; }
 .scope-warning .status-dot { width: 6px; height: 6px; }
