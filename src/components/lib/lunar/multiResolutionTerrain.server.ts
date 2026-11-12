@@ -705,17 +705,6 @@ async function calculateProduct78DirectionHorizon(
 /**
  * Calculates a multi-resolution horizon for one azimuth.
  *
- * Product 78 is sampled at the configured local interval.
- * Product 90 is sampled at its regional interval after the
- * Product 78 footprint is exited.
- *
- * An uncovered or NoData regional sample terminates the
- * direction explicitly. It is never treated as clear terrain.
- */
-
-/**
- * Calculates a multi-resolution horizon for one azimuth.
- *
  * Product 78 is sampled locally at its configured interval.
  * Product 90 coordinates are collected and sampled in one
  * batch after the directional path has been generated.
@@ -1042,13 +1031,13 @@ async function calculateDirectionHorizon(
 }
 
 /**
- * Calculates the terrain horizon using Product 78 locally
- * and Product 90 regionally.
+ * Calculates a Product78-first terrain horizon.
  *
- * This is an asynchronous replacement for the existing
- * Product-78-only calculation at the API integration point.
+ * Product78 is always calculated locally. Product90 is loaded and sampled
+ * only when explicitly enabled, and its failure never invalidates the
+ * completed Product78 baseline.
  *
- * The original calculateTerrainHorizon() remains unchanged.
+ * Complete lunar horizon coverage is never claimed by this result.
  */
 export async function calculateMultiResolutionTerrainHorizon(
     product78: LolaTerrainData,
