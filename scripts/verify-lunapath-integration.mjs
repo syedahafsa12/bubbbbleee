@@ -27,6 +27,46 @@ function isValidDate(value) {
   );
 }
 
+function parseUtcTimestamp(value) {
+  if (typeof value !== "string" || value.length === 0) return null;
+
+  const direct = new Date(value);
+  if (!Number.isNaN(direct.getTime())) return direct;
+
+  // Current API output is JPL's YYYY-Mmm-DD form, e.g. 2026-Nov-13T00:00:00Z.
+  const match = value.match(
+    /^(\d{4})-([A-Za-z]{3})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d+))?)?Z$/
+  );
+  if (!match) return null;
+
+  const months = {
+    Jan: 0, Feb: 1, Mar: 2, Apr: 3, May: 4, Jun: 5,
+    Jul: 6, Aug: 7, Sep: 8, Oct: 9, Nov: 10, Dec: 11,
+  };
+
+  const [, year, month, day, hour, minute, second = "0", fraction = ""] = match;
+  if (months[month] === undefined) return null;
+
+  const date = new Date(Date.UTC(
+    Number(year),
+    months[month],
+    Number(day),
+    Number(hour),
+    Number(minute),
+    Number(second),
+    Number((fraction + "000").slice(0, 3))
+  ));
+
+  return date.getUTCFullYear() === Number(year) &&
+    date.getUTCMonth() === months[month] &&
+    date.getUTCDate() === Number(day) &&
+    date.getUTCHours() === Number(hour) &&
+    date.getUTCMinutes() === Number(minute) &&
+    date.getUTCSeconds() === Number(second)
+    ? date
+    : null;
+}
+
 function validateObservations(name, target, targetStatus) {
   const observations = Array.isArray(target?.observations)
     ? target.observations
@@ -45,7 +85,7 @@ function validateObservations(name, target, targetStatus) {
   let invalidCount = 0;
 
   for (const [index, item] of observations.entries()) {
-    const timestamp = Date.parse(item?.timeUtc);
+    const timestamp = parseUtcTimestamp(item?.timeUtc)?.getTime() ?? Number.NaN;
     const azimuth = item?.azimuthDeg;
     const elevation = item?.elevationDeg;
 
