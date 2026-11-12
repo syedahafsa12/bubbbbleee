@@ -334,6 +334,7 @@ export default function Site04Terrain() {
         <div className="terrain-overlay terrain-overlay-top">
           <span className="scene-chip"><span className="status-dot" /> PRODUCT78 · SITE04</span>
           <span className="scene-chip">5 m source pixels</span>
+          <span className="scene-chip">ORANGE MARKER · OBSERVER</span>
         </div>
         <div className="terrain-overlay terrain-overlay-bottom">
           <span>Drag to orbit · Scroll to zoom · Right-drag to pan</span>
