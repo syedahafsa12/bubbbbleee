@@ -14,6 +14,7 @@ import type {
   LolaTerrainData,
   LolaTerrainMetadata,
 } from "@/components/lib/lunar/terrainData";
+import type { CelestialObservation } from "./types";
 
 type TerrainState =
   | { status: "loading"; message: string }
@@ -187,6 +188,136 @@ function buildDisplayGeometry(terrain: LolaTerrainData): {
   };
 }
 
+function projectedBearingDirection(
+  azimuthDeg: number,
+  metadata: LolaTerrainMetadata
+): THREE.Vector3 | null {
+  const latitude = SITE04_COORDINATES.latitudeDeg;
+  const longitude = SITE04_COORDINATES.longitudeEastDeg;
+  const radius = metadata.georeferencing.lunarRadiusMeters;
+  const latitudeRadians = THREE.MathUtils.degToRad(latitude);
+  const cosLatitude = Math.cos(latitudeRadians);
+
+  if (!Number.isFinite(cosLatitude) || Math.abs(cosLatitude) < 1e-8) {
+    return null;
+  }
+
+  // Estimate the local north/east basis by projecting nearby points through
+  // the same Product78 south-polar stereographic transform as the terrain.
+  const basisStepMeters = 100;
+  const northLatitude = latitude +
+    THREE.MathUtils.radToDeg(basisStepMeters / radius);
+  const eastLongitude = longitude +
+    THREE.MathUtils.radToDeg(basisStepMeters / (radius * cosLatitude));
+
+  try {
+    const origin = geographicToLolaProjected(SITE04_COORDINATES, metadata);
+    const north = geographicToLolaProjected(
+      { latitudeDeg: northLatitude, longitudeEastDeg: longitude },
+      metadata
+    );
+    const east = geographicToLolaProjected(
+      { latitudeDeg: latitude, longitudeEastDeg: eastLongitude },
+      metadata
+    );
+
+    const northDirection = new THREE.Vector3(
+      north.xMeters - origin.xMeters,
+      0,
+      -(north.yMeters - origin.yMeters)
+    ).normalize();
+
+    const eastDirection = new THREE.Vector3(
+      east.xMeters - origin.xMeters,
+      0,
+      -(east.yMeters - origin.yMeters)
+    ).normalize();
+
+    const azimuth = THREE.MathUtils.degToRad(azimuthDeg);
+    return northDirection
+      .multiplyScalar(Math.cos(azimuth))
+      .add(eastDirection.multiplyScalar(Math.sin(azimuth)))
+      .normalize();
+  } catch (error) {
+    console.warn("[LOLA] Could not project celestial bearing into the local terrain view:", error);
+    return null;
+  }
+}
+
+function celestialSceneDirection(
+  observation: CelestialObservation,
+  metadata: LolaTerrainMetadata
+): THREE.Vector3 | null {
+  const horizontal = projectedBearingDirection(
+    observation.azimuthDeg,
+    metadata
+  );
+  if (!horizontal) return null;
+
+  const elevation = THREE.MathUtils.degToRad(
+    THREE.MathUtils.clamp(observation.elevationDeg, -89.9, 89.9)
+  );
+
+  return new THREE.Vector3(
+    horizontal.x * Math.cos(elevation),
+    Math.sin(elevation),
+    horizontal.z * Math.cos(elevation)
+  ).normalize();
+}
+
+function disposeArrowHelper(arrow: THREE.ArrowHelper) {
+  arrow.line.geometry.dispose();
+  arrow.cone.geometry.dispose();
+
+  const lineMaterial = arrow.line.material;
+  const coneMaterial = arrow.cone.material;
+
+  if (Array.isArray(lineMaterial)) lineMaterial.forEach((material) => material.dispose());
+  else lineMaterial.dispose();
+
+  if (Array.isArray(coneMaterial)) coneMaterial.forEach((material) => material.dispose());
+  else coneMaterial.dispose();
+}
+
+function CelestialArrow({
+  observation,
+  metadata,
+  observerPosition,
+  color,
+}: {
+  observation?: CelestialObservation;
+  metadata: LolaTerrainMetadata;
+  observerPosition: [number, number, number] | null;
+  color: string;
+}) {
+  const arrow = useMemo(() => {
+    if (!observation || !observerPosition) return null;
+    const direction = celestialSceneDirection(observation, metadata);
+    if (!direction) return null;
+
+    return new THREE.ArrowHelper(
+      direction,
+      new THREE.Vector3(...observerPosition),
+      7,
+      color,
+      0.55,
+      0.3
+    );
+  }, [
+    observation?.azimuthDeg,
+    observation?.elevationDeg,
+    observerPosition,
+    metadata,
+    color,
+  ]);
+
+  useEffect(() => () => {
+    if (arrow) disposeArrowHelper(arrow);
+  }, [arrow]);
+
+  return arrow ? <primitive object={arrow} /> : null;
+}
+
 function CameraReset({ resetToken }: { resetToken: number }) {
   const camera = useThree((state) => state.camera);
 
@@ -234,12 +365,27 @@ function TerrainMesh({
   observerPosition,
   metadata,
   resetToken,
+  sun,
+  earth,
 }: {
   geometry: THREE.BufferGeometry;
   observerPosition: [number, number, number] | null;
   metadata: LolaTerrainMetadata;
   resetToken: number;
+  sun?: CelestialObservation;
+  earth?: CelestialObservation;
 }) {
+  const sunDirection = useMemo(
+    () => sun ? celestialSceneDirection(sun, metadata) : null,
+    [sun?.azimuthDeg, sun?.elevationDeg, metadata]
+  );
+  const sunLightPosition = sunDirection && observerPosition
+    ? [
+        observerPosition[0] + sunDirection.x * 12,
+        observerPosition[1] + sunDirection.y * 12,
+        observerPosition[2] + sunDirection.z * 12,
+      ] as [number, number, number]
+    : null;
   return (
     <>
       <CameraReset resetToken={resetToken} />
@@ -264,6 +410,27 @@ function TerrainMesh({
         </group>
       )}
       <TerrainCoverageOutline metadata={metadata} />
+      <CelestialArrow
+        observation={sun}
+        metadata={metadata}
+        observerPosition={observerPosition}
+        color="#f1b65d"
+      />
+      <CelestialArrow
+        observation={earth}
+        metadata={metadata}
+        observerPosition={observerPosition}
+        color="#72cce8"
+      />
+      {sunLightPosition && (
+        <directionalLight
+          position={sunLightPosition}
+          intensity={sun && sun.elevationDeg > 0 ? 2.3 : 0.08}
+          castShadow={Boolean(sun && sun.elevationDeg > 0)}
+          shadow-mapSize-width={1024}
+          shadow-mapSize-height={1024}
+        />
+      )}
       <gridHelper
         position={[0, -3.15, 0]}
         args={[26, 26, "#59717a", "#38515b"]}
@@ -281,7 +448,7 @@ function TerrainMesh({
   );
 }
 
-export default function Site04Terrain() {
+export default function Site04Terrain({ sun, earth }: { sun?: CelestialObservation; earth?: CelestialObservation }) {
   const [cameraResetToken, setCameraResetToken] = useState(0);
   const [terrain, setTerrain] = useState<TerrainState>({
     status: "loading",
@@ -367,20 +534,15 @@ export default function Site04Terrain() {
           shadows
         >
           <color attach="background" args={["#08131b"]} />
-          <ambientLight intensity={1.35} />
-          <directionalLight
-            position={[-7, 12, 8]}
-            intensity={2.4}
-            castShadow
-            shadow-mapSize-width={1024}
-            shadow-mapSize-height={1024}
-          />
-          <directionalLight position={[8, 4, -9]} intensity={0.55} />
+          <ambientLight intensity={1.15} />
+          <directionalLight position={[8, 4, -9]} intensity={0.35} />
           <TerrainMesh
             geometry={terrain.geometry}
             observerPosition={terrain.observerPosition}
             metadata={terrain.metadata}
             resetToken={cameraResetToken}
+            sun={sun}
+            earth={earth}
           />
         </Canvas>
         <div className="terrain-overlay terrain-overlay-top">
