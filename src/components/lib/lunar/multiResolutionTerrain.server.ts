@@ -1296,17 +1296,20 @@ export async function calculateMultiResolutionTerrainHorizon(
 
         if (direction.terminationReason === "search_limit") {
             searchLimitReachedDirections++;
-        } else {
+        } else if (
+            direction.terminationReason === "product78_boundary" ||
+            direction.terminationReason === "product90_boundary"
+        ) {
             rasterBoundaryLimitedDirections++;
             if (direction.terminationReason === "product78_boundary") {
                 product78BoundaryLimitedDirections++;
-            } else if (direction.terminationReason === "product78_nodata") {
-                product78NoDataTerminatedDirections++;
-            } else if (direction.terminationReason === "product90_boundary") {
+            } else {
                 product90CoverageBoundaryLimitedDirections++;
-            } else if (direction.terminationReason === "product90_nodata") {
-                product90NoDataTerminatedDirections++;
             }
+        } else if (direction.terminationReason === "product78_nodata") {
+            product78NoDataTerminatedDirections++;
+        } else if (direction.terminationReason === "product90_nodata") {
+            product90NoDataTerminatedDirections++;
         }
     }
 
