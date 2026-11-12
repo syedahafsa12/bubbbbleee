@@ -12,6 +12,7 @@ import {
 import {
   DEFAULT_PRODUCT78_SITE_ID,
   getProduct78Site,
+  PRODUCT78_SITE_REGISTRY,
   type Product78SiteId,
 } from "@/components/lib/lunar/siteRegistry";
 
@@ -927,15 +928,7 @@ export async function GET(request: NextRequest) {
       {
         success: false,
         error: getErrorMessage(error),
-        availableSiteIds: [
-          "site01_connecting_ridge",
-          "site04_shackleton_rim",
-          "site06_nobile_rim_1",
-          "site07_peak_near_shackleton",
-          "site11_de_gerlache_rim",
-          "site20_leibnitz_beta_plateau",
-          "site23_malapert_massif",
-        ],
+        availableSiteIds: Object.keys(PRODUCT78_SITE_REGISTRY),
       },
       { status: 400 }
     );
