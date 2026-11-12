@@ -1,4 +1,10 @@
 
+import {
+  DEFAULT_PRODUCT78_SITE_ID,
+  getProduct78Site,
+  type Product78SiteId,
+} from "./siteRegistry";
+
 export interface GeographicCoordinate {
   latitudeDeg: number;
   longitudeEastDeg: number;
@@ -67,7 +73,7 @@ export interface LolaSample {
   elevationMeters: number;
 }
 
-const DATA_PATH = "/data/site04_shackleton_rim";
+
 
 const ELEVATION_RANGE_TOLERANCE_METERS = 0.1;
 const GEOREFERENCE_TOLERANCE_METERS = 0.1;
@@ -77,7 +83,12 @@ export const SITE04_COORDINATES: GeographicCoordinate = {
   longitudeEastDeg: 188.13,
 };
 
-let terrainPromise: Promise<LolaTerrainData> | null = null;
+// Each Product78 site has an independent loading promise.
+// Concurrent requests for the same site share one load.
+const terrainPromises = new Map<
+  Product78SiteId,
+  Promise<LolaTerrainData>
+>();
 
 /**
  * Validates a finite numeric value.
@@ -706,42 +717,56 @@ export function decodeLolaTerrain(
 }
 
 /**
- * Loads the Site04 LOLA terrain metadata and binary raster.
+ * Loads a specific Product78 site's metadata and elevation raster.
  *
- * Concurrent callers share the same loading promise.
- * If loading fails, the promise is cleared so a later
- * request can retry.
+ * Each site has its own loading promise.
+ * Concurrent callers for the same site share one request.
+ *
+ * Failed requests clear only their own cache entry.
  */
-export async function loadLolaTerrain(): Promise<LolaTerrainData> {
-  if (terrainPromise) {
-    return terrainPromise;
+export async function loadLolaTerrainForSite(
+  siteId: Product78SiteId = DEFAULT_PRODUCT78_SITE_ID
+): Promise<LolaTerrainData> {
+
+  const site = getProduct78Site(siteId);
+
+  const existingPromise = terrainPromises.get(siteId);
+
+  if (existingPromise) {
+    return existingPromise;
   }
 
-  terrainPromise = (async () => {
-    console.info("[LOLA] Loading terrain...");
+  const pending = (async (): Promise<LolaTerrainData> => {
+
+    console.info("[LOLA] Loading Product78 terrain:", {
+      siteId,
+      site: site.displayName,
+    });
+
+    const dataPath = `/data/${site.dataDirectory}`;
 
     const [
       metadataResponse,
       elevationResponse,
     ] = await Promise.all([
-      fetch(`${DATA_PATH}/metadata.json`, {
+      fetch(`${dataPath}/metadata.json`, {
         cache: "no-store",
       }),
 
-      fetch(`${DATA_PATH}/elevation.bin`, {
+      fetch(`${dataPath}/elevation.bin`, {
         cache: "no-store",
       }),
     ]);
 
     if (!metadataResponse.ok) {
       throw new Error(
-        `Metadata HTTP error: ${metadataResponse.status}`
+        `Product78 ${site.archiveSite} metadata HTTP error: ${metadataResponse.status}`
       );
     }
 
     if (!elevationResponse.ok) {
       throw new Error(
-        `Elevation HTTP error: ${elevationResponse.status}`
+        `Product78 ${site.archiveSite} elevation HTTP error: ${elevationResponse.status}`
       );
     }
 
@@ -751,16 +776,16 @@ export async function loadLolaTerrain(): Promise<LolaTerrainData> {
     const buffer =
       await elevationResponse.arrayBuffer();
 
+    // Preserve the original strict decoder.
     const terrain = decodeLolaTerrain(
       rawMetadata,
       new Uint8Array(buffer)
     );
 
-    console.info("[LOLA] Terrain loaded:", {
+    console.info("[LOLA] Product78 terrain loaded:", {
+      siteId,
       dimensions: `${terrain.width} x ${terrain.height}`,
       resolutionMeters: terrain.resolutionMeters,
-      registration:
-        terrain.metadata.coordinateSystem.pixelRegistration,
       referenceFrame:
         terrain.metadata.coordinateSystem.referenceFrame,
       ephemeris:
@@ -769,20 +794,36 @@ export async function loadLolaTerrain(): Promise<LolaTerrainData> {
     });
 
     return terrain;
+
   })();
 
+  terrainPromises.set(siteId, pending);
+
   try {
-    return await terrainPromise;
+    return await pending;
   } catch (error) {
-    terrainPromise = null;
+
+    if (terrainPromises.get(siteId) === pending) {
+      terrainPromises.delete(siteId);
+    }
 
     console.error(
-      "[LOLA] Loading failed:",
+      `[LOLA] ${site.displayName} loading failed:`,
       error
     );
 
     throw error;
   }
+}
+
+/**
+ * Backward-compatible Site04 loader.
+ * Existing callers remain unchanged.
+ */
+export function loadLolaTerrain(): Promise<LolaTerrainData> {
+  return loadLolaTerrainForSite(
+    DEFAULT_PRODUCT78_SITE_ID
+  );
 }
 
 /**
