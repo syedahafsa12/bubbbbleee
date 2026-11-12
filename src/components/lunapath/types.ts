@@ -1,3 +1,5 @@
+import type { Product78SiteId } from "@/components/lib/lunar/siteRegistry";
+
 export type ApiStatus = "complete" | "partial";
 
 /**
@@ -33,7 +35,7 @@ export type TerrainDirection = {
 export type TerrainModel = {
   status: "partial";
   source: "product78";
-  siteId: "site04_shackleton_rim";
+  siteId: Product78SiteId;
   resolutionMeters: number;
   completeHorizonVerified: false;
   horizonProfile: TerrainDirection[];
