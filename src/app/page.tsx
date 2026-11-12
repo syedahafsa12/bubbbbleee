@@ -169,7 +169,7 @@ export default function Home() {
             <div><div className="eyebrow">01 / LOCAL TOPOGRAPHY</div><h2>Shackleton Rim <span>· 3D terrain</span></h2></div>
             <span className="panel-badge">PRODUCT 78</span>
           </div>
-          <Site04Terrain />
+          <Site04Terrain sun={selectedSun[0]} earth={selectedEarth[0]} />
         </section>
 
         <section className="panel scope-panel">
