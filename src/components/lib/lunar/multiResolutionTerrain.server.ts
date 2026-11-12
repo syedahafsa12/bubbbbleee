@@ -114,6 +114,11 @@ export interface MultiResolutionTerrainHorizonOptions {
 type Product90Diagnostics =
     Awaited<ReturnType<typeof getProduct90Diagnostics>>;
 
+export interface Product90EnhancementDependencies {
+    getDiagnostics?: () => Promise<Product90Diagnostics>;
+    sampleElevations?: typeof sampleProduct90Elevations;
+}
+
 const DEFAULT_DIRECTION_COUNT = 360;
 const DEFAULT_SAMPLE_STEP_METERS = 5;
 const DEFAULT_REGIONAL_SAMPLE_STEP_METERS = 20;
@@ -361,7 +366,8 @@ function isInsideProduct90Raster(
  */
 export async function sampleMultiResolutionElevation(
     product78: LolaTerrainData,
-    projected: ProjectedCoordinate
+    projected: ProjectedCoordinate,
+    options: { enableProduct90?: boolean } = {}
 ): Promise<MultiResolutionElevationSample | null> {
     assertFinite(projected.xMeters, "Projected X");
     assertFinite(projected.yMeters, "Projected Y");
@@ -390,7 +396,12 @@ export async function sampleMultiResolutionElevation(
         };
     }
 
+    if (options.enableProduct90 !== true) {
+        return null;
+    }
+
     const diagnostics = await getProduct90Metadata();
+    validateDatasetCompatibility(product78, diagnostics);
 
     if (
         !isInsideProduct90Raster(
@@ -574,7 +585,7 @@ function calculateTerrainElevationAngle(
  * Product90. Each ray stops at the first actual Product78 footprint boundary
  * or declared NoData sample. Previously sampled terrain is preserved.
  */
-async function calculateProduct78DirectionHorizon(
+function calculateProduct78DirectionHorizon(
     product78: LolaTerrainData,
     observer: GeographicCoordinate,
     observerElevationMeters: number,
@@ -582,7 +593,7 @@ async function calculateProduct78DirectionHorizon(
     sampleStepMeters: number,
     maxDistanceMeters: number,
     lunarRadiusMeters: number
-): Promise<MultiResolutionTerrainHorizonDirection> {
+): MultiResolutionTerrainHorizonDirection {
     let maximumAngle = -Infinity;
     let maximumDistance: number | null = null;
     let maximumTerrainElevation: number | null = null;
@@ -694,17 +705,6 @@ async function calculateProduct78DirectionHorizon(
 /**
  * Calculates a multi-resolution horizon for one azimuth.
  *
- * Product 78 is sampled at the configured local interval.
- * Product 90 is sampled at its regional interval after the
- * Product 78 footprint is exited.
- *
- * An uncovered or NoData regional sample terminates the
- * direction explicitly. It is never treated as clear terrain.
- */
-
-/**
- * Calculates a multi-resolution horizon for one azimuth.
- *
  * Product 78 is sampled locally at its configured interval.
  * Product 90 coordinates are collected and sampled in one
  * batch after the directional path has been generated.
@@ -723,7 +723,9 @@ async function calculateDirectionHorizon(
     sampleStepMeters: number,
     regionalSampleStepMeters: number,
     maxDistanceMeters: number,
-    lunarRadiusMeters: number
+    lunarRadiusMeters: number,
+    sampleRegionalElevations: typeof sampleProduct90Elevations =
+        sampleProduct90Elevations
 ): Promise<MultiResolutionTerrainHorizonDirection> {
     type DirectionPathSample =
         | {
@@ -792,11 +794,21 @@ async function calculateDirectionHorizon(
         let stepAfterSample: number;
 
         if (isLolaPixelInsideRaster(localPixel, product78)) {
-            // Product 78: use existing high-resolution sampling.
-            const elevation = sampleLolaHeightAtPixel(
-                product78,
-                localPixel
-            );
+            // Product 78: stop explicitly at declared NoData. Do not skip
+            // the gap and continue with Product90 behind unknown local terrain.
+            let elevation: number;
+            try {
+                elevation = sampleLolaHeightAtPixel(
+                    product78,
+                    localPixel
+                );
+            } catch (error) {
+                if (error instanceof LolaNoDataError) {
+                    terminationReason = "product78_nodata";
+                    break;
+                }
+                throw error;
+            }
 
             pathSamples.push({
                 source: "product78",
@@ -861,7 +873,7 @@ async function calculateDirectionHorizon(
     // Load and sample all regional coordinates in one batch.
     const regionalElevations =
         regionalCoordinates.length > 0
-            ? await sampleProduct90Elevations(
+            ? await sampleRegionalElevations(
                 regionalCoordinates
             )
             : [];
@@ -888,6 +900,7 @@ async function calculateDirectionHorizon(
     let samplesChecked = 0;
     let product78SamplesChecked = 0;
     let product90SamplesChecked = 0;
+    let lastKnownSampleDistanceMeters: number | null = null;
 
     // Process the samples in original distance order.
     for (const pathSample of pathSamples) {
@@ -940,6 +953,7 @@ async function calculateDirectionHorizon(
             );
 
         samplesChecked++;
+        lastKnownSampleDistanceMeters = pathSample.distanceMeters;
 
         if (source === "product78") {
             product78SamplesChecked++;
@@ -1002,10 +1016,7 @@ async function calculateDirectionHorizon(
         horizonSource,
         horizonResolutionMeters,
 
-        lastKnownSampleDistanceMeters:
-            pathSamples.length > 0
-                ? pathSamples[pathSamples.length - 1].distanceMeters
-                : null,
+        lastKnownSampleDistanceMeters,
         coverageStatus: samplesChecked > 0 ? "partial" : "no_data",
         terrainBeyondKnownCoverageUnknown: true,
 
@@ -1020,18 +1031,19 @@ async function calculateDirectionHorizon(
 }
 
 /**
- * Calculates the terrain horizon using Product 78 locally
- * and Product 90 regionally.
+ * Calculates a Product78-first terrain horizon.
  *
- * This is an asynchronous replacement for the existing
- * Product-78-only calculation at the API integration point.
+ * Product78 is always calculated locally. Product90 is loaded and sampled
+ * only when explicitly enabled, and its failure never invalidates the
+ * completed Product78 baseline.
  *
- * The original calculateTerrainHorizon() remains unchanged.
+ * Complete lunar horizon coverage is never claimed by this result.
  */
 export async function calculateMultiResolutionTerrainHorizon(
     product78: LolaTerrainData,
     observer: GeographicCoordinate = SITE04_COORDINATES,
-    options: MultiResolutionTerrainHorizonOptions = {}
+    options: MultiResolutionTerrainHorizonOptions = {},
+    product90Dependencies: Product90EnhancementDependencies = {}
 ): Promise<MultiResolutionTerrainHorizonResult> {
     const directionCount =
         options.directionCount ?? DEFAULT_DIRECTION_COUNT;
@@ -1068,16 +1080,19 @@ export async function calculateMultiResolutionTerrainHorizon(
         );
     }
 
+    if (!Number.isFinite(regionalSampleStepMeters) || regionalSampleStepMeters <= 0) {
+        throw new Error(
+            "regionalSampleStepMeters must be a finite positive number."
+        );
+    }
+
     if (
-        !Number.isFinite(regionalSampleStepMeters) ||
-        regionalSampleStepMeters <
-        PRODUCT90_RESOLUTION_METERS
+        options.enableProduct90 === true &&
+        regionalSampleStepMeters < PRODUCT90_RESOLUTION_METERS
     ) {
-        if (options.enableProduct90 === true) {
-            throw new Error(
-                "regionalSampleStepMeters must be at least Product 90's 20 m pixel spacing."
-            );
-        }
+        throw new Error(
+            "regionalSampleStepMeters must be at least Product 90's 20 m pixel spacing."
+        );
     }
 
     if (
@@ -1112,8 +1127,80 @@ export async function calculateMultiResolutionTerrainHorizon(
         );
     }
 
+    const localMetadata = product78.metadata;
+    const localCoordinateSystem = localMetadata.coordinateSystem;
+
+    if (
+        normalizeMetadataValue(localCoordinateSystem.projection) !==
+            "southpolarstereographic"
+    ) {
+        throw new Error(
+            "Product78 must use South Polar Stereographic projection."
+        );
+    }
+
+    if (
+        normalizeMetadataValue(localCoordinateSystem.referenceFrame) !== "moonme" ||
+        normalizeMetadataValue(localCoordinateSystem.ephemeris) !== "de421"
+    ) {
+        throw new Error(
+            "Product78 must use the MOON_ME reference frame and DE421 ephemeris."
+        );
+    }
+
+    const localUnits = normalizeMetadataValue(localCoordinateSystem.linearUnits);
+    if (!["m", "meter", "meters", "metre", "metres"].includes(localUnits)) {
+        throw new Error("Product78 projected coordinates must use metres.");
+    }
+
+    const localPixelRegistration = normalizeMetadataValue(
+        localCoordinateSystem.pixelRegistration
+    );
+    if (
+        localPixelRegistration !== "pixelarea" &&
+        localPixelRegistration !== "pixelisarea"
+    ) {
+        throw new Error("Product78 must use PixelIsArea registration.");
+    }
+
+    if (
+        !Number.isSafeInteger(product78.width) ||
+        !Number.isSafeInteger(product78.height) ||
+        product78.width <= 0 ||
+        product78.height <= 0 ||
+        localMetadata.width !== product78.width ||
+        localMetadata.height !== product78.height ||
+        product78.elevations.length !== product78.width * product78.height
+    ) {
+        throw new Error(
+            "Product78 elevation array dimensions do not match validated metadata."
+        );
+    }
+
+    if (
+        !approximatelyEqual(
+            Math.abs(localMetadata.pixelResolution[0]),
+            PRODUCT78_RESOLUTION_METERS,
+            0.001
+        ) ||
+        !approximatelyEqual(
+            Math.abs(localMetadata.pixelResolution[1]),
+            PRODUCT78_RESOLUTION_METERS,
+            0.001
+        ) ||
+        !approximatelyEqual(
+            localMetadata.resolutionMeters,
+            PRODUCT78_RESOLUTION_METERS,
+            0.001
+        )
+    ) {
+        throw new Error(
+            "Product78 horizon calculation requires the validated 5 m/pixel raster."
+        );
+    }
+
     const lunarRadius =
-        product78.metadata.georeferencing.lunarRadiusMeters;
+        localMetadata.georeferencing.lunarRadiusMeters;
 
     if (!Number.isFinite(lunarRadius) || lunarRadius <= 0) {
         throw new Error(
@@ -1171,7 +1258,9 @@ export async function calculateMultiResolutionTerrainHorizon(
     // network, tile or sampling failure leaves the Product78 baseline intact.
     if (options.enableProduct90 === true) {
         try {
-            const product90 = await getProduct90Metadata();
+            const product90 = product90Dependencies.getDiagnostics
+                ? await product90Dependencies.getDiagnostics()
+                : await getProduct90Metadata();
             validateDatasetCompatibility(product78, product90);
 
             const enhancedDirections: MultiResolutionTerrainHorizonDirection[] = [];
@@ -1194,7 +1283,9 @@ export async function calculateMultiResolutionTerrainHorizon(
                             sampleStepMeters,
                             regionalSampleStepMeters,
                             maxDistanceMeters,
-                            lunarRadius
+                            lunarRadius,
+                            product90Dependencies.sampleElevations ??
+                                sampleProduct90Elevations
                         );
                     })
                 );
@@ -1232,17 +1323,20 @@ export async function calculateMultiResolutionTerrainHorizon(
 
         if (direction.terminationReason === "search_limit") {
             searchLimitReachedDirections++;
-        } else {
+        } else if (
+            direction.terminationReason === "product78_boundary" ||
+            direction.terminationReason === "product90_boundary"
+        ) {
             rasterBoundaryLimitedDirections++;
             if (direction.terminationReason === "product78_boundary") {
                 product78BoundaryLimitedDirections++;
-            } else if (direction.terminationReason === "product78_nodata") {
-                product78NoDataTerminatedDirections++;
-            } else if (direction.terminationReason === "product90_boundary") {
+            } else {
                 product90CoverageBoundaryLimitedDirections++;
-            } else if (direction.terminationReason === "product90_nodata") {
-                product90NoDataTerminatedDirections++;
             }
+        } else if (direction.terminationReason === "product78_nodata") {
+            product78NoDataTerminatedDirections++;
+        } else if (direction.terminationReason === "product90_nodata") {
+            product90NoDataTerminatedDirections++;
         }
     }
 
