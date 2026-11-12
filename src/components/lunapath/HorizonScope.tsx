@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import type { CelestialObservation, TerrainDirection } from "./types";
 import { normalizeAzimuth } from "./types";
 
@@ -8,6 +8,10 @@ type Props = {
   profile: TerrainDirection[];
   sun?: CelestialObservation[];
   earth?: CelestialObservation[];
+  archiveSite: string;
+  siteName: string;
+  selectedAzimuth: number;
+  onSelectedAzimuthChange: (azimuthDeg: number) => void;
 };
 
 function polarPoint(azimuth: number, radius: number, cx: number, cy: number) {
@@ -103,8 +107,15 @@ function formatDistance(distanceMeters: number | null): string {
     : "—";
 }
 
-export default function HorizonScope({ profile, sun, earth }: Props) {
-  const [selectedAzimuth, setSelectedAzimuth] = useState(0);
+export default function HorizonScope({
+  profile,
+  sun,
+  earth,
+  archiveSite,
+  siteName,
+  selectedAzimuth,
+  onSelectedAzimuthChange,
+}: Props) {
   const cx = 160;
   const cy = 150;
   const radius = 112;
@@ -175,8 +186,8 @@ export default function HorizonScope({ profile, sun, earth }: Props) {
             r="4"
             className="scope-cursor-point"
           />
-          <text x={cx} y={cy + 4} textAnchor="middle" className="scope-center-label">SITE04</text>
-          <text x={cx} y={cy + 19} textAnchor="middle" className="scope-center-sub">SHACKLETON RIM</text>
+          <text x={cx} y={cy + 4} textAnchor="middle" className="scope-center-label">{archiveSite.toUpperCase()}</text>
+          <text x={cx} y={cy + 19} textAnchor="middle" className="scope-center-sub">{siteName.toUpperCase()}</text>
           <text x={cx} y={cy + 37} textAnchor="middle" fontSize="7" letterSpacing="0.7" fill="#9aa8ae">UNKNOWN OUTSIDE COVERAGE</text>
         </svg>
         <div className="scope-legend">
@@ -197,7 +208,7 @@ export default function HorizonScope({ profile, sun, earth }: Props) {
           max="359.75"
           step="0.25"
           value={selectedAzimuth}
-          onChange={(event) => setSelectedAzimuth(Number(event.target.value))}
+          onChange={(event) => onSelectedAzimuthChange(Number(event.target.value))}
         />
         <div className="scope-azimuth-row">
           <span>AZIMUTH</span>
