@@ -4,30 +4,16 @@ import { useEffect, useState } from "react";
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
 import * as THREE from "three";
-
-type Site04Metadata = {
-  width: number;
-  height: number;
-  minElevation: number;
-  maxElevation: number;
-  resolutionMeters: number;
-  bbox: [number, number, number, number];
-  pixelResolution: [number, number, number];
-  coordinateSystem: {
-    projection: string;
-    referenceFrame: string;
-    ephemeris: string;
-    linearUnits: string;
-    pixelRegistration: string;
-  };
-  georeferencing: {
-    tiePoint: { column: number; row: number; x: number; y: number };
-    centralMeridianDegrees: number;
-    lunarRadiusMeters: number;
-  };
-  dataType: string;
-  byteOrder: string;
-};
+import {
+  geographicToLolaProjected,
+  loadLolaTerrain,
+  sampleLolaHeightAtLocation,
+  SITE04_COORDINATES,
+} from "@/components/lib/lunar/terrainData";
+import type {
+  LolaTerrainData,
+  LolaTerrainMetadata,
+} from "@/components/lib/lunar/terrainData";
 
 type TerrainState =
   | { status: "loading"; message: string }
@@ -35,70 +21,91 @@ type TerrainState =
   | {
       status: "ready";
       geometry: THREE.BufferGeometry;
-      metadata: Site04Metadata;
+      metadata: LolaTerrainMetadata;
       displayResolutionMeters: number;
       validCells: number;
       totalCells: number;
+      observerPosition: [number, number, number] | null;
     };
 
-function buildDisplayGeometry(
-  buffer: ArrayBuffer,
-  metadata: Site04Metadata
-): {
+const DISPLAY_STRIDE_PIXELS = 8;
+
+/**
+ * Builds a lightweight display mesh from the already-decoded Product78
+ * terrain. The original 5 m raster remains intact in terrainData.ts and
+ * is not modified by this rendering downsampling.
+ *
+ * Horizontal coordinates come from the raster's south-polar stereographic
+ * tie point and pixel resolution, not from treating latitude/longitude as
+ * a flat Cartesian grid.
+ */
+function buildDisplayGeometry(terrain: LolaTerrainData): {
   geometry: THREE.BufferGeometry;
   displayResolutionMeters: number;
   validCells: number;
   totalCells: number;
+  observerPosition: [number, number, number] | null;
 } {
-  const expectedBytes = metadata.width * metadata.height * Float32Array.BYTES_PER_ELEMENT;
+  const { metadata, elevations } = terrain;
+  const stride = DISPLAY_STRIDE_PIXELS;
+  const columns = Math.ceil((terrain.width - 1) / stride) + 1;
+  const rows = Math.ceil((terrain.height - 1) / stride) + 1;
+  const vertexCount = columns * rows;
 
-  if (buffer.byteLength !== expectedBytes) {
+  if (elevations.length !== terrain.width * terrain.height) {
     throw new Error(
-      `Terrain binary size mismatch. Expected ${expectedBytes.toLocaleString()} bytes, received ${buffer.byteLength.toLocaleString()}.`
+      `Product78 elevation count mismatch. Expected ${(terrain.width * terrain.height).toLocaleString()}, received ${elevations.length.toLocaleString()}.`
     );
   }
 
-  const stride = Math.max(1, Math.ceil(Math.max(metadata.width, metadata.height) / 180));
-  const columns = Math.ceil((metadata.width - 1) / stride) + 1;
-  const rows = Math.ceil((metadata.height - 1) / stride) + 1;
-  const vertexCount = columns * rows;
   const positions = new Float32Array(vertexCount * 3);
   const colors = new Float32Array(vertexCount * 3);
   const valid = new Uint8Array(vertexCount);
-  const view = new DataView(buffer);
   const low = new THREE.Color("#283d47");
   const middle = new THREE.Color("#7a7468");
   const high = new THREE.Color("#d2c5a8");
   const color = new THREE.Color();
 
+  const tiePoint = metadata.georeferencing.tiePoint;
+  const [pixelWidth, pixelHeight] = metadata.pixelResolution;
+  const centerColumn = (terrain.width - 1) / 2;
+  const centerRow = (terrain.height - 1) / 2;
+
+  const centerProjectedX =
+    tiePoint.x + (centerColumn - tiePoint.column) * pixelWidth;
+  const centerProjectedY =
+    tiePoint.y + (centerRow - tiePoint.row) * pixelHeight;
+
   let validVertices = 0;
 
   for (let row = 0; row < rows; row += 1) {
-    const sourceRow = Math.min(row * stride, metadata.height - 1);
+    const sourceRow = Math.min(row * stride, terrain.height - 1);
 
     for (let column = 0; column < columns; column += 1) {
-      const sourceColumn = Math.min(column * stride, metadata.width - 1);
-      const sourceIndex = sourceRow * metadata.width + sourceColumn;
+      const sourceColumn = Math.min(column * stride, terrain.width - 1);
+      const sourceIndex = sourceRow * terrain.width + sourceColumn;
       const vertexIndex = row * columns + column;
-      const elevation = view.getFloat32(sourceIndex * 4, true);
+      const elevation = elevations[sourceIndex];
 
-      // Do not let non-finite or metadata-out-of-range values create
-      // artificial spikes in the display mesh. Invalid vertices are
-      // left out of the triangle index below.
       const isValid =
         Number.isFinite(elevation) &&
         elevation >= metadata.minElevation - 5 &&
         elevation <= metadata.maxElevation + 5;
 
-      const xKm = (sourceColumn - (metadata.width - 1) / 2) *
-        metadata.resolutionMeters / 1000;
-      const zKm = (sourceRow - (metadata.height - 1) / 2) *
-        metadata.resolutionMeters / 1000;
-      const yKm = isValid ? elevation / 1000 : 0;
+      const projectedX =
+        tiePoint.x + (sourceColumn - tiePoint.column) * pixelWidth;
+      const projectedY =
+        tiePoint.y + (sourceRow - tiePoint.row) * pixelHeight;
 
-      positions[vertexIndex * 3] = xKm;
-      positions[vertexIndex * 3 + 1] = yKm;
-      positions[vertexIndex * 3 + 2] = zKm;
+      // Three.js uses +Y for elevation. Invert projected Y for the scene's
+      // horizontal Z axis so the raster's north/south orientation is retained.
+      positions[vertexIndex * 3] =
+        (projectedX - centerProjectedX) / 1000;
+      positions[vertexIndex * 3 + 1] =
+        isValid ? elevation / 1000 : 0;
+      positions[vertexIndex * 3 + 2] =
+        -(projectedY - centerProjectedY) / 1000;
+
       valid[vertexIndex] = isValid ? 1 : 0;
 
       if (isValid) {
@@ -136,11 +143,11 @@ function buildDisplayGeometry(
       const c = a + columns;
       const d = c + 1;
 
+      // Skip cells touching invalid/out-of-range source samples.
       if (!valid[a] || !valid[b] || !valid[c] || !valid[d]) {
         continue;
       }
 
-      // Counter-clockwise winding when viewed from above (+Y).
       indices.push(a, c, b, b, c, d);
       validCells += 1;
     }
@@ -153,15 +160,43 @@ function buildDisplayGeometry(
   geometry.computeVertexNormals();
   geometry.computeBoundingSphere();
 
+  let observerPosition: [number, number, number] | null = null;
+
+  try {
+    const observer = sampleLolaHeightAtLocation(
+      terrain,
+      SITE04_COORDINATES
+    );
+    const projectedObserver = geographicToLolaProjected(
+      SITE04_COORDINATES,
+      metadata
+    );
+
+    observerPosition = [
+      (projectedObserver.xMeters - centerProjectedX) / 1000,
+      observer.elevationMeters / 1000 + 0.025,
+      -(projectedObserver.yMeters - centerProjectedY) / 1000,
+    ];
+  } catch (error) {
+    console.warn("[LOLA] Site04 observer marker is outside valid raster coverage:", error);
+  }
+
   return {
     geometry,
     displayResolutionMeters: metadata.resolutionMeters * stride,
     validCells,
     totalCells,
+    observerPosition,
   };
 }
 
-function TerrainMesh({ geometry }: { geometry: THREE.BufferGeometry }) {
+function TerrainMesh({
+  geometry,
+  observerPosition,
+}: {
+  geometry: THREE.BufferGeometry;
+  observerPosition: [number, number, number] | null;
+}) {
   return (
     <>
       <mesh geometry={geometry} castShadow receiveShadow>
@@ -172,6 +207,18 @@ function TerrainMesh({ geometry }: { geometry: THREE.BufferGeometry }) {
           side={THREE.DoubleSide}
         />
       </mesh>
+      {observerPosition && (
+        <group position={observerPosition}>
+          <mesh>
+            <sphereGeometry args={[0.14, 16, 16]} />
+            <meshBasicMaterial color="#f0a34b" />
+          </mesh>
+          <mesh position={[0, 0.2, 0]}>
+            <coneGeometry args={[0.1, 0.24, 8]} />
+            <meshBasicMaterial color="#f0a34b" />
+          </mesh>
+        </group>
+      )}
       <gridHelper
         position={[0, -3.15, 0]}
         args={[26, 26, "#59717a", "#38515b"]}
@@ -191,7 +238,7 @@ function TerrainMesh({ geometry }: { geometry: THREE.BufferGeometry }) {
 export default function Site04Terrain() {
   const [terrain, setTerrain] = useState<TerrainState>({
     status: "loading",
-    message: "Loading Site04 terrain metadata…",
+    message: "Loading NASA Product78 Site04 terrain…",
   });
 
   useEffect(() => {
@@ -200,44 +247,10 @@ export default function Site04Terrain() {
 
     async function loadTerrain() {
       try {
-        const metadataResponse = await fetch(
-          "/data/site04_shackleton_rim/metadata.json",
-          { cache: "force-cache" }
-        );
-
-        if (!metadataResponse.ok) {
-          throw new Error(`Metadata request failed (${metadataResponse.status}).`);
-        }
-
-        const metadata = (await metadataResponse.json()) as Site04Metadata;
-
-        if (
-          metadata.width !== 3200 ||
-          metadata.height !== 3200 ||
-          metadata.dataType.toLowerCase() !== "float32" ||
-          metadata.byteOrder.toLowerCase().replace(/[-_ ]/g, "") !== "littleendian"
-        ) {
-          throw new Error("The Site04 raster metadata does not match the expected 3200 × 3200 Float32 little-endian dataset.");
-        }
-
-        if (active) {
-          setTerrain({
-            status: "loading",
-            message: "Loading 40.96 MB elevation raster…",
-          });
-        }
-
-        const elevationResponse = await fetch(
-          "/data/site04_shackleton_rim/elevation.bin",
-          { cache: "force-cache" }
-        );
-
-        if (!elevationResponse.ok) {
-          throw new Error(`Elevation raster request failed (${elevationResponse.status}).`);
-        }
-
-        const buffer = await elevationResponse.arrayBuffer();
-        const result = buildDisplayGeometry(buffer, metadata);
+        // Reuse the validated Product78 loader; do not decode elevation.bin
+        // a second time inside the visualization component.
+        const terrainData = await loadLolaTerrain();
+        const result = buildDisplayGeometry(terrainData);
         createdGeometry = result.geometry;
 
         if (!active) {
@@ -248,10 +261,11 @@ export default function Site04Terrain() {
         setTerrain({
           status: "ready",
           geometry: result.geometry,
-          metadata,
+          metadata: terrainData.metadata,
           displayResolutionMeters: result.displayResolutionMeters,
           validCells: result.validCells,
           totalCells: result.totalCells,
+          observerPosition: result.observerPosition,
         });
       } catch (error) {
         if (!active) return;
@@ -276,7 +290,7 @@ export default function Site04Terrain() {
       <div className="terrain-state">
         <div className="loading-orbit" />
         <p className="terrain-state-title">{terrain.message}</p>
-        <p className="muted small">Preparing a lightweight display mesh from the local NASA LOLA raster.</p>
+        <p className="muted small">Preparing a lightweight display mesh from the validated NASA LOLA raster.</p>
       </div>
     );
   }
@@ -287,7 +301,7 @@ export default function Site04Terrain() {
         <span className="status-dot status-dot-warning" />
         <p className="terrain-state-title">Terrain viewer unavailable</p>
         <p className="muted small">{terrain.message}</p>
-        <p className="muted small">The Horizons observations and other panels can still be used independently.</p>
+        <p className="muted small">The JPL Sun/Earth observations and timeline remain independent of terrain loading.</p>
       </div>
     );
   }
@@ -315,15 +329,18 @@ export default function Site04Terrain() {
             shadow-mapSize-height={1024}
           />
           <directionalLight position={[8, 4, -9]} intensity={0.55} />
-          <TerrainMesh geometry={terrain.geometry} />
+          <TerrainMesh
+            geometry={terrain.geometry}
+            observerPosition={terrain.observerPosition}
+          />
         </Canvas>
         <div className="terrain-overlay terrain-overlay-top">
-          <span className="scene-chip"><span className="status-dot" /> LOCAL DEM · SITE04</span>
+          <span className="scene-chip"><span className="status-dot" /> PRODUCT78 · SITE04</span>
           <span className="scene-chip">5 m source pixels</span>
         </div>
         <div className="terrain-overlay terrain-overlay-bottom">
           <span>Drag to orbit · Scroll to zoom · Right-drag to pan</span>
-          <span>16 × 16 km raster footprint</span>
+          <span>16 × 16 km · south-polar stereographic</span>
         </div>
       </div>
 
@@ -337,17 +354,18 @@ export default function Site04Terrain() {
           <strong>{terrain.validCells.toLocaleString()}</strong>
         </div>
         <div>
-          <span className="eyebrow">VALID CELL SHARE</span>
-          <strong>{coveragePercent}%</strong>
+          <span className="eyebrow">OBSERVER</span>
+          <strong>{terrain.observerPosition ? "MARKED" : "UNAVAILABLE"}</strong>
         </div>
         <div>
-          <span className="eyebrow">FRAME</span>
+          <span className="eyebrow">REFERENCE FRAME</span>
           <strong>{terrain.metadata.coordinateSystem.referenceFrame}</strong>
         </div>
       </div>
       <p className="terrain-footnote">
-        Visual mesh is downsampled for rendering; the source raster remains 5 m/pixel.
-        It is not used for scientific sampling. Finite NoData sentinels have not been independently verified.
+        The display mesh samples every 8th raster pixel (about 40 m); the original NASA Product78 raster remains at 5 m/pixel.
+        Horizontal placement uses the metadata tie point and south-polar stereographic pixel resolution.
+        Vertical scale is 1×. The orange marker identifies the Site04 observer location.
       </p>
     </div>
   );
