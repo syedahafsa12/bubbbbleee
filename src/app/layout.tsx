@@ -5,7 +5,7 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "Lunar Landing Site Navigator | NASA Space Apps",
   description:
-    "Scientific lunar landing site assessment using NASA data.",
+    "Explore lunar landing locations using NASA terrain data and JPL astronomical observations.",
 };
 
 export default function RootLayout({
@@ -16,10 +16,10 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className="min-h-full bg-black text-white"
+      className="min-h-full bg-[#080a10] text-white"
       suppressHydrationWarning
     >
-      <body className="antialiased m-0 min-h-screen overflow-x-hidden overflow-y-auto p-0 font-sans">
+      <body className="m-0 min-h-screen overflow-x-hidden p-0 font-sans antialiased">
         {children}
       </body>
     </html>
