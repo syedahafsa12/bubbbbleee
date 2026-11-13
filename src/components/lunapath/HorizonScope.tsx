@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import type { CelestialObservation, TerrainDirection } from "./types";
 import { normalizeAzimuth } from "./types";
 
@@ -8,6 +8,10 @@ type Props = {
   profile: TerrainDirection[];
   sun?: CelestialObservation[];
   earth?: CelestialObservation[];
+  archiveSite: string;
+  siteName: string;
+  selectedAzimuth: number;
+  onSelectedAzimuthChange: (azimuthDeg: number) => void;
 };
 
 function polarPoint(azimuth: number, radius: number, cx: number, cy: number) {
@@ -103,8 +107,29 @@ function formatDistance(distanceMeters: number | null): string {
     : "—";
 }
 
-export default function HorizonScope({ profile, sun, earth }: Props) {
-  const [selectedAzimuth, setSelectedAzimuth] = useState(0);
+function targetTerrainStatus(observation: CelestialObservation | null) {
+  if (!observation) return "Not returned";
+  if (!observation.terrainVisibility) return "Ephemeris only · terrain unknown";
+  return observation.terrainVisibility.blockedBySampledTerrain
+    ? "Blocked by known local terrain"
+    : "Above sampled terrain · unconfirmed";
+}
+
+function targetClearance(observation: CelestialObservation | null) {
+  return observation?.terrainVisibility
+    ? `${observation.terrainVisibility.clearanceDeg.toFixed(2)}°`
+    : "—";
+}
+
+export default function HorizonScope({
+  profile,
+  sun,
+  earth,
+  archiveSite,
+  siteName,
+  selectedAzimuth,
+  onSelectedAzimuthChange,
+}: Props) {
   const cx = 160;
   const cy = 150;
   const radius = 112;
@@ -175,8 +200,8 @@ export default function HorizonScope({ profile, sun, earth }: Props) {
             r="4"
             className="scope-cursor-point"
           />
-          <text x={cx} y={cy + 4} textAnchor="middle" className="scope-center-label">SITE04</text>
-          <text x={cx} y={cy + 19} textAnchor="middle" className="scope-center-sub">SHACKLETON RIM</text>
+          <text x={cx} y={cy + 4} textAnchor="middle" className="scope-center-label">{archiveSite.toUpperCase()}</text>
+          <text x={cx} y={cy + 19} textAnchor="middle" className="scope-center-sub">{siteName.toUpperCase()}</text>
           <text x={cx} y={cy + 37} textAnchor="middle" fontSize="7" letterSpacing="0.7" fill="#9aa8ae">UNKNOWN OUTSIDE COVERAGE</text>
         </svg>
         <div className="scope-legend">
@@ -197,11 +222,29 @@ export default function HorizonScope({ profile, sun, earth }: Props) {
           max="359.75"
           step="0.25"
           value={selectedAzimuth}
-          onChange={(event) => setSelectedAzimuth(Number(event.target.value))}
+          onChange={(event) => onSelectedAzimuthChange(Number(event.target.value))}
         />
         <div className="scope-azimuth-row">
           <span>AZIMUTH</span>
           <strong>{selectedAzimuth.toFixed(2)}°</strong>
+        </div>
+        <div className="scope-target-readings">
+          <div className="scope-target-reading">
+            <span className="target-symbol sun-symbol">☼</span>
+            <div>
+              <strong>Sun</strong>
+              <small>{sunPoint ? `${sunPoint.azimuthDeg.toFixed(2)}° AZ · ${sunPoint.elevationDeg.toFixed(2)}° EL` : "No selected observation"}</small>
+              <small>{targetTerrainStatus(sunPoint)} · clearance {targetClearance(sunPoint)}</small>
+            </div>
+          </div>
+          <div className="scope-target-reading">
+            <span className="target-symbol earth-symbol">◉</span>
+            <div>
+              <strong>Earth</strong>
+              <small>{earthPoint ? `${earthPoint.azimuthDeg.toFixed(2)}° AZ · ${earthPoint.elevationDeg.toFixed(2)}° EL` : "No selected observation"}</small>
+              <small>{targetTerrainStatus(earthPoint)} · clearance {targetClearance(earthPoint)}</small>
+            </div>
+          </div>
         </div>
         <div className="scope-stats">
           <div><span>Known directions</span><strong>{knownDirectionCount.toLocaleString()}</strong></div>
