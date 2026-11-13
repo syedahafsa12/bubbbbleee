@@ -1,6 +1,8 @@
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 
+import { getTerrainHorizonAtAzimuth } from "../src/components/lib/lunar/horizonInterpolation.mjs";
+
 const requestedDate =
   process.argv[2] ?? new Date().toISOString().slice(0, 10);
 const baseUrl = process.env.LUNAPATH_BASE_URL ?? "http://localhost:3000";
@@ -16,6 +18,229 @@ function pass(message) {
 
 function warn(message) {
   console.warn(`! ${message}`);
+}
+
+const REQUIRED_SITE_IDS = [
+  "site04_shackleton_rim",
+  "site11_de_gerlache_rim",
+  "site23_malapert_massif",
+];
+
+const ALLOWED_TERMINATION_REASONS = new Set([
+  "raster_boundary",
+  "nodata",
+  "outside_raster",
+  "invalid_sample",
+  "calculation_error",
+  "search_limit",
+]);
+
+function verifyUnknownDirectionFixture() {
+  const syntheticProfile = [
+    { azimuthDeg: 0, horizonElevationDeg: 10, coverageStatus: "partial", terminationReason: "search_limit" },
+    { azimuthDeg: 90, horizonElevationDeg: 20, coverageStatus: "partial", terminationReason: "search_limit" },
+    { azimuthDeg: 180, horizonElevationDeg: null, coverageStatus: "no_data", terminationReason: "nodata" },
+    { azimuthDeg: 270, horizonElevationDeg: 40, coverageStatus: "partial", terminationReason: "search_limit" },
+  ];
+
+  const interpolationAcrossGap = getTerrainHorizonAtAzimuth(135, syntheticProfile);
+  const interpolationInsideGap = getTerrainHorizonAtAzimuth(180, syntheticProfile);
+  const wrappedInterpolation = getTerrainHorizonAtAzimuth(315, syntheticProfile);
+
+  if (interpolationAcrossGap !== null || interpolationInsideGap !== null) {
+    fail("Synthetic NoData fixture: interpolation must remain unknown beside and inside a missing direction.");
+    return;
+  }
+
+  if (
+    wrappedInterpolation === null ||
+    Math.abs(wrappedInterpolation.horizonElevationDeg - 25) > 1e-9
+  ) {
+    fail("Synthetic NoData fixture: interpolation across the 360°/0° boundary is incorrect.");
+    return;
+  }
+
+  pass("Synthetic NoData fixture: missing sectors remain unknown and north-wrap interpolation works.");
+}
+
+async function verifyPreparedSiteCatalog(baseUrl) {
+  const endpoint = new URL("/api/product78/sites", baseUrl);
+  let response;
+  let payload;
+
+  try {
+    response = await fetch(endpoint, { cache: "no-store" });
+    payload = await response.json();
+  } catch (error) {
+    fail(`Could not reach or parse Product78 site registry: ${error instanceof Error ? error.message : String(error)}`);
+    return false;
+  }
+
+  if (!response.ok || payload?.success !== true || !Array.isArray(payload?.sites)) {
+    fail(`Product78 site registry returned HTTP ${response.status} or an invalid response.`);
+    return false;
+  }
+
+  let ready = true;
+  for (const siteId of REQUIRED_SITE_IDS) {
+    const site = payload.sites.find((item) => item?.id === siteId);
+    if (!site) {
+      fail(`Product78 site registry is missing ${siteId}.`);
+      ready = false;
+    } else if (site.assetStatus !== "ready") {
+      fail(`${siteId} assets are not ready: ${site.assetStatus ?? "status missing"}${site.error ? ` — ${site.error}` : ""}`);
+      ready = false;
+    } else {
+      pass(`${siteId} Product78 metadata and binary assets are ready.`);
+    }
+  }
+
+  return ready;
+}
+
+function validateSiteSpecificTerrain(siteId, payload) {
+  if (payload?.site?.id !== siteId) {
+    fail(`${siteId}: API returned site identity ${payload?.site?.id ?? "missing"}.`);
+  }
+
+  const terrain = payload?.terrainModel;
+  if (!terrain || terrain.source !== "product78" || terrain.siteId !== siteId) {
+    fail(`${siteId}: API did not return the expected Product78 terrain model.`);
+    return { known: 0, unknown: 0 };
+  }
+
+  if (
+    terrain.status !== "partial" ||
+    terrain.resolutionMeters !== 5 ||
+    terrain.completeHorizonVerified !== false
+  ) {
+    fail(`${siteId}: Product78 terrain status/resolution/completeness contract is invalid.`);
+  }
+
+  const profile = Array.isArray(terrain.horizonProfile)
+    ? terrain.horizonProfile
+    : [];
+
+  if (profile.length !== 1440 || terrain.directionCount !== 1440) {
+    fail(`${siteId}: expected 1,440 horizon directions; received ${profile.length}.`);
+    return { known: 0, unknown: 0 };
+  }
+
+  const seenAzimuths = new Set();
+  let known = 0;
+  let unknown = 0;
+
+  for (const [index, direction] of profile.entries()) {
+    const expectedAzimuth = index * 0.25;
+    const validAzimuth =
+      Number.isFinite(direction?.azimuthDeg) &&
+      direction.azimuthDeg >= 0 &&
+      direction.azimuthDeg < 360 &&
+      Math.abs(direction.azimuthDeg - expectedAzimuth) < 1e-6;
+    const validDistance =
+      direction?.lastKnownSampleDistanceM === null ||
+      (Number.isFinite(direction?.lastKnownSampleDistanceM) &&
+        direction.lastKnownSampleDistanceM >= 0);
+    const validAngle =
+      direction?.maxTerrainElevationAngleDeg === null ||
+      (Number.isFinite(direction?.maxTerrainElevationAngleDeg) &&
+        direction.maxTerrainElevationAngleDeg >= -90 &&
+        direction.maxTerrainElevationAngleDeg <= 90);
+    const validSamples =
+      Number.isInteger(direction?.sampleCount) && direction.sampleCount >= 0;
+    const validSource =
+      direction?.source === "product78" || direction?.source === null;
+    const validCoverage =
+      direction?.coverageStatus === "partial" ||
+      direction?.coverageStatus === "no_data";
+    const validReason = ALLOWED_TERMINATION_REASONS.has(direction?.terminationReason);
+    const unknownFlag = direction?.terrainBeyondKnownCoverageUnknown === true;
+    const nullSemantics =
+      direction?.coverageStatus !== "no_data" ||
+      (direction.maxTerrainElevationAngleDeg === null &&
+        direction.horizonElevationDeg === null &&
+        direction.source === null);
+
+    if (
+      !validAzimuth ||
+      !validDistance ||
+      !validAngle ||
+      !validSamples ||
+      !validSource ||
+      !validCoverage ||
+      !validReason ||
+      !unknownFlag ||
+      !nullSemantics
+    ) {
+      fail(`${siteId}: horizon direction ${index} violates the Product78 partial-coverage contract.`);
+      continue;
+    }
+
+    const key = direction.azimuthDeg.toFixed(6);
+    if (seenAzimuths.has(key)) {
+      fail(`${siteId}: duplicate horizon azimuth ${direction.azimuthDeg}°.`);
+      continue;
+    }
+    seenAzimuths.add(key);
+
+    if (
+      direction.coverageStatus === "partial" &&
+      direction.source === "product78" &&
+      Number.isFinite(direction.maxTerrainElevationAngleDeg)
+    ) {
+      known += 1;
+    } else {
+      unknown += 1;
+      if (getTerrainHorizonAtAzimuth(direction.azimuthDeg, profile) !== null) {
+        fail(`${siteId}: NoData direction ${direction.azimuthDeg}° was interpolated as known terrain.`);
+      }
+    }
+  }
+
+  if (known === 0) {
+    fail(`${siteId}: no valid Product78 terrain samples were returned.`);
+  } else {
+    pass(`${siteId}: 1,440 horizon directions validated (${known} known / ${unknown} unknown).`);
+  }
+
+  if (unknown === 0) {
+    warn(`${siteId}: live raster contains no NoData directions; synthetic NoData behaviour was checked separately.`);
+  }
+
+  return { known, unknown };
+}
+
+async function verifyAdditionalSiteHorizons(baseUrl, requestedDate) {
+  for (const siteId of REQUIRED_SITE_IDS.slice(1)) {
+    const endpoint = new URL("/api/horizons", baseUrl);
+    endpoint.searchParams.set("siteId", siteId);
+    endpoint.searchParams.set("date", requestedDate);
+
+    let response;
+    let payload;
+    try {
+      response = await fetch(endpoint, { cache: "no-store" });
+      payload = await response.json();
+    } catch (error) {
+      fail(`${siteId}: could not reach or parse the site-specific Horizons API: ${error instanceof Error ? error.message : String(error)}`);
+      continue;
+    }
+
+    if (!response.ok || payload?.success !== true) {
+      fail(`${siteId}: Horizons API returned HTTP ${response.status}: ${payload?.error ?? "success=false"}`);
+      if (payload?.targetErrors) {
+        for (const [target, error] of Object.entries(payload.targetErrors)) {
+          if (error) console.error(`  ${siteId} ${target}: ${error}`);
+        }
+      }
+      continue;
+    }
+
+    pass(`${siteId}: site-specific Horizons API responded successfully.`);
+    validateObservations(`Sun (${siteId})`, payload.targets?.sun, payload.targetStatus?.sun);
+    validateObservations(`Earth (${siteId})`, payload.targets?.earth, payload.targetStatus?.earth);
+    validateSiteSpecificTerrain(siteId, payload);
+  }
 }
 
 function isValidDate(value) {
@@ -115,9 +340,12 @@ function validateObservations(name, target, targetStatus) {
 }
 
 async function main() {
-  console.log("\nLUNAPATH FRONTEND INTEGRATION CHECK");
+  console.log("\nLUNAPATH MULTI-SITE BACKEND/API INTEGRATION CHECK");
   console.log(`Target: ${baseUrl}`);
   console.log(`UTC date: ${requestedDate}\n`);
+
+  verifyUnknownDirectionFixture();
+  if (!(await verifyPreparedSiteCatalog(baseUrl))) return;
 
   if (!isValidDate(requestedDate)) {
     fail("Date must be a real calendar date in YYYY-MM-DD format.");
@@ -325,6 +553,8 @@ async function main() {
   } else {
     pass("API reports a complete response.");
   }
+
+  await verifyAdditionalSiteHorizons(baseUrl, requestedDate);
 
   console.log("\nSUMMARY");
   console.log(`  Sun observations:     ${sunCount}`);
