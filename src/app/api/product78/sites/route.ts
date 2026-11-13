@@ -7,12 +7,6 @@ import {
   type Product78SiteId,
 } from "@/components/lib/lunar/siteRegistry";
 
-type SiteAssetStatus =
-  | "ready"
-  | "not_prepared"
-  | "invalid_metadata"
-  | "invalid_binary_size";
-
 async function inspectSiteAssets(siteId: Product78SiteId) {
   const site = PRODUCT78_SITE_REGISTRY[siteId];
   const directory = path.join(

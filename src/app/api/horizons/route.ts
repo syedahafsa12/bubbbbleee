@@ -28,13 +28,6 @@ type TerrainHorizonDirections = TerrainHorizonResult["directions"];
 const HORIZONS_URL =
   "https://ssd.jpl.nasa.gov/api/horizons.api";
 
-const DEFAULT_SITE = getProduct78Site(DEFAULT_PRODUCT78_SITE_ID);
-
-const BASE_OBSERVER = {
-  name: `${DEFAULT_SITE.displayName} — Product78`,
-  longitudeEast: DEFAULT_SITE.observer.longitudeEastDeg,
-  latitude: DEFAULT_SITE.observer.latitudeDeg,
-};
 
 const STEP_SIZE = "10m";
 const OBSERVATION_INTERVAL_MS = 10 * 60 * 1000;
@@ -88,7 +81,10 @@ type ParsedObservations = {
   unparsedLines: string[];
 };
 
-type Observer = typeof BASE_OBSERVER & {
+type Observer = {
+  name: string;
+  longitudeEast: number;
+  latitude: number;
   altitudeKm: number;
 };
 
@@ -622,22 +618,25 @@ function getTerrainHorizonAtAzimuth(
 
   const lower = profile[lowerIndex];
   const upper = profile[upperIndex];
+  const lowerElevation = lower.horizonElevationDeg;
+  const upperElevation = upper.horizonElevationDeg;
 
+  // A direction with missing or non-finite terrain remains unknown.
+  // Narrow the values before interpolation so null can never enter the math.
   if (
-    lower.horizonElevationDeg === null ||
-    upper.horizonElevationDeg === null ||
+    typeof lowerElevation !== "number" ||
+    typeof upperElevation !== "number" ||
     lower.coverageStatus === "no_data" ||
     upper.coverageStatus === "no_data" ||
-    !Number.isFinite(lower.horizonElevationDeg) ||
-    !Number.isFinite(upper.horizonElevationDeg)
+    !Number.isFinite(lowerElevation) ||
+    !Number.isFinite(upperElevation)
   ) {
     return null;
   }
 
   const horizonElevationDeg =
-    lower.horizonElevationDeg +
-    (upper.horizonElevationDeg -
-      lower.horizonElevationDeg) *
+    lowerElevation +
+    (upperElevation - lowerElevation) *
       fraction;
 
   return {
