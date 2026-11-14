@@ -27,15 +27,20 @@ const HORIZONS_URL =
   "https://ssd.jpl.nasa.gov/api/horizons.api";
 
 const TERRAIN_OPTIONS = {
-  directionCount: 720,
-  sampleStepMeters: 5,
+  // A 1-degree azimuth grid and 10 m radial step provide a responsive
+  // sampled skyline while keeping the underlying local DEM at 5 m.
+  directionCount: 360,
+  sampleStepMeters: 10,
   regionalSampleStepMeters: 20,
   maxDistanceMeters: 15000,
   directionConcurrency: 8,
-  // Product90 is optional: the sampler preserves the Product78 baseline
-  // if metadata, compatibility checks, COG access or tile sampling fail.
-  enableProduct90: true,
+  // Product90 remains opt-in. Product78 is the reliable baseline.
+  enableProduct90: false,
 };
+
+const HORIZONS_MAX_ATTEMPTS = 3;
+const HORIZONS_REQUEST_TIMEOUT_MS = 30_000;
+const TERRAIN_HORIZON_RESPONSE_BUDGET_MS = 18_000;
 
 const JPL_SAMPLE_INTERVAL_MINUTES = 10;
 const ALLOWED_DURATION_HOURS = [6, 12, 24, 48, 72] as const;
@@ -287,42 +292,36 @@ async function loadTerrainForSite(
 async function getTerrainHorizon(
   siteId: Product78SiteId,
   terrain: LolaTerrainData,
-  observer: GeographicCoordinate
+  observer: GeographicCoordinate,
+  includeProduct90 = false
 ): Promise<TerrainHorizonResult> {
   const cacheKey = [
     siteId,
     observer.latitudeDeg.toFixed(7),
     observer.longitudeEastDeg.toFixed(7),
+    includeProduct90 ? "product90" : "product78",
   ].join(":");
 
-  const cached =
-    horizonPromises.get(cacheKey);
+  const cached = horizonPromises.get(cacheKey);
+  if (cached) return cached;
 
-  if (cached) {
-    return cached;
-  }
-
-  const pending =
-    calculateMultiResolutionTerrainHorizon(
-      terrain,
-      observer,
-      TERRAIN_OPTIONS
-    );
-
-  horizonPromises.set(
-    cacheKey,
-    pending
+  const pending = calculateMultiResolutionTerrainHorizon(
+    terrain,
+    observer,
+    {
+      ...TERRAIN_OPTIONS,
+      enableProduct90: includeProduct90,
+    }
   );
+
+  horizonPromises.set(cacheKey, pending);
 
   try {
     return await pending;
   } catch (error) {
-    if (
-      horizonPromises.get(cacheKey) === pending
-    ) {
+    if (horizonPromises.get(cacheKey) === pending) {
       horizonPromises.delete(cacheKey);
     }
-
     throw error;
   }
 }
@@ -421,7 +420,7 @@ function parseHorizonsObservations(
     if (!line) continue;
 
     const timeMatch = line.match(
-      /^(\d{4})-([A-Za-z]{3})-(\d{2})\s+(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d+))?)?/
+      /^(\d{4})-([A-Za-z]{3})-(\d{2})[ T]+(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d+))?)?/
     );
     if (!timeMatch) continue;
 
@@ -487,74 +486,98 @@ async function requestHorizonsTarget(
   startTime: string,
   stopTime: string
 ): Promise<HorizonsObservation[]> {
+  // Follow the documented Horizons API value syntax. Enum/boolean
+  // values and coordinate triplets are quoted.
   const params = new URLSearchParams({
-    format: "text",
-
+    format: "json",
     COMMAND: `'${targetId}'`,
-
-    OBJ_DATA: "NO",
-    MAKE_EPHEM: "YES",
-    EPHEM_TYPE: "OBSERVER",
-
+    OBJ_DATA: "'NO'",
+    MAKE_EPHEM: "'YES'",
+    EPHEM_TYPE: "'OBSERVER'",
     CENTER: "'coord@301'",
-    COORD_TYPE: "GEODETIC",
-
-    SITE_COORD:
-      `'${normalizeHorizonsLongitude(
-        observer.longitudeEastDeg
-      )},${observer.latitudeDeg},${altitudeKm}'`,
-
+    COORD_TYPE: "'GEODETIC'",
+    SITE_COORD: `'${normalizeHorizonsLongitude(observer.longitudeEastDeg)},${observer.latitudeDeg},${altitudeKm}'`,
     START_TIME: `'${startTime}'`,
     STOP_TIME: `'${stopTime}'`,
-
     STEP_SIZE: "'10m'",
-
-    /*
-     * 4  = apparent AZ/EL
-     * 13 = target angular diameter
-     */
     QUANTITIES: "'4,13'",
-
-    /*
-     * Make the time basis explicit. The mission time passed
-     * to this route is interpreted as UT.
-     */
-    TIME_TYPE: "UT",
-    TIME_DIGITS: "SECONDS",
-
-    CSV_FORMAT: "NO",
-    ANG_FORMAT: "DEG",
-    APPARENT: "AIRLESS",
-    EXTRA_PREC: "YES",
+    TIME_TYPE: "'UT'",
+    TIME_DIGITS: "'SECONDS'",
+    CSV_FORMAT: "'NO'",
+    ANG_FORMAT: "'DEG'",
+    APPARENT: "'AIRLESS'",
+    EXTRA_PREC: "'YES'",
   });
 
-  const response = await fetch(
-    `${HORIZONS_URL}?${params.toString()}`,
-    {
-      cache: "no-store",
-      signal: AbortSignal.timeout(45_000),
+  const url = `${HORIZONS_URL}?${params.toString()}`;
+  let lastError: unknown = null;
+
+  for (let attempt = 1; attempt <= HORIZONS_MAX_ATTEMPTS; attempt += 1) {
+    let response: Response;
+
+    try {
+      response = await fetch(url, {
+        method: "GET",
+        cache: "no-store",
+        signal: AbortSignal.timeout(HORIZONS_REQUEST_TIMEOUT_MS),
+      });
+    } catch (error) {
+      lastError = error;
+      if (attempt < HORIZONS_MAX_ATTEMPTS) {
+        await new Promise((resolve) => setTimeout(resolve, 600 * attempt));
+        continue;
+      }
+      break;
     }
+
+    if (!response.ok) {
+      const body = await response.text().catch(() => "");
+      const retryable =
+        response.status === 408 ||
+        response.status === 429 ||
+        response.status >= 500;
+
+      lastError = new Error(
+        `JPL Horizons HTTP ${response.status} for target ${targetId}: ${body.slice(0, 500)}`
+      );
+
+      if (retryable && attempt < HORIZONS_MAX_ATTEMPTS) {
+        await new Promise((resolve) => setTimeout(resolve, 600 * attempt));
+        continue;
+      }
+
+      throw lastError;
+    }
+
+    let payload: { result?: string; error?: string };
+    try {
+      payload = await response.json() as { result?: string; error?: string };
+    } catch (error) {
+      throw new Error(
+        `JPL Horizons returned invalid JSON for target ${targetId}: ${error instanceof Error ? error.message : "unknown parse error"}`
+      );
+    }
+
+    if (payload.error) {
+      throw new Error(`JPL Horizons rejected target ${targetId}: ${payload.error}`);
+    }
+
+    if (typeof payload.result !== "string" || payload.result.length === 0) {
+      throw new Error(`JPL Horizons returned no ephemeris result for target ${targetId}.`);
+    }
+
+    try {
+      return parseHorizonsObservations(payload.result);
+    } catch (error) {
+      throw new Error(
+        `Could not parse JPL target ${targetId}: ${error instanceof Error ? error.message : "unknown table error"}`
+      );
+    }
+  }
+
+  throw new Error(
+    `JPL Horizons network request failed for target ${targetId} after ${HORIZONS_MAX_ATTEMPTS} attempts: ${lastError instanceof Error ? lastError.message : "unknown network error"}`
   );
-
-  const responseText =
-    await response.text();
-
-  if (!response.ok) {
-    throw new Error(
-      `JPL Horizons request failed for target ${targetId}: HTTP ${response.status}. ${responseText.slice(0, 500)}`
-    );
-  }
-
-  if (
-    responseText.includes("INPUT ERROR") ||
-    responseText.includes("$$SOF")
-  ) {
-    throw new Error(
-      `JPL Horizons rejected target ${targetId}: ${responseText.slice(0, 800)}`
-    );
-  }
-
-  return parseHorizonsObservations(responseText);
 }
 
 /* =====================================================
@@ -915,11 +938,22 @@ function buildVisibilityWindows(
 
 function buildTarget(
   observations: HorizonsObservation[],
-  horizon: TerrainHorizonResult
+  horizon: TerrainHorizonResult | null
 ): HorizonsTarget {
   const assessed = observations.map((observation) => ({
     ...observation,
-    terrainVisibility: assessTargetVisibility(observation, horizon),
+    terrainVisibility: horizon
+      ? assessTargetVisibility(observation, horizon)
+      : {
+          azimuthDeg: observation.azimuthDeg,
+          targetElevationDeg: observation.elevationDeg,
+          terrainHorizonElevationDeg: null,
+          clearanceDeg: null,
+          angularDiameterArcsec: observation.angularDiameterArcsec,
+          status: "terrain_horizon_unavailable" as const,
+          targetDiskVisible: null,
+          terrainCoverageComplete: false as const,
+        },
   }));
 
   return {
@@ -945,120 +979,75 @@ function getErrorMessage(
    API ROUTE
 ===================================================== */
 
-export async function GET(
-  request: NextRequest
-) {
-  try {
-    const params =
-      request.nextUrl.searchParams;
-
-    const {
-      id: siteId,
-      site,
-    } = getSelectedSite(
-      params.get("siteId")
+function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  message: string
+): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error(message)), timeoutMs);
+    promise.then(
+      (value) => {
+        clearTimeout(timeout);
+        resolve(value);
+      },
+      (error: unknown) => {
+        clearTimeout(timeout);
+        reject(error);
+      }
     );
+  });
+}
 
+export async function GET(request: NextRequest) {
+  try {
+    const params = request.nextUrl.searchParams;
+    const { id: siteId, site } = getSelectedSite(params.get("siteId"));
     const mission = getDateAndTime(
       params.get("date"),
       params.get("time"),
       params.get("durationHours")
     );
 
-    const requestedLatitude =
-      parseFiniteParameter(
-        params.get("lat"),
-        "Latitude"
-      );
+    const requestedLatitude = parseFiniteParameter(params.get("lat"), "Latitude");
+    const requestedLongitude = parseFiniteParameter(params.get("lon"), "Longitude");
 
-    const requestedLongitude =
-      parseFiniteParameter(
-        params.get("lon"),
-        "Longitude"
-      );
-
-    /*
-     * Product 78 sites in this route are southern lunar
-     * landing sites. Preserve the site's hemisphere.
-     */
-    const latitudeDeg =
-      requestedLatitude === null
-        ? site.observer.latitudeDeg
-        : Math.sign(
-          site.observer.latitudeDeg
-        ) *
-        Math.abs(requestedLatitude);
-
-    const longitudeEastDeg =
-      normalizeLongitudeEast(
-        requestedLongitude ??
-        site.observer.longitudeEastDeg
-      );
-
-    if (
-      latitudeDeg < -90 ||
-      latitudeDeg > 0
-    ) {
-      throw new Error(
-        "The selected site must use a valid southern lunar latitude."
-      );
+    if (requestedLatitude !== null && (requestedLatitude < -90 || requestedLatitude > 90)) {
+      throw new Error("Latitude must be between -90 and 90 degrees.");
     }
+    if (requestedLongitude !== null && (requestedLongitude < -360 || requestedLongitude > 360)) {
+      throw new Error("Longitude must be between -360 and 360 degrees.");
+    }
+
+    // Product78 candidate sites are in the lunar south-polar region.
+    const latitudeDeg = requestedLatitude === null
+      ? site.observer.latitudeDeg
+      : Math.sign(site.observer.latitudeDeg || -1) * Math.abs(requestedLatitude);
+    const longitudeEastDeg = normalizeLongitudeEast(
+      requestedLongitude ?? site.observer.longitudeEastDeg
+    );
 
     const observer: GeographicCoordinate = {
       latitudeDeg,
       longitudeEastDeg,
     };
 
-    const suppliedPixelColumn =
-      parseOptionalPixel(
-        params.get("pixelColumn"),
-        "pixelColumn"
-      );
+    const suppliedPixelColumn = parseOptionalPixel(params.get("pixelColumn"), "pixelColumn");
+    const suppliedPixelRow = parseOptionalPixel(params.get("pixelRow"), "pixelRow");
 
-    const suppliedPixelRow =
-      parseOptionalPixel(
-        params.get("pixelRow"),
-        "pixelRow"
-      );
-
-    if (
-      (suppliedPixelColumn === null) !==
-      (suppliedPixelRow === null)
-    ) {
-      throw new Error(
-        "Both pixelColumn and pixelRow must be supplied together."
-      );
+    if ((suppliedPixelColumn === null) !== (suppliedPixelRow === null)) {
+      throw new Error("Both pixelColumn and pixelRow must be supplied together.");
     }
 
-    /* -----------------------------------------------
-       Load the actual selected site's Product 78 data.
-    ------------------------------------------------ */
+    // Load Product78 and verify that the exact map coordinate and pixel agree.
+    const terrain = await loadTerrainForSite(siteId);
+    const observerSample = sampleLolaHeightAtLocation(terrain, observer);
 
-    const terrain =
-      await loadTerrainForSite(siteId);
-
-    const observerSample =
-      sampleLolaHeightAtLocation(
-        terrain,
-        observer
+    if (suppliedPixelColumn !== null && suppliedPixelRow !== null) {
+      const pixelDifference = Math.hypot(
+        suppliedPixelColumn - observerSample.pixel.column,
+        suppliedPixelRow - observerSample.pixel.row
       );
-
-    /*
-     * Confirm that the planner's selected pixel and
-     * geographic coordinate refer to the same location.
-     */
-    if (
-      suppliedPixelColumn !== null &&
-      suppliedPixelRow !== null
-    ) {
-      const pixelDifference =
-        Math.hypot(
-          suppliedPixelColumn -
-          observerSample.pixel.column,
-
-          suppliedPixelRow -
-          observerSample.pixel.row
-        );
 
       if (pixelDifference > 1.5) {
         throw new Error(
@@ -1067,32 +1056,11 @@ export async function GET(
       }
     }
 
-    /* -----------------------------------------------
-       Calculate the local terrain horizon.
-    ------------------------------------------------ */
+    const altitudeKm = observerSample.elevationMeters / 1000;
 
-    const terrainHorizon =
-      await getTerrainHorizon(
-        siteId,
-        terrain,
-        observer
-      );
-
-    /*
-     * JPL accepts the observer's lunar elevation in km.
-     * The elevation comes from the selected LOLA sample.
-     */
-    const altitudeKm =
-      observerSample.elevationMeters / 1000;
-
-    /* -----------------------------------------------
-       Fetch actual JPL apparent positions.
-    ------------------------------------------------ */
-
-    const [
-      sunObservations,
-      earthObservations,
-    ] = await Promise.all([
+    // Request the exact observer's ephemerides before doing the more expensive
+    // local horizon calculation. Sun and Earth failures are isolated.
+    const [sunResult, earthResult] = await Promise.allSettled([
       requestHorizonsTarget(
         "10",
         observer,
@@ -1100,7 +1068,6 @@ export async function GET(
         mission.startTime,
         mission.stopTime
       ),
-
       requestHorizonsTarget(
         "399",
         observer,
@@ -1110,149 +1077,146 @@ export async function GET(
       ),
     ]);
 
-    /* -----------------------------------------------
-       Assess both disks against the sampled terrain.
-    ------------------------------------------------ */
+    const sunObservations = sunResult.status === "fulfilled" ? sunResult.value : null;
+    const earthObservations = earthResult.status === "fulfilled" ? earthResult.value : null;
+    const targetErrors = {
+      sun: sunResult.status === "rejected"
+        ? getErrorMessage(sunResult.reason)
+        : null,
+      earth: earthResult.status === "rejected"
+        ? getErrorMessage(earthResult.reason)
+        : null,
+    };
 
-    const sunTarget = buildTarget(sunObservations, terrainHorizon);
-    const earthTarget = buildTarget(earthObservations, terrainHorizon);
+    if (!sunObservations && !earthObservations) {
+      return NextResponse.json(
+        {
+          success: false,
+          status: "unavailable",
+          source: "NASA/JPL Horizons",
+          error: "Both exact-observer JPL Horizons requests failed.",
+          targetErrors,
+          observer: {
+            latitudeDeg: observer.latitudeDeg,
+            longitudeEastDeg: observer.longitudeEastDeg,
+            altitudeKm,
+            elevationMeters: observerSample.elevationMeters,
+            pixel: observerSample.pixel,
+            nearestPixel: observerSample.nearestPixel,
+          },
+          mission,
+        },
+        { status: 502 }
+      );
+    }
 
-    /* -----------------------------------------------
-       Return flat target objects.
+    // Product90 is optional and opt-in via ?includeProduct90=true. The
+    // Product78-only horizon is the fast baseline for the normal explorer.
+    const includeProduct90 = params.get("includeProduct90") === "true";
+    let terrainHorizon: TerrainHorizonResult | null = null;
+    let terrainError: string | null = null;
 
-       This is the exact shape consumed by
-       Lunar360Explorer.tsx:
+    try {
+      terrainHorizon = await withTimeout(
+        getTerrainHorizon(siteId, terrain, observer, includeProduct90),
+        TERRAIN_HORIZON_RESPONSE_BUDGET_MS,
+        `Terrain horizon calculation exceeded the ${TERRAIN_HORIZON_RESPONSE_BUDGET_MS / 1000}-second response budget. Exact-observer JPL data is still available; retry to reuse the in-progress terrain calculation.`
+      );
+    } catch (error) {
+      terrainError = getErrorMessage(error);
+      console.warn("[Selected Location API] Terrain horizon unavailable:", terrainError);
+    }
 
-       targets.sun.azimuthDeg
-       targets.sun.elevationDeg
-       targets.sun.terrainVisibility.status
-    ------------------------------------------------ */
+    const sunTarget = sunObservations
+      ? buildTarget(sunObservations, terrainHorizon)
+      : null;
+    const earthTarget = earthObservations
+      ? buildTarget(earthObservations, terrainHorizon)
+      : null;
+
+    const status =
+      sunTarget && earthTarget && terrainHorizon
+        ? "complete"
+        : "partial";
 
     return NextResponse.json({
       success: true,
-
+      status,
       site: {
         id: siteId,
         archiveSite: site.archiveSite,
         displayName: site.displayName,
         dataDirectory: site.dataDirectory,
       },
-
       mission: {
         ...mission,
         sampleIntervalMinutes: JPL_SAMPLE_INTERVAL_MINUTES,
       },
-      horizonProfile: terrainHorizon.directions,
-
+      horizonProfile: terrainHorizon?.directions ?? [],
       observer: {
-        latitudeDeg:
-          observer.latitudeDeg,
-
-        longitudeEastDeg:
-          observer.longitudeEastDeg,
-
+        latitudeDeg: observer.latitudeDeg,
+        longitudeEastDeg: observer.longitudeEastDeg,
         altitudeKm,
-
-        elevationMeters:
-          observerSample.elevationMeters,
-
-        pixel:
-          observerSample.pixel,
-
-        nearestPixel:
-          observerSample.nearestPixel,
+        elevationMeters: observerSample.elevationMeters,
+        pixel: observerSample.pixel,
+        nearestPixel: observerSample.nearestPixel,
       },
-
       targets: {
-        sun: sunTarget,
-        earth: earthTarget,
+        ...(sunTarget ? { sun: sunTarget } : {}),
+        ...(earthTarget ? { earth: earthTarget } : {}),
       },
-
+      targetErrors,
+      terrainError,
       terrainModel: {
-        product: "NASA LOLA Product 78",
+        product: "NASA LOLA Product78",
         siteId,
         siteName: site.displayName,
-
-        resolutionMeters:
-          terrain.resolutionMeters,
-
-        referenceFrame:
-          terrain.metadata.coordinateSystem.referenceFrame,
-
-        ephemeris:
-          terrain.metadata.coordinateSystem.ephemeris,
-
-        sampleStepMeters:
-          terrainHorizon.sampleStepMeters,
-
-        maxDistanceMeters:
-          terrainHorizon.maxDistanceMeters,
-
-        calculatedDirections:
-          terrainHorizon.calculatedDirections,
-
-        totalSamplesChecked:
-          terrainHorizon.totalSamplesChecked,
-
-        product78SamplesChecked:
-          terrainHorizon.product78SamplesChecked,
-
-        product90SamplesChecked:
-          terrainHorizon.product90SamplesChecked,
-
-        product90Status: terrainHorizon.product90Status,
-        product90Error: terrainHorizon.product90Error,
-        regionalResolutionMeters:
-          terrainHorizon.product90SamplesChecked > 0
-            ? terrainHorizon.product90ResolutionMeters
-            : null,
-
-        rasterBoundaryLimitedDirections:
-          terrainHorizon.rasterBoundaryLimitedDirections,
-
-        searchLimitReachedDirections:
-          terrainHorizon.searchLimitReachedDirections,
-
+        resolutionMeters: terrain.resolutionMeters,
+        sampleStepMeters: terrainHorizon?.sampleStepMeters ?? TERRAIN_OPTIONS.sampleStepMeters,
+        maxDistanceMeters: terrainHorizon?.maxDistanceMeters ?? TERRAIN_OPTIONS.maxDistanceMeters,
+        calculatedDirections: terrainHorizon?.calculatedDirections ?? 0,
+        totalSamplesChecked: terrainHorizon?.totalSamplesChecked ?? 0,
+        product78SamplesChecked: terrainHorizon?.product78SamplesChecked ?? 0,
+        product90SamplesChecked: terrainHorizon?.product90SamplesChecked ?? 0,
+        product90Status: terrainHorizon?.product90Status ?? (includeProduct90 ? "unavailable" : "disabled"),
+        product90Error: terrainHorizon?.product90Error ?? null,
+        regionalResolutionMeters: terrainHorizon && terrainHorizon.product90SamplesChecked > 0
+          ? terrainHorizon.product90ResolutionMeters
+          : null,
+        rasterBoundaryLimitedDirections: terrainHorizon?.rasterBoundaryLimitedDirections ?? 0,
+        searchLimitReachedDirections: terrainHorizon?.searchLimitReachedDirections ?? 0,
         completeHorizonVerified: false,
+        status: terrainHorizon ? "partial" : "unavailable",
+        error: terrainError,
       },
-
       sources: {
         ephemeris: "NASA/JPL Horizons",
-        localTerrain: "NASA LOLA Product 78",
-        regionalTerrain:
-          terrainHorizon.product90SamplesChecked > 0
-            ? "NASA LOLA Product 90 (20 m pixel spacing; optional regional samples)"
-            : "Not used — regional terrain samples unavailable or not required",
+        localTerrain: "NASA LOLA Product78",
+        regionalTerrain: terrainHorizon && terrainHorizon.product90SamplesChecked > 0
+          ? "NASA LOLA Product90 (20 m pixel spacing; optional regional samples)"
+          : "Not used — Product78 baseline only or regional samples unavailable",
       },
-
       interpretation: {
         horizonProfile:
           "Each azimuth reports the highest sampled terrain elevation angle within known coverage. Terrain beyond the last known sample or coverage boundary remains unknown.",
         sunVisibility:
-          "Each observation is assessed against the sampled terrain profile. Above-sampled-terrain status is not proof of complete visibility.",
+          "Above-sampled-terrain is a provisional result from the available local profile; it is not proof of a globally complete horizon.",
         earthVisibility:
-          "Earth terrain visibility is a geometric line-of-sight screening only. No radio-frequency link budget, antenna gain, transmit power, pointing loss, or data-rate analysis is included.",
+          "Earth terrain visibility is geometric line-of-sight screening only. No radio-frequency link budget, antenna gain, transmit power, pointing loss, or data-rate analysis is included.",
         visibilityWindows:
           "10-minute sampled windows. Boundaries are observation timestamps, not exact interpolated crossings.",
       },
     });
   } catch (error) {
-    const message =
-      getErrorMessage(error);
-
-    console.error(
-      "[Selected Location API]",
-      message
-    );
-
+    const message = getErrorMessage(error);
+    console.error("[Selected Location API]", message);
     return NextResponse.json(
       {
         success: false,
+        status: "error",
         error: message,
       },
-      {
-        status: 400,
-      }
+      { status: 500 }
     );
   }
 }
