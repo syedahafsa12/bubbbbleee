@@ -2,6 +2,7 @@
 "use client";
 
 import {
+  Suspense,
   useEffect,
   useMemo,
   useRef,
@@ -13,22 +14,32 @@ import type {
   RefObject,
 } from "react";
 
-import { Canvas, useFrame } from "@react-three/fiber";
-import { Stars } from "@react-three/drei";
+import {
+  Canvas,
+  useFrame,
+} from "@react-three/fiber";
+
+import { useGLTF } from "@react-three/drei";
 import * as THREE from "three";
 
 import {
-  loadLolaTerrain,
+  geographicToLolaProjected,
+  projectedToLolaPixel,
+  loadLolaTerrainForSite,
   sampleLolaHeightAtPixel,
   type LolaTerrainData,
 } from "@/components/lib/lunar/terrainData";
 
-import {
-  calculateEphemeris,
-  type CelestialEphemeris,
-} from "@/components/lib/lunar/ephemeris";
+import type {
+  Product78SiteId,
+} from "@/components/lib/lunar/siteRegistry";
+
+/* =====================================================
+   TYPES
+===================================================== */
 
 interface Lunar360ExplorerProps {
+  siteId: Product78SiteId;
   latitude: number;
   longitude: number;
   pixelColumn: number;
@@ -37,251 +48,539 @@ interface Lunar360ExplorerProps {
   missionTime: string;
 }
 
+type TerrainVisibilityStatus =
+  | "target_disk_below_sampled_terrain"
+  | "target_disk_intersects_sampled_terrain"
+  | "target_disk_above_sampled_terrain_unconfirmed"
+  | "target_disk_size_unavailable"
+  | "terrain_horizon_unavailable";
+
+interface TerrainVisibility {
+  azimuthDeg: number;
+  targetElevationDeg: number;
+  terrainHorizonElevationDeg: number | null;
+  clearanceDeg: number | null;
+  angularDiameterArcsec: number | null;
+  status: TerrainVisibilityStatus;
+  targetDiskVisible: boolean | null;
+  terrainCoverageComplete: boolean;
+}
+
+interface HorizonsObservation {
+  time: string;
+  azimuthDeg: number;
+  elevationDeg: number;
+  angularDiameterArcsec: number | null;
+  terrainVisibility: TerrainVisibility;
+}
+
+interface HorizonsResponse {
+  success: boolean;
+
+  site?: {
+    id: string;
+    archiveSite: string;
+    displayName: string;
+    dataDirectory: string;
+  };
+
+  mission?: {
+    date: string;
+    time: string;
+    startTime: string;
+    stopTime: string;
+  };
+
+  observer?: {
+    latitudeDeg: number;
+    longitudeEastDeg: number;
+    altitudeKm: number;
+    elevationMeters: number;
+    pixel: {
+      column: number;
+      row: number;
+    };
+    nearestPixel: {
+      column: number;
+      row: number;
+    };
+  };
+
+  targets?: {
+    sun?: HorizonsObservation;
+    earth?: HorizonsObservation;
+  };
+
+  terrainModel?: {
+    product: string;
+    siteId: string;
+    siteName: string;
+    resolutionMeters: number;
+    sampleStepMeters: number;
+    maxDistanceMeters: number;
+    completeHorizonVerified: boolean;
+  };
+
+  sources?: {
+    ephemeris: string;
+    localTerrain: string;
+    regionalTerrain: string;
+  };
+
+  error?: string;
+}
+
 interface LookState {
   yaw: number;
   pitch: number;
 }
 
-interface TerrainMeshData {
-  geometry: THREE.BufferGeometry;
-  centerElevation: number;
-  minSlope: number;
-  maxSlope: number;
-}
+/* =====================================================
+   SCENE CONSTANTS
+===================================================== */
 
-const GRID_SEGMENTS = 1024;
-const MAX_RADIUS_PIXELS = 700;
+const TERRAIN_RADIUS_PIXELS = 500;
 
 const OBSERVER_HEIGHT_METERS = 1.7;
 const LUNAR_RADIUS_METERS = 1_737_400;
 
-const CELESTIAL_DISPLAY_DISTANCE = 8000;
+const CELESTIAL_DISTANCE = 8000;
 
-// Slope colours are an analytical visualization of measured elevations.
-// They do not modify the terrain geometry.
-const SLOPE_STOPS = [
-  { degrees: 0, color: new THREE.Color("#285b9a") },
-  { degrees: 5, color: new THREE.Color("#319b91") },
-  { degrees: 15, color: new THREE.Color("#d4c65b") },
-  { degrees: 30, color: new THREE.Color("#d87942") },
-  { degrees: 45, color: new THREE.Color("#bd4545") },
-];
+const SUN_FALLBACK_ANGULAR_RADIUS_DEG = 0.2666;
+const EARTH_FALLBACK_ANGULAR_RADIUS_DEG = 0.95;
 
-function getSlopeColor(
-  degrees: number,
-  target: THREE.Color
-): THREE.Color {
-  const value = THREE.MathUtils.clamp(degrees, 0, 45);
+const CELESTIAL_VISUAL_SCALE = 6;
 
-  for (let i = 0; i < SLOPE_STOPS.length - 1; i++) {
-    const current = SLOPE_STOPS[i];
-    const next = SLOPE_STOPS[i + 1];
+const STAR_COUNT = 9000;
+const STAR_RADIUS = 12000;
 
-    if (
-      value >= current.degrees &&
-      value <= next.degrees
-    ) {
-      const amount =
-        (value - current.degrees) /
-        (next.degrees - current.degrees);
+const LUNAR_REGOLITH_COLOR = "#777777";
 
-      return target
-        .copy(current.color)
-        .lerp(next.color, amount);
-    }
-  }
+/* =====================================================
+   GENERAL HELPERS
+===================================================== */
 
-  return target.copy(SLOPE_STOPS[SLOPE_STOPS.length - 1].color);
+function clamp(
+  value: number,
+  min: number,
+  max: number
+): number {
+  return Math.max(min, Math.min(max, value));
 }
 
-function createTerrainGeometry(
+function getFirstObservation(
+  target?: HorizonsObservation | null
+): HorizonsObservation | null {
+  if (
+    !target ||
+    !Number.isFinite(target.azimuthDeg) ||
+    !Number.isFinite(target.elevationDeg)
+  ) {
+    return null;
+  }
+
+  return target;
+}
+
+function getAngularRadiusDeg(
+  observation: HorizonsObservation | null
+): number | null {
+  const diameter = observation?.angularDiameterArcsec;
+
+  if (
+    diameter === null ||
+    diameter === undefined ||
+    !Number.isFinite(diameter) ||
+    diameter <= 0
+  ) {
+    return null;
+  }
+
+  return diameter / 7200;
+}
+
+function isConfirmedBlockedByTerrain(
+  observation: HorizonsObservation | null
+): boolean {
+  if (!observation) {
+    return true;
+  }
+
+  const visibility = observation.terrainVisibility;
+
+  if (!visibility) {
+    return false;
+  }
+
+  return (
+    visibility.status === "target_disk_below_sampled_terrain" ||
+    visibility.targetDiskVisible === false
+  );
+}
+
+function canRenderCelestialDisk(
+  observation: HorizonsObservation | null,
+  fallbackAngularRadiusDeg: number
+): boolean {
+  if (!observation) {
+    return false;
+  }
+
+  if (isConfirmedBlockedByTerrain(observation)) {
+    return false;
+  }
+
+  const angularRadiusDeg =
+    getAngularRadiusDeg(observation) ??
+    fallbackAngularRadiusDeg;
+
+  return (
+    observation.elevationDeg + angularRadiusDeg > 0
+  );
+}
+
+function getDiskFractionAboveHorizon(
+  clearanceDeg: number,
+  angularRadiusDeg: number
+): number {
+  if (
+    !Number.isFinite(clearanceDeg) ||
+    !Number.isFinite(angularRadiusDeg) ||
+    angularRadiusDeg <= 0
+  ) {
+    return 0;
+  }
+
+  const normalized = clamp(
+    clearanceDeg / angularRadiusDeg,
+    -1,
+    1
+  );
+
+  return clamp(
+    (
+      Math.acos(-normalized) +
+      normalized *
+        Math.sqrt(
+          Math.max(0, 1 - normalized * normalized)
+        )
+    ) / Math.PI,
+    0,
+    1
+  );
+}
+
+function getSunlightFraction(
+  sun: HorizonsObservation | null
+): number {
+  if (!sun) {
+    return 0;
+  }
+
+  const visibility = sun.terrainVisibility;
+
+  if (!visibility) {
+    return 0;
+  }
+
+  if (
+    visibility.status === "target_disk_below_sampled_terrain" ||
+    visibility.targetDiskVisible === false
+  ) {
+    return 0;
+  }
+
+  if (
+    visibility.status ===
+    "target_disk_above_sampled_terrain_unconfirmed"
+  ) {
+    return 1;
+  }
+
+  if (
+    visibility.status === "terrain_horizon_unavailable"
+  ) {
+    return 0;
+  }
+
+  if (
+    visibility.status !==
+      "target_disk_intersects_sampled_terrain" &&
+    visibility.status !== "target_disk_size_unavailable"
+  ) {
+    return 0;
+  }
+
+  if (
+    visibility.clearanceDeg === null ||
+    !Number.isFinite(visibility.clearanceDeg)
+  ) {
+    return 0;
+  }
+
+  const angularRadiusDeg =
+    getAngularRadiusDeg(sun) ??
+    SUN_FALLBACK_ANGULAR_RADIUS_DEG;
+
+  return getDiskFractionAboveHorizon(
+    visibility.clearanceDeg,
+    angularRadiusDeg
+  );
+}
+
+/* =====================================================
+   GEOGRAPHIC DIRECTION
+===================================================== */
+
+function destinationOnMoon(
+  latitudeDeg: number,
+  longitudeEastDeg: number,
+  bearingRadians: number,
+  distanceMeters: number
+): {
+  latitudeDeg: number;
+  longitudeEastDeg: number;
+} {
+  const lat1 = THREE.MathUtils.degToRad(latitudeDeg);
+  const lon1 = THREE.MathUtils.degToRad(longitudeEastDeg);
+
+  const angularDistance =
+    distanceMeters / LUNAR_RADIUS_METERS;
+
+  const sinLat2 =
+    Math.sin(lat1) * Math.cos(angularDistance) +
+    Math.cos(lat1) *
+      Math.sin(angularDistance) *
+      Math.cos(bearingRadians);
+
+  const lat2 = Math.asin(clamp(sinLat2, -1, 1));
+
+  const y =
+    Math.sin(bearingRadians) *
+    Math.sin(angularDistance) *
+    Math.cos(lat1);
+
+  const x =
+    Math.cos(angularDistance) -
+    Math.sin(lat1) * Math.sin(lat2);
+
+  const lon2 = lon1 + Math.atan2(y, x);
+
+  return {
+    latitudeDeg: THREE.MathUtils.radToDeg(lat2),
+    longitudeEastDeg:
+      (
+        THREE.MathUtils.radToDeg(lon2) % 360 +
+        360
+      ) % 360,
+  };
+}
+
+function getLocalSkyDirection(
+  observation: HorizonsObservation,
+  terrain: LolaTerrainData,
+  latitude: number,
+  longitude: number
+): THREE.Vector3 {
+  const azimuth = THREE.MathUtils.degToRad(
+    observation.azimuthDeg
+  );
+
+  const elevation = THREE.MathUtils.degToRad(
+    observation.elevationDeg
+  );
+
+  const east = Math.sin(azimuth) * Math.cos(elevation);
+  const north = Math.cos(azimuth) * Math.cos(elevation);
+  const up = Math.sin(elevation);
+
+  const metadata = terrain.metadata;
+  const probeMeters = 20;
+
+  const origin = projectedToLolaPixel(
+    geographicToLolaProjected(
+      {
+        latitudeDeg: latitude,
+        longitudeEastDeg: longitude,
+      },
+      metadata
+    ),
+    metadata
+  );
+
+  const eastCoordinate = destinationOnMoon(
+    latitude,
+    longitude,
+    Math.PI / 2,
+    probeMeters
+  );
+
+  const northCoordinate = destinationOnMoon(
+    latitude,
+    longitude,
+    0,
+    probeMeters
+  );
+
+  const eastPixel = projectedToLolaPixel(
+    geographicToLolaProjected(eastCoordinate, metadata),
+    metadata
+  );
+
+  const northPixel = projectedToLolaPixel(
+    geographicToLolaProjected(northCoordinate, metadata),
+    metadata
+  );
+
+  const spacingX = Math.abs(metadata.pixelResolution[0]);
+  const spacingZ = Math.abs(metadata.pixelResolution[1]);
+
+  const eastX =
+    ((eastPixel.column - origin.column) * spacingX) /
+    probeMeters;
+
+  const eastZ =
+    ((eastPixel.row - origin.row) * spacingZ) /
+    probeMeters;
+
+  const northX =
+    ((northPixel.column - origin.column) * spacingX) /
+    probeMeters;
+
+  const northZ =
+    ((northPixel.row - origin.row) * spacingZ) /
+    probeMeters;
+
+  return new THREE.Vector3(
+    east * eastX + north * northX,
+    up,
+    east * eastZ + north * northZ
+  ).normalize();
+}
+
+/* =====================================================
+   NATIVE NASA LOLA GEOMETRY
+===================================================== */
+
+function createLunarGeometry(
   terrain: LolaTerrainData,
   pixelColumn: number,
   pixelRow: number
-): TerrainMeshData {
-  const metadata = terrain.metadata;
+): THREE.BufferGeometry {
+  const {
+    width,
+    height,
+    elevations,
+    metadata,
+  } = terrain;
 
-  const pixelWidth = Math.abs(metadata.pixelResolution[0]);
-  const pixelHeight = Math.abs(metadata.pixelResolution[1]);
-
-  const availableRadius = Math.min(
-    pixelColumn,
-    terrain.width - 1 - pixelColumn,
-    pixelRow,
-    terrain.height - 1 - pixelRow
-  );
-
-  const radiusPixels = Math.min(
-    MAX_RADIUS_PIXELS,
-    Math.floor(availableRadius)
-  );
-
-  if (radiusPixels < 2) {
+  if (elevations.length !== width * height) {
     throw new Error(
-      "Selected pixel is too close to the Product 78 raster boundary."
+      "LOLA raster dimensions do not match the elevation array."
     );
   }
 
-  const centerElevation = sampleLolaHeightAtPixel(terrain, {
-    column: pixelColumn,
-    row: pixelRow,
-  });
+  const spacingX = Math.abs(metadata.pixelResolution[0]);
+  const spacingZ = Math.abs(metadata.pixelResolution[1]);
 
-  if (!Number.isFinite(centerElevation)) {
+  if (spacingX <= 0 || spacingZ <= 0) {
+    throw new Error("LOLA pixel spacing is invalid.");
+  }
+
+  const centerElevation = sampleLolaHeightAtPixel(
+    terrain,
+    {
+      column: pixelColumn,
+      row: pixelRow,
+    }
+  );
+
+  const startColumn = Math.max(
+    0,
+    Math.floor(pixelColumn - TERRAIN_RADIUS_PIXELS)
+  );
+
+  const endColumn = Math.min(
+    width - 1,
+    Math.ceil(pixelColumn + TERRAIN_RADIUS_PIXELS)
+  );
+
+  const startRow = Math.max(
+    0,
+    Math.floor(pixelRow - TERRAIN_RADIUS_PIXELS)
+  );
+
+  const endRow = Math.min(
+    height - 1,
+    Math.ceil(pixelRow + TERRAIN_RADIUS_PIXELS)
+  );
+
+  const columns = endColumn - startColumn + 1;
+  const rows = endRow - startRow + 1;
+
+  if (columns < 2 || rows < 2) {
     throw new Error(
-      "Unable to sample elevation at the selected location."
+      "Observer is too close to the raster boundary."
     );
   }
 
-  const side = GRID_SEGMENTS + 1;
-  const vertexCount = side * side;
+  const vertexCount = columns * rows;
 
   const positions = new Float32Array(vertexCount * 3);
-  const elevations = new Float32Array(vertexCount);
-  const colors = new Float32Array(vertexCount * 3);
 
-  // Uint32Array avoids the large temporary JavaScript number array.
   const indices = new Uint32Array(
-    GRID_SEGMENTS * GRID_SEGMENTS * 6
+    (columns - 1) * (rows - 1) * 6
   );
 
-  const xSpacing =
-    (2 * radiusPixels * pixelWidth) / GRID_SEGMENTS;
+  for (let row = 0; row < rows; row++) {
+    const rasterRow = startRow + row;
+    const z = (rasterRow - pixelRow) * spacingZ;
 
-  const zSpacing =
-    (2 * radiusPixels * pixelHeight) / GRID_SEGMENTS;
+    for (let column = 0; column < columns; column++) {
+      const rasterColumn = startColumn + column;
 
-  // First pass: sample the actual LOLA elevation raster.
-  for (let row = 0; row <= GRID_SEGMENTS; row++) {
-    const v = row / GRID_SEGMENTS;
+      const rasterIndex =
+        rasterRow * width + rasterColumn;
 
-    for (let column = 0; column <= GRID_SEGMENTS; column++) {
-      const u = column / GRID_SEGMENTS;
+      const vertexIndex = row * columns + column;
+      const offset = vertexIndex * 3;
 
-      const rasterColumn =
-        pixelColumn + (u * 2 - 1) * radiusPixels;
+      const elevation = elevations[rasterIndex];
 
-      const rasterRow =
-        pixelRow + (v * 2 - 1) * radiusPixels;
+      if (!Number.isFinite(elevation)) {
+        throw new Error(
+          `Invalid NASA elevation at pixel ${rasterColumn}, ${rasterRow}.`
+        );
+      }
 
-      const sampledElevation = sampleLolaHeightAtPixel(
-        terrain,
-        {
-          column: rasterColumn,
-          row: rasterRow,
-        }
-      );
+      const x = (rasterColumn - pixelColumn) * spacingX;
 
-      const elevation = Number.isFinite(sampledElevation)
-        ? sampledElevation
-        : centerElevation;
-
-      const x = (rasterColumn - pixelColumn) * pixelWidth;
-      const z = (rasterRow - pixelRow) * pixelHeight;
-
-      // Lunar curvature in the local tangent-plane representation.
-      const curvatureDrop =
+      const curvature =
         (x * x + z * z) / (2 * LUNAR_RADIUS_METERS);
 
-      const relativeElevation =
-        elevation - centerElevation;
-
-      const index = row * side + column;
-      const positionOffset = index * 3;
-
-      positions[positionOffset] = x;
-      positions[positionOffset + 1] =
-        relativeElevation - curvatureDrop;
-      positions[positionOffset + 2] = z;
-
-      elevations[index] = relativeElevation;
+      positions[offset] = x;
+      positions[offset + 1] =
+        elevation - centerElevation - curvature;
+      positions[offset + 2] = z;
     }
   }
 
-  // Second pass: calculate actual slope from neighbouring DEM samples.
-  // The gradient is calculated from elevation, not artificial geometry.
-  const slopeColor = new THREE.Color();
+  let cursor = 0;
 
-  let minSlope = Number.POSITIVE_INFINITY;
-  let maxSlope = Number.NEGATIVE_INFINITY;
-
-  for (let row = 0; row <= GRID_SEGMENTS; row++) {
-    const previousRow = Math.max(0, row - 1);
-    const nextRow = Math.min(GRID_SEGMENTS, row + 1);
-
-    for (let column = 0; column <= GRID_SEGMENTS; column++) {
-      const previousColumn = Math.max(0, column - 1);
-      const nextColumn = Math.min(
-        GRID_SEGMENTS,
-        column + 1
-      );
-
-      const centerIndex = row * side + column;
-
-      const leftIndex = row * side + previousColumn;
-      const rightIndex = row * side + nextColumn;
-
-      const upperIndex = previousRow * side + column;
-      const lowerIndex = nextRow * side + column;
-
-      const horizontalDistance =
-        (nextColumn - previousColumn) * xSpacing;
-
-      const verticalDistance =
-        (nextRow - previousRow) * zSpacing;
-
-      const dzdx =
-        horizontalDistance > 0
-          ? (elevations[rightIndex] - elevations[leftIndex]) /
-            horizontalDistance
-          : 0;
-
-      const dzdz =
-        verticalDistance > 0
-          ? (elevations[lowerIndex] - elevations[upperIndex]) /
-            verticalDistance
-          : 0;
-
-      const slopeRadians = Math.atan(
-        Math.sqrt(dzdx * dzdx + dzdz * dzdz)
-      );
-
-      const slopeDegrees =
-        slopeRadians * (180 / Math.PI);
-
-      minSlope = Math.min(minSlope, slopeDegrees);
-      maxSlope = Math.max(maxSlope, slopeDegrees);
-
-      const color = getSlopeColor(
-        slopeDegrees,
-        slopeColor
-      );
-
-      const colorOffset = centerIndex * 3;
-
-      colors[colorOffset] = color.r;
-      colors[colorOffset + 1] = color.g;
-      colors[colorOffset + 2] = color.b;
-    }
-  }
-
-  // Third pass: construct the terrain mesh.
-  let indexOffset = 0;
-
-  for (let row = 0; row < GRID_SEGMENTS; row++) {
-    for (let column = 0; column < GRID_SEGMENTS; column++) {
-      const a = row * side + column;
+  for (let row = 0; row < rows - 1; row++) {
+    for (let column = 0; column < columns - 1; column++) {
+      const a = row * columns + column;
       const b = a + 1;
-      const c = a + side;
+      const c = a + columns;
       const d = c + 1;
 
-      indices[indexOffset++] = a;
-      indices[indexOffset++] = c;
-      indices[indexOffset++] = b;
+      indices[cursor++] = a;
+      indices[cursor++] = c;
+      indices[cursor++] = b;
 
-      indices[indexOffset++] = b;
-      indices[indexOffset++] = c;
-      indices[indexOffset++] = d;
+      indices[cursor++] = b;
+      indices[cursor++] = c;
+      indices[cursor++] = d;
     }
   }
 
@@ -292,11 +591,6 @@ function createTerrainGeometry(
     new THREE.BufferAttribute(positions, 3)
   );
 
-  geometry.setAttribute(
-    "color",
-    new THREE.BufferAttribute(colors, 3)
-  );
-
   geometry.setIndex(
     new THREE.BufferAttribute(indices, 1)
   );
@@ -304,28 +598,25 @@ function createTerrainGeometry(
   geometry.computeVertexNormals();
   geometry.computeBoundingSphere();
 
-  return {
-    geometry,
-    centerElevation,
-    minSlope,
-    maxSlope,
-  };
+  return geometry;
 }
 
-function Product78Terrain({
+/* =====================================================
+   LUNAR SURFACE
+===================================================== */
+
+function LunarSurface({
   terrain,
   pixelColumn,
   pixelRow,
-  slopeMode,
 }: {
   terrain: LolaTerrainData;
   pixelColumn: number;
   pixelRow: number;
-  slopeMode: boolean;
 }) {
-  const terrainData = useMemo(
+  const geometry = useMemo(
     () =>
-      createTerrainGeometry(
+      createLunarGeometry(
         terrain,
         pixelColumn,
         pixelRow
@@ -336,129 +627,506 @@ function Product78Terrain({
   const material = useMemo(
     () =>
       new THREE.MeshStandardMaterial({
-        color: slopeMode ? "#ffffff" : "#92928D",
-        vertexColors: slopeMode,
+        color: LUNAR_REGOLITH_COLOR,
         roughness: 1,
         metalness: 0,
-        side: THREE.FrontSide,
+        side: THREE.DoubleSide,
       }),
-    [slopeMode]
+    []
   );
 
   useEffect(() => {
     return () => {
-      terrainData.geometry.dispose();
+      geometry.dispose();
       material.dispose();
     };
-  }, [terrainData, material]);
+  }, [geometry, material]);
 
   return (
     <mesh
-      geometry={terrainData.geometry}
+      geometry={geometry}
       material={material}
       castShadow
       receiveShadow
+      frustumCulled={false}
     />
   );
 }
 
-function toSceneDirection(
-  direction: CelestialEphemeris["sunDirection"]
-): THREE.Vector3 {
-  return new THREE.Vector3(
-    direction.east,
-    direction.up,
-    -direction.north
-  ).normalize();
+/* =====================================================
+   ANIMATED STARS
+===================================================== */
+
+const STAR_VERTEX_SHADER = `
+  uniform float uTime;
+
+  attribute float aPhase;
+  attribute float aSize;
+  attribute vec3 aColor;
+
+  varying float vAlpha;
+  varying vec3 vColor;
+
+  void main() {
+    float pulse =
+      0.88 + 0.12 * sin(uTime * 0.55 + aPhase);
+
+    vec4 mvPosition =
+      modelViewMatrix * vec4(position, 1.0);
+
+    gl_Position = projectionMatrix * mvPosition;
+    gl_PointSize = aSize * (0.85 + pulse * 0.15);
+
+    vAlpha = pulse;
+    vColor = aColor;
+  }
+`;
+
+const STAR_FRAGMENT_SHADER = `
+  varying float vAlpha;
+  varying vec3 vColor;
+
+  void main() {
+    vec2 point = gl_PointCoord - vec2(0.5);
+    float radius = length(point);
+
+    float core = 1.0 - smoothstep(0.04, 0.34, radius);
+    float glow = exp(-radius * 13.0) * 0.12;
+
+    float alpha = clamp(
+      (core + glow) * vAlpha,
+      0.0,
+      1.0
+    );
+
+    gl_FragColor = vec4(vColor, alpha);
+  }
+`;
+
+function createStarGeometry(): THREE.BufferGeometry {
+  const positions = new Float32Array(STAR_COUNT * 3);
+  const colors = new Float32Array(STAR_COUNT * 3);
+  const phases = new Float32Array(STAR_COUNT);
+  const sizes = new Float32Array(STAR_COUNT);
+
+  let seed = 7812345;
+
+  function random(): number {
+    seed =
+      (1664525 * seed + 1013904223) %
+      4294967296;
+
+    return seed / 4294967296;
+  }
+
+  for (let i = 0; i < STAR_COUNT; i++) {
+    const azimuth = random() * Math.PI * 2;
+    const elevation = 0.025 + random() * 0.975;
+
+    const horizontal = Math.sqrt(
+      1 - elevation * elevation
+    );
+
+    const offset = i * 3;
+
+    positions[offset] =
+      Math.cos(azimuth) * horizontal * STAR_RADIUS;
+
+    positions[offset + 1] =
+      elevation * STAR_RADIUS;
+
+    positions[offset + 2] =
+      Math.sin(azimuth) * horizontal * STAR_RADIUS;
+
+    const tint = random();
+
+    colors[offset] =
+      tint > 0.88 ? 1 : 0.82 + random() * 0.18;
+
+    colors[offset + 1] =
+      tint < 0.10 ? 0.84 : 0.90 + random() * 0.10;
+
+    colors[offset + 2] =
+      tint > 0.88 ? 0.82 : 1;
+
+    phases[i] = random() * Math.PI * 2;
+    sizes[i] = 1.0 + random() * 2.2;
+  }
+
+  const geometry = new THREE.BufferGeometry();
+
+  geometry.setAttribute(
+    "position",
+    new THREE.BufferAttribute(positions, 3)
+  );
+
+  geometry.setAttribute(
+    "aColor",
+    new THREE.BufferAttribute(colors, 3)
+  );
+
+  geometry.setAttribute(
+    "aPhase",
+    new THREE.BufferAttribute(phases, 1)
+  );
+
+  geometry.setAttribute(
+    "aSize",
+    new THREE.BufferAttribute(sizes, 1)
+  );
+
+  return geometry;
 }
 
-function CelestialBodies({
-  ephemeris,
+function AnimatedStarField() {
+  const geometry = useMemo(
+    () => createStarGeometry(),
+    []
+  );
+
+  const material = useMemo(
+    () =>
+      new THREE.ShaderMaterial({
+        uniforms: {
+          uTime: { value: 0 },
+        },
+        vertexShader: STAR_VERTEX_SHADER,
+        fragmentShader: STAR_FRAGMENT_SHADER,
+        transparent: true,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+        toneMapped: false,
+      }),
+    []
+  );
+
+  useFrame(({ clock }) => {
+    material.uniforms.uTime.value = clock.elapsedTime;
+  });
+
+  useEffect(() => {
+    return () => {
+      geometry.dispose();
+      material.dispose();
+    };
+  }, [geometry, material]);
+
+  return (
+    <points
+      geometry={geometry}
+      material={material}
+      frustumCulled={false}
+      renderOrder={10}
+    />
+  );
+}
+
+/* =====================================================
+   SUN AND EARTH MODELS
+===================================================== */
+
+function CelestialModel({
+  url,
+  position,
+  diameter,
+  emissive = false,
+  rotationSpeed = 0,
 }: {
-  ephemeris: CelestialEphemeris;
+  url: string;
+  position: THREE.Vector3;
+  diameter: number;
+  emissive?: boolean;
+  rotationSpeed?: number;
 }) {
+  const { scene } = useGLTF(url);
+  const modelRef = useRef<THREE.Group>(null);
+
+  const model = useMemo(() => {
+    const clone = scene.clone(true);
+    clone.updateMatrixWorld(true);
+
+    const bounds = new THREE.Box3().setFromObject(clone);
+    const size = bounds.getSize(new THREE.Vector3());
+    const center = bounds.getCenter(new THREE.Vector3());
+
+    const largestDimension = Math.max(
+      size.x,
+      size.y,
+      size.z
+    );
+
+    const group = new THREE.Group();
+
+    clone.position.sub(center);
+    group.add(clone);
+
+    if (largestDimension > 0) {
+      group.scale.setScalar(
+        diameter / largestDimension
+      );
+    }
+
+    group.traverse((object) => {
+      object.layers.set(1);
+
+      if (!(object instanceof THREE.Mesh)) {
+        return;
+      }
+
+      const materials = Array.isArray(object.material)
+        ? object.material
+        : [object.material];
+
+      const clonedMaterials = materials.map(
+        (sourceMaterial) => {
+          const material = sourceMaterial.clone();
+
+          if (
+            emissive &&
+            material instanceof THREE.MeshStandardMaterial
+          ) {
+            material.emissive.set("#ffb24d");
+            material.emissiveIntensity = 4.0;
+            material.toneMapped = false;
+          }
+
+          if (
+            emissive &&
+            material instanceof THREE.MeshBasicMaterial
+          ) {
+            material.color.set("#fff2d5");
+            material.toneMapped = false;
+          }
+
+          return material;
+        }
+      );
+
+      object.material = Array.isArray(object.material)
+        ? clonedMaterials
+        : clonedMaterials[0];
+
+      object.castShadow = false;
+      object.receiveShadow = false;
+    });
+
+    group.layers.set(1);
+
+    return group;
+  }, [scene, diameter, emissive]);
+
+  useEffect(() => {
+    return () => {
+      model.traverse((object) => {
+        if (!(object instanceof THREE.Mesh)) {
+          return;
+        }
+
+        const materials = Array.isArray(object.material)
+          ? object.material
+          : [object.material];
+
+        materials.forEach((material) => material.dispose());
+      });
+    };
+  }, [model]);
+
+  useFrame((_, delta) => {
+    if (modelRef.current && rotationSpeed !== 0) {
+      modelRef.current.rotation.y +=
+        rotationSpeed * Math.min(delta, 0.05);
+    }
+  });
+
+  return (
+    <group
+      ref={modelRef}
+      position={[position.x, position.y, position.z]}
+    >
+      <primitive object={model} />
+    </group>
+  );
+}
+
+/* =====================================================
+   REAL CELESTIAL POSITIONS AND LIGHTING
+===================================================== */
+
+function CelestialBodies({
+  terrain,
+  latitude,
+  longitude,
+  sun,
+  earth,
+}: {
+  terrain: LolaTerrainData;
+  latitude: number;
+  longitude: number;
+  sun: HorizonsObservation | null;
+  earth: HorizonsObservation | null;
+}) {
+  const sunAngularRadiusDeg =
+    sun
+      ? getAngularRadiusDeg(sun) ??
+        SUN_FALLBACK_ANGULAR_RADIUS_DEG
+      : null;
+
+  const earthAngularRadiusDeg =
+    earth
+      ? getAngularRadiusDeg(earth) ??
+        EARTH_FALLBACK_ANGULAR_RADIUS_DEG
+      : null;
+
+  const sunVisible = canRenderCelestialDisk(
+    sun,
+    SUN_FALLBACK_ANGULAR_RADIUS_DEG
+  );
+
+  const earthVisible = canRenderCelestialDisk(
+    earth,
+    EARTH_FALLBACK_ANGULAR_RADIUS_DEG
+  );
+
+  const sunlightFraction = getSunlightFraction(sun);
+
+  const directSunlightAvailable =
+    sunVisible && sunlightFraction > 0;
+
   const sunDirection = useMemo(
-    () => toSceneDirection(ephemeris.sunDirection),
-    [ephemeris.sunDirection]
+    () =>
+      sunVisible && sun
+        ? getLocalSkyDirection(
+            sun,
+            terrain,
+            latitude,
+            longitude
+          )
+        : null,
+    [sun, sunVisible, terrain, latitude, longitude]
   );
 
   const earthDirection = useMemo(
-    () => toSceneDirection(ephemeris.earthDirection),
-    [ephemeris.earthDirection]
+    () =>
+      earthVisible && earth
+        ? getLocalSkyDirection(
+            earth,
+            terrain,
+            latitude,
+            longitude
+          )
+        : null,
+    [earth, earthVisible, terrain, latitude, longitude]
   );
 
   const sunPosition = useMemo(
     () =>
       sunDirection
-        .clone()
-        .multiplyScalar(CELESTIAL_DISPLAY_DISTANCE),
+        ? sunDirection.clone().multiplyScalar(
+            CELESTIAL_DISTANCE
+          )
+        : null,
     [sunDirection]
   );
 
   const earthPosition = useMemo(
     () =>
       earthDirection
-        .clone()
-        .multiplyScalar(CELESTIAL_DISPLAY_DISTANCE),
+        ? earthDirection.clone().multiplyScalar(
+            CELESTIAL_DISTANCE
+          )
+        : null,
     [earthDirection]
   );
 
-  const sunRadius =
-    CELESTIAL_DISPLAY_DISTANCE *
-    Math.tan(0.2666 * Math.PI / 180);
+  const sunDiameter =
+    sunAngularRadiusDeg !== null
+      ? 2 *
+        CELESTIAL_DISTANCE *
+        Math.tan(
+          THREE.MathUtils.degToRad(sunAngularRadiusDeg)
+        ) *
+        CELESTIAL_VISUAL_SCALE
+      : null;
 
-  const earthRadius =
-    CELESTIAL_DISPLAY_DISTANCE *
-    Math.tan(ephemeris.earthAngularRadius);
+  const earthDiameter =
+    earthAngularRadiusDeg !== null
+      ? 2 *
+        CELESTIAL_DISTANCE *
+        Math.tan(
+          THREE.MathUtils.degToRad(earthAngularRadiusDeg)
+        ) *
+        CELESTIAL_VISUAL_SCALE
+      : null;
+
+  const modelAmbient = useMemo(() => {
+    const light = new THREE.AmbientLight("#ffffff", 0.75);
+    light.layers.set(1);
+    return light;
+  }, []);
+
+  const sunLightRef = useRef<THREE.DirectionalLight>(null);
+
+  useEffect(() => {
+    sunLightRef.current?.layers.enable(1);
+  }, [sunPosition, directSunlightAvailable]);
 
   return (
     <>
-      {ephemeris.sunElevation > 0 && (
+      <primitive object={modelAmbient} />
+
+      {directSunlightAvailable && sunPosition && (
         <directionalLight
-          color="#fff8e8"
-          intensity={2.0}
-          position={sunPosition}
+          ref={sunLightRef}
+          position={[
+            sunPosition.x,
+            sunPosition.y,
+            sunPosition.z,
+          ]}
+          intensity={2.6 * sunlightFraction}
+          color="#fff0d7"
           castShadow
           shadow-mapSize-width={2048}
           shadow-mapSize-height={2048}
-          shadow-camera-left={-4000}
-          shadow-camera-right={4000}
-          shadow-camera-top={4000}
-          shadow-camera-bottom={-4000}
+          shadow-camera-left={-3500}
+          shadow-camera-right={3500}
+          shadow-camera-top={3500}
+          shadow-camera-bottom={-3500}
           shadow-camera-near={0.1}
-          shadow-camera-far={12000}
+          shadow-camera-far={16000}
           shadow-bias={-0.0001}
           shadow-normalBias={0.02}
         />
       )}
 
-      {ephemeris.isSunVisible && (
-        <mesh position={sunPosition}>
-          <sphereGeometry args={[sunRadius, 48, 32]} />
-
-          <meshBasicMaterial
-            color="#fff2d5"
-            toneMapped={false}
+      {sunVisible &&
+        sunPosition &&
+        sunDiameter !== null && (
+          <CelestialModel
+            url="/models/sun.glb"
+            position={sunPosition}
+            diameter={sunDiameter}
+            emissive
+            rotationSpeed={0.0015}
           />
-        </mesh>
-      )}
+        )}
 
-      {ephemeris.isEarthVisible && (
-        <mesh position={earthPosition}>
-          <sphereGeometry args={[earthRadius, 64, 48]} />
-
-          <meshStandardMaterial
-            color="#477fae"
-            emissive="#10243a"
-            emissiveIntensity={0.25}
-            roughness={0.9}
-            metalness={0}
+      {earthVisible &&
+        earthPosition &&
+        earthDiameter !== null && (
+          <CelestialModel
+            url="/models/earth.glb"
+            position={earthPosition}
+            diameter={earthDiameter}
+            rotationSpeed={0.0005}
           />
-        </mesh>
-      )}
+        )}
     </>
   );
 }
+
+/* =====================================================
+   FIRST-PERSON CAMERA
+===================================================== */
 
 function ObserverCamera({
   look,
@@ -466,6 +1134,8 @@ function ObserverCamera({
   look: RefObject<LookState>;
 }) {
   useFrame(({ camera }) => {
+    camera.layers.enable(1);
+
     camera.position.set(
       0,
       OBSERVER_HEIGHT_METERS,
@@ -481,68 +1151,67 @@ function ObserverCamera({
   return null;
 }
 
+/* =====================================================
+   VISUALIZATION SCENE
+===================================================== */
+
 function LunarScene({
   terrain,
   pixelColumn,
   pixelRow,
   look,
-  ephemeris,
-  slopeMode,
+  sun,
+  earth,
+  observer,
 }: {
-  terrain: LolaTerrainData;
+  terrain: LolaTerrainData | null;
   pixelColumn: number;
   pixelRow: number;
   look: RefObject<LookState>;
-  ephemeris: CelestialEphemeris | null;
-  slopeMode: boolean;
+  sun: HorizonsObservation | null;
+  earth: HorizonsObservation | null;
+  observer: {
+    latitudeDeg: number;
+    longitudeEastDeg: number;
+  } | null;
 }) {
   return (
     <>
-      <color attach="background" args={["#020306"]} />
+      <color attach="background" args={["#020203"]} />
 
-      <fog attach="fog" args={["#020306", 3500, 12000]} />
+      <AnimatedStarField />
 
-      <ambientLight intensity={0.3} />
-
-      <hemisphereLight
-        color="#D8D8D2"
-        groundColor="#454541"
-        intensity={0.25}
-      />
-
-      <Stars
-        radius={14000}
-        depth={3000}
-        count={2600}
-        factor={3}
-        saturation={0}
-        fade
-        speed={0}
-      />
-
-      {ephemeris && (
-        <CelestialBodies ephemeris={ephemeris} />
+      {terrain && (
+        <LunarSurface
+          terrain={terrain}
+          pixelColumn={pixelColumn}
+          pixelRow={pixelRow}
+        />
       )}
 
-      <Product78Terrain
-        terrain={terrain}
-        pixelColumn={pixelColumn}
-        pixelRow={pixelRow}
-        slopeMode={slopeMode}
-      />
+      {terrain && observer && (sun || earth) && (
+        <Suspense fallback={null}>
+          <CelestialBodies
+            terrain={terrain}
+            latitude={observer.latitudeDeg}
+            longitude={observer.longitudeEastDeg}
+            sun={sun}
+            earth={earth}
+          />
+        </Suspense>
+      )}
 
       <ObserverCamera look={look} />
     </>
   );
 }
 
-function formatDegrees(radians: number): string {
-  return `${(
-    radians * 180 / Math.PI
-  ).toFixed(1)}°`;
-}
+/* =====================================================
+   MAIN COMPONENT
+===================================================== */
 
 export default function Lunar360Explorer({
+  siteId,
   latitude,
   longitude,
   pixelColumn,
@@ -553,10 +1222,8 @@ export default function Lunar360Explorer({
   const [terrain, setTerrain] =
     useState<LolaTerrainData | null>(null);
 
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [dragging, setDragging] = useState(false);
-  const [slopeMode, setSlopeMode] = useState(false);
+  const [horizons, setHorizons] =
+    useState<HorizonsResponse | null>(null);
 
   const look = useRef<LookState>({
     yaw: 0,
@@ -570,86 +1237,196 @@ export default function Lunar360Explorer({
     y: 0,
   });
 
-  const ephemeris = useMemo(() => {
-    if (
-      !missionDate ||
-      missionDate === "NOT SET" ||
-      !missionTime
-    ) {
-      return null;
-    }
-
-    const date = new Date(
-      `${missionDate}T${missionTime}:00Z`
-    );
-
-    if (!Number.isFinite(date.getTime())) {
-      return null;
-    }
-
-    try {
-      return calculateEphemeris(
-        date,
-        latitude,
-        longitude
-      );
-    } catch {
-      return null;
-    }
-  }, [
-    missionDate,
-    missionTime,
-    latitude,
-    longitude,
-  ]);
+  /* -----------------------------------------------
+     Load the selected site's actual NASA LOLA terrain.
+  ------------------------------------------------ */
 
   useEffect(() => {
     let cancelled = false;
 
-    async function initialize() {
+    setTerrain(null);
+    setHorizons(null);
+
+    async function initializeTerrain() {
       try {
-        setLoading(true);
-        setError(null);
+        const loaded = await loadLolaTerrainForSite(siteId);
 
-        const data = await loadLolaTerrain();
-
-        if (cancelled) return;
-
-        if (
-          !Number.isFinite(pixelColumn) ||
-          !Number.isFinite(pixelRow) ||
-          pixelColumn < 0 ||
-          pixelRow < 0 ||
-          pixelColumn >= data.width ||
-          pixelRow >= data.height
-        ) {
-          throw new Error(
-            "The selected raster pixel is outside Product 78 coverage."
-          );
+        if (cancelled) {
+          return;
         }
 
-        setTerrain(data);
-      } catch (err) {
+        sampleLolaHeightAtPixel(loaded, {
+          column: pixelColumn,
+          row: pixelRow,
+        });
+
+        setTerrain(loaded);
+
+        console.info("[LUNAPATH] Loaded selected LOLA site:", {
+          siteId,
+          width: loaded.width,
+          height: loaded.height,
+          metadata: loaded.metadata,
+        });
+      } catch (error) {
+        console.error(
+          `[LUNAPATH] NASA terrain unavailable for ${siteId}:`,
+          error
+        );
+
         if (!cancelled) {
-          setError(
-            err instanceof Error
-              ? err.message
-              : "Unable to load Product 78 terrain."
-          );
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
+          setTerrain(null);
         }
       }
     }
 
-    initialize();
+    initializeTerrain();
 
     return () => {
       cancelled = true;
     };
-  }, [pixelColumn, pixelRow]);
+  }, [siteId, pixelColumn, pixelRow]);
+
+  /* -----------------------------------------------
+     Fetch JPL Horizons at the selected location.
+  ------------------------------------------------ */
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const controller = new AbortController();
+
+    setHorizons(null);
+
+    if (!terrain) {
+      return () => {
+        cancelled = true;
+        controller.abort();
+      };
+    }
+
+    if (
+      !/^\d{4}-\d{2}-\d{2}$/.test(missionDate) ||
+      !/^\d{2}:\d{2}(?::\d{2})?$/.test(missionTime)
+    ) {
+      return () => {
+        cancelled = true;
+        controller.abort();
+      };
+    }
+
+    async function loadJplHorizons() {
+      try {
+        const query = new URLSearchParams({
+          date: missionDate,
+          time: missionTime,
+          lat: String(latitude),
+          lon: String(longitude),
+          pixelColumn: String(pixelColumn),
+          pixelRow: String(pixelRow),
+          siteId,
+        });
+
+        const response = await fetch(
+          `/api/horizons/selected-location?${query.toString()}`,
+          {
+            cache: "no-store",
+            signal: controller.signal,
+          }
+        );
+
+        const result =
+          (await response.json()) as HorizonsResponse;
+
+        if (!response.ok || !result.success) {
+          throw new Error(
+            result.error ||
+              `JPL Horizons request failed: HTTP ${response.status}.`
+          );
+        }
+
+        if (cancelled) {
+          return;
+        }
+
+        if (result.site?.id && result.site.id !== siteId) {
+          throw new Error(
+            `Site mismatch: requested ${siteId}, received ${result.site.id}.`
+          );
+        }
+
+        setHorizons(result);
+
+        console.info(
+          "[LUNAPATH] JPL selected-location result:",
+          {
+            requestedSiteId: siteId,
+            returnedSiteId: result.site?.id,
+            observer: result.observer,
+            sun: result.targets?.sun,
+            earth: result.targets?.earth,
+            terrainModel: result.terrainModel,
+          }
+        );
+      } catch (error) {
+        if (
+          !cancelled &&
+          !(
+            error instanceof DOMException &&
+            error.name === "AbortError"
+          )
+        ) {
+          console.error(
+            "[LUNAPATH] JPL Horizons data unavailable:",
+            error
+          );
+
+          setHorizons(null);
+        }
+      }
+    }
+
+    loadJplHorizons();
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [
+    terrain,
+    siteId,
+    latitude,
+    longitude,
+    pixelColumn,
+    pixelRow,
+    missionDate,
+    missionTime,
+  ]);
+
+  const sun = useMemo(
+    () => getFirstObservation(horizons?.targets?.sun),
+    [horizons]
+  );
+
+  const earth = useMemo(
+    () => getFirstObservation(horizons?.targets?.earth),
+    [horizons]
+  );
+
+  const observer = useMemo(() => {
+    if (!horizons?.observer) {
+      return null;
+    }
+
+    return {
+      latitudeDeg: horizons.observer.latitudeDeg,
+      longitudeEastDeg: horizons.observer.longitudeEastDeg,
+    };
+  }, [horizons]);
+
+  /* -----------------------------------------------
+     Mouse-look controls.
+  ------------------------------------------------ */
 
   function handlePointerDown(
     event: ReactPointerEvent<HTMLDivElement>
@@ -661,11 +1438,7 @@ export default function Lunar360Explorer({
       y: event.clientY,
     };
 
-    event.currentTarget.setPointerCapture(
-      event.pointerId
-    );
-
-    setDragging(true);
+    event.currentTarget.setPointerCapture(event.pointerId);
   }
 
   function handlePointerMove(
@@ -678,20 +1451,16 @@ export default function Lunar360Explorer({
       return;
     }
 
-    const deltaX =
-      event.clientX - pointer.current.x;
-
-    const deltaY =
-      event.clientY - pointer.current.y;
+    const dx = event.clientX - pointer.current.x;
+    const dy = event.clientY - pointer.current.y;
 
     pointer.current.x = event.clientX;
     pointer.current.y = event.clientY;
 
-    look.current.yaw -= deltaX * 0.0035;
-    look.current.pitch -= deltaY * 0.0035;
+    look.current.yaw -= dx * 0.0035;
 
-    look.current.pitch = THREE.MathUtils.clamp(
-      look.current.pitch,
+    look.current.pitch = clamp(
+      look.current.pitch - dy * 0.0035,
       -Math.PI / 2 + 0.02,
       Math.PI / 2 - 0.02
     );
@@ -700,71 +1469,22 @@ export default function Lunar360Explorer({
   function handlePointerUp(
     event: ReactPointerEvent<HTMLDivElement>
   ) {
-    if (
-      pointer.current.pointerId !== event.pointerId
-    ) {
+    if (pointer.current.pointerId !== event.pointerId) {
       return;
     }
 
     pointer.current.active = false;
     pointer.current.pointerId = -1;
-
-    setDragging(false);
   }
 
   function handlePointerCancel() {
     pointer.current.active = false;
     pointer.current.pointerId = -1;
-
-    setDragging(false);
-  }
-
-  if (loading) {
-    return (
-      <main className="flex min-h-screen items-center justify-center bg-[#030406] text-white">
-        <div className="w-[min(320px,80vw)]">
-          <p className="text-[10px] tracking-[0.3em] text-white/45">
-            LOADING PRODUCT 78
-          </p>
-
-          <div className="mt-5 h-px overflow-hidden bg-white/10">
-            <div className="h-full w-1/2 animate-pulse bg-white/70" />
-          </div>
-
-          <p className="mt-4 text-xs text-white/40">
-            Loading Shackleton Rim elevation data...
-          </p>
-        </div>
-      </main>
-    );
-  }
-
-  if (error || !terrain) {
-    return (
-      <main className="flex min-h-screen items-center justify-center bg-[#030406] px-6 text-center text-white">
-        <div className="max-w-lg">
-          <p className="text-[10px] tracking-[0.3em] text-red-300/70">
-            TERRAIN LOAD FAILED
-          </p>
-
-          <p className="mt-4 text-sm leading-6 text-white/60">
-            {error || "Product 78 terrain is unavailable."}
-          </p>
-
-          <a
-            href="/map"
-            className="mt-6 inline-flex border border-white/20 px-5 py-3 text-[10px] tracking-[0.2em] text-white/75 hover:border-white/50"
-          >
-            RETURN TO MISSION PLANNER
-          </a>
-        </div>
-      </main>
-    );
   }
 
   return (
     <main
-      className="relative h-[100dvh] min-h-[480px] w-full touch-none select-none overflow-hidden bg-[#030406]"
+      className="fixed inset-0 h-[100dvh] w-full overflow-hidden bg-black touch-none select-none"
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
@@ -773,167 +1493,62 @@ export default function Lunar360Explorer({
       <Canvas
         shadows
         camera={{
-          position: [
-            0,
-            OBSERVER_HEIGHT_METERS,
-            0,
-          ],
-          fov: 78,
-          near: 0.05,
-          far: 18000,
+          position: [0, OBSERVER_HEIGHT_METERS, 0],
+          fov: 72,
+          near: 0.1,
+          far: 30000,
         }}
         dpr={[1, 1.5]}
         gl={{
           antialias: true,
           alpha: false,
           powerPreference: "high-performance",
+          toneMapping: THREE.ACESFilmicToneMapping,
+          toneMappingExposure: 1,
         }}
       >
+        <color attach="background" args={["#020203"]} />
+
+        <ambientLight
+          color="#a9a9a4"
+          intensity={0.14}
+        />
+
+        <hemisphereLight
+          args={["#b9b9b5", "#3c3c3a", 0.22]}
+        />
+
         <LunarScene
           terrain={terrain}
           pixelColumn={pixelColumn}
           pixelRow={pixelRow}
           look={look}
-          ephemeris={ephemeris}
-          slopeMode={slopeMode}
+          sun={sun}
+          earth={earth}
+          observer={observer}
         />
       </Canvas>
 
-      <div className="pointer-events-none absolute left-5 top-5 z-10">
-        <p className="text-[9px] tracking-[0.28em] text-white/45">
-          LUNAPATH / SURFACE OBSERVATION
-        </p>
-
-        <p className="mt-2 text-sm font-medium text-white/85">
-          Shackleton Rim
-        </p>
-
-        <p className="mt-1 font-mono text-[10px] text-white/45">
-          {latitude.toFixed(5)}° / {longitude.toFixed(5)}° E
-        </p>
-      </div>
-
-      <div className="absolute left-5 top-[105px] z-20 pointer-events-auto">
-        <button
-          type="button"
-          onPointerDown={(event) => event.stopPropagation()}
-          onClick={() => setSlopeMode((current) => !current)}
-          aria-pressed={slopeMode}
-          className="border border-white/20 bg-black/65 px-3 py-2 text-[9px] tracking-[0.16em] text-white/80 backdrop-blur hover:border-white/50"
-        >
-          {slopeMode ? "SHOW NATURAL SURFACE" : "SHOW SLOPE ANALYSIS"}
-        </button>
-      </div>
-
-      {slopeMode && (
-        <div className="pointer-events-none absolute left-5 top-[150px] z-10 w-[190px] border border-white/10 bg-black/65 p-3 backdrop-blur">
-          <p className="text-[9px] tracking-[0.18em] text-white/75">
-            LOLA DERIVED SLOPE
-          </p>
-
-          <div
-            className="mt-3 h-2 w-full"
-            style={{
-              background:
-                "linear-gradient(to right, #285b9a, #319b91, #d4c65b, #d87942, #bd4545)",
-            }}
-          />
-
-          <div className="mt-2 flex justify-between font-mono text-[9px] text-white/55">
-            <span>0°</span>
-            <span>5°</span>
-            <span>15°</span>
-            <span>30°</span>
-            <span>45°+</span>
-          </div>
-
-          <p className="mt-2 text-[9px] leading-4 text-white/40">
-            Slope calculated from neighbouring elevation samples.
-          </p>
-        </div>
-      )}
-
-      <div className="pointer-events-none absolute right-5 top-5 z-10 text-right">
-        <p className="text-[9px] tracking-[0.2em] text-white/40">
-          MISSION UTC
-        </p>
-
-        <p className="mt-2 font-mono text-xs text-white/70">
-          {missionDate} · {missionTime}
-        </p>
-
-        {ephemeris ? (
-          <div className="mt-4 space-y-2">
-            <div>
-              <p className="text-[9px] tracking-[0.15em] text-white/35">
-                SUN · AZ / EL
-              </p>
-
-              <p className="mt-1 font-mono text-[10px] text-white/65">
-                {formatDegrees(ephemeris.sunAzimuth)} /{" "}
-                {formatDegrees(ephemeris.sunElevation)}
-              </p>
-
-              <p className="mt-1 text-[9px] text-white/35">
-                {ephemeris.isSunVisible
-                  ? "ABOVE GEOMETRIC HORIZON"
-                  : "BELOW GEOMETRIC HORIZON"}
-              </p>
-            </div>
-
-            <div>
-              <p className="text-[9px] tracking-[0.15em] text-white/35">
-                EARTH · AZ / EL
-              </p>
-
-              <p className="mt-1 font-mono text-[10px] text-white/65">
-                {formatDegrees(ephemeris.earthAzimuth)} /{" "}
-                {formatDegrees(ephemeris.earthElevation)}
-              </p>
-
-              <p className="mt-1 text-[9px] text-white/35">
-                {ephemeris.isEarthVisible
-                  ? "VISIBLE AT GEOMETRIC HORIZON"
-                  : "BELOW GEOMETRIC HORIZON"}
-              </p>
-            </div>
-          </div>
-        ) : (
-          <p className="mt-3 text-[9px] text-amber-200/60">
-            MISSION TIME UNAVAILABLE
-          </p>
-        )}
-      </div>
-
-      <div className="pointer-events-none absolute bottom-7 left-1/2 z-10 -translate-x-1/2 text-center">
-        <p className="text-[9px] tracking-[0.25em] text-white/65">
-          {dragging
-            ? "LOOKING AROUND"
-            : "DRAG TO LOOK AROUND"}
-        </p>
-
-        <p className="mt-2 text-[9px] text-white/30">
-          FIXED OBSERVATION POINT · NO MOVEMENT
-        </p>
-      </div>
-
       <a
         href="/map"
-        onPointerDown={(event) => event.stopPropagation()}
-        className="absolute bottom-6 left-5 z-20 border border-white/15 bg-black/40 px-4 py-3 text-[9px] tracking-[0.18em] text-white/65 backdrop-blur hover:border-white/40 hover:text-white"
+        onPointerDown={(
+          event: ReactPointerEvent<HTMLAnchorElement>
+        ) => event.stopPropagation()}
+        onPointerUp={(
+          event: ReactPointerEvent<HTMLAnchorElement>
+        ) => event.stopPropagation()}
+        className="absolute bottom-5 left-5 z-50 inline-flex items-center gap-2 border border-white/25 bg-black/70 px-4 py-3 text-[10px] font-medium tracking-[0.16em] text-white/85 shadow-lg backdrop-blur-md transition-colors hover:border-white/60 hover:bg-black/90 hover:text-white"
       >
+        <span aria-hidden="true">←</span>
         BACK TO PLANNER
       </a>
-
-      <div className="pointer-events-none absolute bottom-6 right-5 z-10 text-right">
-        <p className="text-[9px] tracking-[0.15em] text-white/35">
-          NASA LOLA · PRODUCT 78
-        </p>
-
-        <p className="mt-1 text-[9px] text-white/25">
-          5 METRE / PIXEL SOURCE DATA
-        </p>
-      </div>
     </main>
   );
 }
+
+/* =====================================================
+   PRELOAD MODELS
+===================================================== */
+
+useGLTF.preload("/models/sun.glb");
+useGLTF.preload("/models/earth.glb");

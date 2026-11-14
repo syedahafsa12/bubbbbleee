@@ -1,27 +1,37 @@
+
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-
 import type {
   PointerEvent as ReactPointerEvent,
   WheelEvent as ReactWheelEvent,
 } from "react";
 
 import {
-  loadLolaTerrain,
+  loadLolaTerrainForSite,
   isLolaPixelInsideRaster,
   type GeographicCoordinate,
   type LolaTerrainData,
   type RasterPixelCoordinate,
 } from "@/components/lib/lunar/terrainData";
 
+import type { Product78SiteId } from "@/components/lib/lunar/siteRegistry";
 import { lolaPixelToGeographic } from "@/components/lib/lunar/lunarMapCoordinates";
 
+interface LunarMapSelection {
+  coordinate: GeographicCoordinate;
+  pixel: RasterPixelCoordinate;
+}
+
 interface LunarMapProps {
+  siteId: Product78SiteId;
   onLocationSelect?: (
     coordinate: GeographicCoordinate,
     pixel: RasterPixelCoordinate,
   ) => void;
+  compact?: boolean;
+  initialSelection?: LunarMapSelection | null;
+  interactiveSelection?: boolean;
 }
 
 interface MapView {
@@ -44,14 +54,9 @@ interface DragState {
   moved: boolean;
 }
 
-const INITIAL_VIEW: MapView = {
-  scale: 0.2,
-  offsetX: 0,
-  offsetY: 0,
-};
-
 const MIN_ZOOM = 0.1;
 const MAX_ZOOM = 12;
+const DISPLAY_SAMPLE_STEP = 4;
 
 const LIGHT_AZIMUTH_DEGREES = 315;
 const LIGHT_ALTITUDE_DEGREES = 35;
@@ -67,16 +72,17 @@ function getElevationPercentiles(
   const range = maxElevation - minElevation;
 
   if (!Number.isFinite(range) || range <= 0) {
-    return {
-      low: minElevation,
-      high: maxElevation,
-    };
+    return { low: minElevation, high: maxElevation };
   }
 
   let validCount = 0;
 
-  for (let i = 0; i < elevations.length; i++) {
-    const value = elevations[i];
+  for (
+    let index = 0;
+    index < elevations.length;
+    index += DISPLAY_SAMPLE_STEP
+  ) {
+    const value = elevations[index];
 
     if (!Number.isFinite(value)) continue;
 
@@ -85,28 +91,23 @@ function getElevationPercentiles(
       Math.min(0.999999, (value - minElevation) / range),
     );
 
-    const bin = Math.floor(normalized * bins);
-
-    histogram[bin]++;
+    histogram[Math.floor(normalized * bins)]++;
     validCount++;
   }
 
   if (validCount === 0) {
-    return {
-      low: minElevation,
-      high: maxElevation,
-    };
+    return { low: minElevation, high: maxElevation };
   }
 
   const findPercentile = (percentile: number) => {
-    const target = Math.floor(validCount * percentile);
+    const target = Math.max(1, Math.floor(validCount * percentile));
     let accumulated = 0;
 
-    for (let i = 0; i < bins; i++) {
-      accumulated += histogram[i];
+    for (let index = 0; index < bins; index++) {
+      accumulated += histogram[index];
 
       if (accumulated >= target) {
-        return minElevation + (i / bins) * range;
+        return minElevation + (index / bins) * range;
       }
     }
 
@@ -132,29 +133,26 @@ function getElevationAt(
   return elevations[y * width + x];
 }
 
-/**
- * Builds a shaded-relief image from the actual LOLA elevation raster.
- *
- * This is a digital elevation model visualization, not photographic
- * lunar surface imagery.
- */
-function createElevationRaster(terrain: LolaTerrainData): HTMLCanvasElement {
+function createElevationRaster(
+  terrain: LolaTerrainData,
+): HTMLCanvasElement {
   const { width, height, elevations } = terrain;
+  const step = DISPLAY_SAMPLE_STEP;
+
+  const outputWidth = Math.ceil(width / step);
+  const outputHeight = Math.ceil(height / step);
 
   const raster = document.createElement("canvas");
+  raster.width = outputWidth;
+  raster.height = outputHeight;
 
-  raster.width = width;
-  raster.height = height;
-
-  const context = raster.getContext("2d", {
-    alpha: false,
-  });
+  const context = raster.getContext("2d", { alpha: false });
 
   if (!context) {
     throw new Error("Unable to create lunar map canvas.");
   }
 
-  const imageData = context.createImageData(width, height);
+  const imageData = context.createImageData(outputWidth, outputHeight);
 
   const { low, high } = getElevationPercentiles(
     elevations,
@@ -163,15 +161,12 @@ function createElevationRaster(terrain: LolaTerrainData): HTMLCanvasElement {
   );
 
   const elevationRange = Math.max(high - low, 1);
-
-  const resolution = Math.max(terrain.metadata.resolutionMeters, 0.001);
+  const sourceResolution = terrain.metadata.resolutionMeters || 5;
+  const resolution = Math.max(sourceResolution * step, 0.001);
 
   const azimuth = (LIGHT_AZIMUTH_DEGREES * Math.PI) / 180;
-
   const altitude = (LIGHT_ALTITUDE_DEGREES * Math.PI) / 180;
 
-  // Screen-coordinate light direction.
-  // Negative X and Y means light comes from the upper-left.
   const lightX = -Math.cos(altitude) * Math.sin(azimuth);
   const lightY = -Math.cos(altitude) * Math.cos(azimuth);
   const lightZ = Math.sin(altitude);
@@ -179,12 +174,20 @@ function createElevationRaster(terrain: LolaTerrainData): HTMLCanvasElement {
   const ambientLight = 0.32;
   const directionalLight = 0.68;
 
-  for (let row = 0; row < height; row++) {
-    for (let column = 0; column < width; column++) {
-      const index = row * width + column;
-      const elevation = elevations[index];
+  for (let outputRow = 0; outputRow < outputHeight; outputRow++) {
+    const sourceRow = Math.min(height - 1, outputRow * step);
 
-      const pixelOffset = index * 4;
+    for (
+      let outputColumn = 0;
+      outputColumn < outputWidth;
+      outputColumn++
+    ) {
+      const sourceColumn = Math.min(width - 1, outputColumn * step);
+
+      const sourceIndex = sourceRow * width + sourceColumn;
+      const elevation = elevations[sourceIndex];
+      const pixelOffset =
+        (outputRow * outputWidth + outputColumn) * 4;
 
       if (!Number.isFinite(elevation)) {
         imageData.data[pixelOffset] = 20;
@@ -194,66 +197,83 @@ function createElevationRaster(terrain: LolaTerrainData): HTMLCanvasElement {
         continue;
       }
 
-      // Horn's 3x3 method estimates the terrain gradient.
-      const z1 = getElevationAt(elevations, width, height, column - 1, row - 1);
-      const z2 = getElevationAt(elevations, width, height, column, row - 1);
-      const z3 = getElevationAt(elevations, width, height, column + 1, row - 1);
-      const z4 = getElevationAt(elevations, width, height, column - 1, row);
-      const z6 = getElevationAt(elevations, width, height, column + 1, row);
-      const z7 = getElevationAt(elevations, width, height, column - 1, row + 1);
-      const z8 = getElevationAt(elevations, width, height, column, row + 1);
-      const z9 = getElevationAt(elevations, width, height, column + 1, row + 1);
-
-      const validNeighbors = [z1, z2, z3, z4, z6, z7, z8, z9].every(
-        Number.isFinite,
+      const z1 = getElevationAt(
+        elevations, width, height, sourceColumn - step, sourceRow - step,
       );
+      const z2 = getElevationAt(
+        elevations, width, height, sourceColumn, sourceRow - step,
+      );
+      const z3 = getElevationAt(
+        elevations, width, height, sourceColumn + step, sourceRow - step,
+      );
+      const z4 = getElevationAt(
+        elevations, width, height, sourceColumn - step, sourceRow,
+      );
+      const z6 = getElevationAt(
+        elevations, width, height, sourceColumn + step, sourceRow,
+      );
+      const z7 = getElevationAt(
+        elevations, width, height, sourceColumn - step, sourceRow + step,
+      );
+      const z8 = getElevationAt(
+        elevations, width, height, sourceColumn, sourceRow + step,
+      );
+      const z9 = getElevationAt(
+        elevations, width, height, sourceColumn + step, sourceRow + step,
+      );
+
+      const validNeighbors = [
+        z1, z2, z3, z4, z6, z7, z8, z9,
+      ].every(Number.isFinite);
 
       let illumination = 0.72;
 
       if (validNeighbors) {
-        // X increases from left to right.
-        const dzdx = (z3 + 2 * z6 + z9 - (z1 + 2 * z4 + z7)) / (8 * resolution);
+        const dzdx =
+          (z3 + 2 * z6 + z9 - (z1 + 2 * z4 + z7)) /
+          (8 * resolution);
 
-        // Screen Y increases from top to bottom.
-        const dzdy = (z7 + 2 * z8 + z9 - (z1 + 2 * z2 + z3)) / (8 * resolution);
+        const dzdy =
+          (z7 + 2 * z8 + z9 - (z1 + 2 * z2 + z3)) /
+          (8 * resolution);
 
         const slopeX = dzdx * VERTICAL_EXAGGERATION;
         const slopeY = dzdy * VERTICAL_EXAGGERATION;
 
-        // Surface normal in screen coordinates.
         let normalX = -slopeX;
         let normalY = -slopeY;
         let normalZ = 1;
 
         const normalLength = Math.sqrt(
-          normalX * normalX + normalY * normalY + normalZ * normalZ,
+          normalX * normalX +
+          normalY * normalY +
+          normalZ * normalZ,
         );
 
         normalX /= normalLength;
         normalY /= normalLength;
         normalZ /= normalLength;
 
-        const dot = normalX * lightX + normalY * lightY + normalZ * lightZ;
+        const dot =
+          normalX * lightX +
+          normalY * lightY +
+          normalZ * lightZ;
 
-        illumination = ambientLight + directionalLight * Math.max(0, dot);
+        illumination =
+          ambientLight +
+          directionalLight * Math.max(0, dot);
       }
 
-      // Elevation contrast is independent of hillshade.
       const normalizedElevation = Math.max(
         0,
         Math.min(1, (elevation - low) / elevationRange),
       );
 
-      // Neutral lunar-grey base tone.
       const elevationTone = 102 + normalizedElevation * 66;
 
-      // Directional relief adds visible crater walls and ridges.
-      const shadedTone = Math.max(
-        12,
-        Math.min(235, elevationTone * illumination),
+      const shade = Math.round(
+        Math.max(12, Math.min(235, elevationTone * illumination)),
       );
-
-      const shade = Math.round(shadedTone);
 
       imageData.data[pixelOffset] = shade;
       imageData.data[pixelOffset + 1] = shade;
@@ -263,7 +283,6 @@ function createElevationRaster(terrain: LolaTerrainData): HTMLCanvasElement {
   }
 
   context.putImageData(imageData, 0, 0);
-
   return raster;
 }
 
@@ -272,8 +291,10 @@ function getFittedView(
   viewport: ViewportSize,
 ): MapView {
   const scale =
-    Math.min(viewport.width / terrain.width, viewport.height / terrain.height) *
-    0.94;
+    Math.min(
+      viewport.width / terrain.width,
+      viewport.height / terrain.height,
+    ) * 0.94;
 
   return {
     scale,
@@ -282,13 +303,18 @@ function getFittedView(
   };
 }
 
-export default function LunarMap({ onLocationSelect }: LunarMapProps) {
+export default function LunarMap({
+  siteId,
+  onLocationSelect,
+  compact = false,
+  initialSelection = null,
+  interactiveSelection = true,
+}: LunarMapProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rasterRef = useRef<HTMLCanvasElement | null>(null);
   const dragRef = useRef<DragState | null>(null);
 
   const [terrain, setTerrain] = useState<LolaTerrainData | null>(null);
-
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -298,23 +324,26 @@ export default function LunarMap({ onLocationSelect }: LunarMapProps) {
     height: 0,
   });
 
-  const [view, setView] = useState<MapView>(INITIAL_VIEW);
+  const [view, setView] = useState<MapView>({
+    scale: 0.2,
+    offsetX: 0,
+    offsetY: 0,
+  });
 
-  const [selected, setSelected] = useState<{
-    coordinate: GeographicCoordinate;
-    pixel: RasterPixelCoordinate;
-  } | null>(null);
+  const [selected, setSelected] = useState<LunarMapSelection | null>(null);
 
-  // Load and shade the actual Product 78 elevation data.
   useEffect(() => {
     let cancelled = false;
 
     async function initialize() {
-      try {
-        setLoading(true);
-        setError(null);
+      setLoading(true);
+      setError(null);
+      setTerrain(null);
+      rasterRef.current = null;
+      setSelected(null);
 
-        const loadedTerrain = await loadLolaTerrain();
+      try {
+        const loadedTerrain = await loadLolaTerrainForSite(siteId);
 
         if (cancelled) return;
 
@@ -329,7 +358,7 @@ export default function LunarMap({ onLocationSelect }: LunarMapProps) {
           setError(
             err instanceof Error
               ? err.message
-              : "Failed to load lunar elevation data.",
+              : `Failed to load LOLA data for ${siteId}.`,
           );
         }
       } finally {
@@ -339,14 +368,26 @@ export default function LunarMap({ onLocationSelect }: LunarMapProps) {
       }
     }
 
-    initialize();
+    void initialize();
 
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [siteId]);
 
-  // Track the map viewport.
+  useEffect(() => {
+    if (!terrain) return;
+
+    if (
+      initialSelection &&
+      isLolaPixelInsideRaster(initialSelection.pixel, terrain)
+    ) {
+      setSelected(initialSelection);
+    } else {
+      setSelected(null);
+    }
+  }, [terrain, initialSelection]);
+
   useEffect(() => {
     const canvas = canvasRef.current;
     const container = canvas?.parentElement;
@@ -361,36 +402,28 @@ export default function LunarMap({ onLocationSelect }: LunarMapProps) {
     });
 
     observer.observe(container);
-
     return () => observer.disconnect();
   }, []);
 
-  // Fit the raster when the data or viewport first becomes available.
   useEffect(() => {
     if (!terrain || viewport.width <= 0 || viewport.height <= 0) {
       return;
     }
 
-    // Intentional initial view update after terrain and viewport initialization.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setView((previous) => {
-      if (
-        previous.scale !== INITIAL_VIEW.scale ||
-        previous.offsetX !== INITIAL_VIEW.offsetX ||
-        previous.offsetY !== INITIAL_VIEW.offsetY
-      ) {
-        return previous;
-      }
-
-      return getFittedView(terrain, viewport);
-    });
+    setView(getFittedView(terrain, viewport));
   }, [terrain, viewport]);
-  // Render the raster and the selected coordinate.
+
   useEffect(() => {
     const canvas = canvasRef.current;
     const raster = rasterRef.current;
 
-    if (!canvas || !raster || viewport.width <= 0 || viewport.height <= 0) {
+    if (
+      !canvas ||
+      !raster ||
+      !terrain ||
+      viewport.width <= 0 ||
+      viewport.height <= 0
+    ) {
       return;
     }
 
@@ -399,14 +432,10 @@ export default function LunarMap({ onLocationSelect }: LunarMapProps) {
     canvas.width = Math.round(viewport.width * dpr);
     canvas.height = Math.round(viewport.height * dpr);
 
-    const context = canvas.getContext("2d", {
-      alpha: false,
-    });
-
+    const context = canvas.getContext("2d", { alpha: false });
     if (!context) return;
 
     context.setTransform(dpr, 0, 0, dpr, 0, 0);
-
     context.fillStyle = "#101214";
     context.fillRect(0, 0, viewport.width, viewport.height);
 
@@ -417,27 +446,32 @@ export default function LunarMap({ onLocationSelect }: LunarMapProps) {
       raster,
       view.offsetX,
       view.offsetY,
-      raster.width * view.scale,
-      raster.height * view.scale,
+      terrain.width * view.scale,
+      terrain.height * view.scale,
     );
 
     if (selected) {
-      const markerX = view.offsetX + selected.pixel.column * view.scale;
+      const markerX =
+        view.offsetX + (selected.pixel.column + 0.5) * view.scale;
 
-      const markerY = view.offsetY + selected.pixel.row * view.scale;
+      const markerY =
+        view.offsetY + (selected.pixel.row + 0.5) * view.scale;
 
-      // Subtle dark outline keeps the target visible on bright terrain.
       context.beginPath();
-      context.arc(markerX, markerY, 10, 0, Math.PI * 2);
-      context.strokeStyle = "rgba(0, 0, 0, 0.8)";
+      context.arc(markerX, markerY, compact ? 9 : 12, 0, Math.PI * 2);
+      context.fillStyle = "rgba(231, 199, 125, 0.12)";
+      context.fill();
+
+      context.beginPath();
+      context.arc(markerX, markerY, compact ? 7 : 9, 0, Math.PI * 2);
+      context.strokeStyle = "rgba(0, 0, 0, 0.85)";
       context.lineWidth = 4;
       context.stroke();
 
-      // Fine gold target ring.
       context.beginPath();
-      context.arc(markerX, markerY, 8, 0, Math.PI * 2);
+      context.arc(markerX, markerY, compact ? 5 : 7, 0, Math.PI * 2);
       context.strokeStyle = "#E7C77D";
-      context.lineWidth = 1.5;
+      context.lineWidth = 1.7;
       context.stroke();
 
       context.beginPath();
@@ -446,41 +480,47 @@ export default function LunarMap({ onLocationSelect }: LunarMapProps) {
       context.fill();
 
       context.beginPath();
-      context.moveTo(markerX - 14, markerY);
+      context.moveTo(markerX - 15, markerY);
       context.lineTo(markerX - 5, markerY);
       context.moveTo(markerX + 5, markerY);
-      context.lineTo(markerX + 14, markerY);
-      context.moveTo(markerX, markerY - 14);
+      context.lineTo(markerX + 15, markerY);
+      context.moveTo(markerX, markerY - 15);
       context.lineTo(markerX, markerY - 5);
       context.moveTo(markerX, markerY + 5);
-      context.lineTo(markerX, markerY + 14);
+      context.lineTo(markerX, markerY + 15);
 
       context.strokeStyle = "#E7C77D";
       context.lineWidth = 1;
       context.stroke();
     }
-  }, [terrain, viewport, view, selected]);
+  }, [terrain, viewport, view, selected, compact]);
 
   const selectMapPosition = useCallback(
     (screenX: number, screenY: number) => {
-      if (!terrain) return;
+      if (!interactiveSelection || !terrain || view.scale <= 0) return;
 
       const pixel: RasterPixelCoordinate = {
-        column: (screenX - view.offsetX) / view.scale,
-        row: (screenY - view.offsetY) / view.scale,
+        column: (screenX - view.offsetX) / view.scale - 0.5,
+        row: (screenY - view.offsetY) / view.scale - 0.5,
       };
 
-      if (!isLolaPixelInsideRaster(pixel, terrain)) {
+      if (
+        pixel.column < 0 ||
+        pixel.row < 0 ||
+        pixel.column > terrain.width - 1 ||
+        pixel.row > terrain.height - 1 ||
+        !isLolaPixelInsideRaster(pixel, terrain)
+      ) {
         return;
       }
 
       try {
-        const coordinate = lolaPixelToGeographic(pixel, terrain.metadata);
-
-        const selection = {
-          coordinate,
+        const coordinate = lolaPixelToGeographic(
           pixel,
-        };
+          terrain.metadata,
+        );
+
+        const selection = { coordinate, pixel };
 
         setSelected(selection);
         onLocationSelect?.(coordinate, pixel);
@@ -488,7 +528,7 @@ export default function LunarMap({ onLocationSelect }: LunarMapProps) {
         console.error("[LunarMap] Coordinate conversion failed:", err);
       }
     },
-    [terrain, view, onLocationSelect],
+    [terrain, view, onLocationSelect, interactiveSelection],
   );
 
   const zoomAt = useCallback(
@@ -500,7 +540,6 @@ export default function LunarMap({ onLocationSelect }: LunarMapProps) {
         );
 
         const mapX = (screenX - previous.offsetX) / previous.scale;
-
         const mapY = (screenY - previous.offsetY) / previous.scale;
 
         return {
@@ -513,7 +552,9 @@ export default function LunarMap({ onLocationSelect }: LunarMapProps) {
     [],
   );
 
-  const handleWheel = (event: ReactWheelEvent<HTMLCanvasElement>) => {
+  const handleWheel = (
+    event: ReactWheelEvent<HTMLCanvasElement>,
+  ) => {
     event.preventDefault();
 
     const rect = event.currentTarget.getBoundingClientRect();
@@ -525,7 +566,9 @@ export default function LunarMap({ onLocationSelect }: LunarMapProps) {
     );
   };
 
-  const handlePointerDown = (event: ReactPointerEvent<HTMLCanvasElement>) => {
+  const handlePointerDown = (
+    event: ReactPointerEvent<HTMLCanvasElement>,
+  ) => {
     event.currentTarget.setPointerCapture(event.pointerId);
 
     dragRef.current = {
@@ -538,9 +581,10 @@ export default function LunarMap({ onLocationSelect }: LunarMapProps) {
     };
   };
 
-  const handlePointerMove = (event: ReactPointerEvent<HTMLCanvasElement>) => {
+  const handlePointerMove = (
+    event: ReactPointerEvent<HTMLCanvasElement>,
+  ) => {
     const drag = dragRef.current;
-
     if (!drag || drag.pointerId !== event.pointerId) return;
 
     const deltaX = event.clientX - drag.startX;
@@ -560,15 +604,19 @@ export default function LunarMap({ onLocationSelect }: LunarMapProps) {
     }
   };
 
-  const handlePointerUp = (event: ReactPointerEvent<HTMLCanvasElement>) => {
+  const handlePointerUp = (
+    event: ReactPointerEvent<HTMLCanvasElement>,
+  ) => {
     const drag = dragRef.current;
-
     if (!drag || drag.pointerId !== event.pointerId) return;
 
     if (!drag.moved) {
       const rect = event.currentTarget.getBoundingClientRect();
 
-      selectMapPosition(event.clientX - rect.left, event.clientY - rect.top);
+      selectMapPosition(
+        event.clientX - rect.left,
+        event.clientY - rect.top,
+      );
     }
 
     dragRef.current = null;
@@ -576,38 +624,41 @@ export default function LunarMap({ onLocationSelect }: LunarMapProps) {
   };
 
   const resetView = () => {
-    if (!terrain || !viewport.width || !viewport.height) {
-      return;
-    }
-
+    if (!terrain || !viewport.width || !viewport.height) return;
     setView(getFittedView(terrain, viewport));
   };
 
   const formatCoordinate = (value: number) => value.toFixed(5);
 
   return (
-    <section className="w-full space-y-3">
+    <section className="w-full space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="text-xs font-semibold tracking-[0.2em] text-neutral-400">
-            PRODUCT 78 · LOLA SHADED RELIEF
+          <p className="text-[10px] font-semibold tracking-[0.22em] text-white/40">
+            NASA LOLA · PRODUCT 78 · SHADED RELIEF
           </p>
 
-          <h2 className="mt-1 text-lg font-medium text-white">
-            Select a lunar location
-          </h2>
+          <h3 className="mt-1 text-base font-medium text-white">
+            {compact
+              ? siteId.replaceAll("_", " ").replace("site", "Site ")
+              : "Selected lunar terrain"}
+          </h3>
 
-          <p className="mt-1 text-xs text-neutral-500">
-            Terrain shape is derived from measured elevation data.
-          </p>
+          {!compact && (
+            <p className="mt-1 text-xs text-white/40">
+              Elevation-derived terrain visualization for the selected landing site.
+            </p>
+          )}
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
           <button
             type="button"
-            onClick={() => zoomAt(viewport.width / 2, viewport.height / 2, 1.4)}
+            onClick={() =>
+              zoomAt(viewport.width / 2, viewport.height / 2, 1.4)
+            }
             disabled={!terrain}
-            className="rounded-lg border border-white/15 px-3 py-2 text-sm text-white hover:bg-white/10 disabled:opacity-40"
+            className="h-9 w-9 rounded-lg border border-white/15 bg-white/[0.025] text-lg text-white transition duration-200 hover:border-white/35 hover:bg-white/[0.09] active:scale-95 disabled:opacity-40"
             aria-label="Zoom in"
           >
             +
@@ -619,7 +670,7 @@ export default function LunarMap({ onLocationSelect }: LunarMapProps) {
               zoomAt(viewport.width / 2, viewport.height / 2, 1 / 1.4)
             }
             disabled={!terrain}
-            className="rounded-lg border border-white/15 px-3 py-2 text-sm text-white hover:bg-white/10 disabled:opacity-40"
+            className="h-9 w-9 rounded-lg border border-white/15 bg-white/[0.025] text-lg text-white transition duration-200 hover:border-white/35 hover:bg-white/[0.09] active:scale-95 disabled:opacity-40"
             aria-label="Zoom out"
           >
             −
@@ -629,22 +680,24 @@ export default function LunarMap({ onLocationSelect }: LunarMapProps) {
             type="button"
             onClick={resetView}
             disabled={!terrain}
-            className="rounded-lg border border-white/15 px-3 py-2 text-xs text-neutral-300 hover:bg-white/10 disabled:opacity-40"
+            className="h-9 rounded-lg border border-white/15 bg-white/[0.025] px-3 text-[10px] font-semibold tracking-wider text-white/65 transition duration-200 hover:border-white/35 hover:bg-white/[0.09] hover:text-white active:scale-[0.98] disabled:opacity-40"
           >
-            RESET
+            RESET VIEW
           </button>
         </div>
       </div>
 
-      <div className="relative h-[560px] w-full overflow-hidden rounded-xl border border-white/10 bg-[#101214]">
+      <div
+        className={`relative w-full overflow-hidden rounded-xl border border-white/10 bg-[#101214] ${
+          compact ? "h-[260px]" : "h-[min(65vh,620px)] min-h-[380px]"
+        }`}
+      >
         <canvas
           ref={canvasRef}
           role="img"
-          aria-label="Interactive LOLA shaded-relief elevation map. Drag to pan, scroll to zoom, and click to select a lunar coordinate."
+          aria-label={`Interactive LOLA shaded-relief elevation map for ${siteId}. Drag to pan and scroll to zoom.`}
           className="h-full w-full touch-none"
-          style={{
-            cursor: isDragging ? "grabbing" : "crosshair",
-          }}
+          style={{ cursor: isDragging ? "grabbing" : "grab" }}
           onWheel={handleWheel}
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
@@ -658,32 +711,30 @@ export default function LunarMap({ onLocationSelect }: LunarMapProps) {
         {loading && (
           <div className="absolute inset-0 flex items-center justify-center bg-[#101214]">
             <div className="text-center">
-              <div className="mx-auto mb-3 h-7 w-7 animate-spin rounded-full border-2 border-white/20 border-t-white" />
-              <p className="text-sm text-neutral-300">
-                Processing LOLA elevation data...
+              <div className="mx-auto mb-3 h-6 w-6 animate-spin rounded-full border-2 border-white/15 border-t-white" />
+              <p className="text-xs text-white/65">
+                Loading lunar elevation data...
               </p>
-              <p className="mt-1 text-xs text-neutral-500">
-                Generating terrain relief from the 3,200 × 3,200 raster
+              <p className="mt-1 text-[10px] text-white/35">
+                Preparing Product 78 raster
               </p>
             </div>
           </div>
         )}
 
         {error && (
-          <div className="absolute inset-0 flex items-center justify-center bg-[#101214] p-6">
+          <div className="absolute inset-0 flex items-center justify-center bg-[#101214] p-5">
             <div className="max-w-md text-center">
-              <p className="text-sm font-semibold text-red-400">
+              <p className="text-sm font-semibold text-red-300">
                 Map loading failed
               </p>
-
-              <p className="mt-2 break-words text-xs text-neutral-400">
+              <p className="mt-2 break-words text-xs text-white/45">
                 {error}
               </p>
-
               <button
                 type="button"
                 onClick={() => window.location.reload()}
-                className="mt-4 rounded-lg border border-white/20 px-4 py-2 text-sm text-white"
+                className="mt-4 rounded-lg border border-white/20 px-4 py-2 text-xs text-white transition hover:bg-white/10"
               >
                 Reload page
               </button>
@@ -691,70 +742,81 @@ export default function LunarMap({ onLocationSelect }: LunarMapProps) {
           </div>
         )}
 
-        <div className="pointer-events-none absolute bottom-3 left-3 rounded-md border border-white/10 bg-black/65 px-3 py-2 backdrop-blur">
-          <p className="text-[10px] tracking-wider text-neutral-400">
+        <div className="pointer-events-none absolute left-3 top-3 rounded-lg border border-white/10 bg-black/65 px-3 py-2 backdrop-blur-md">
+          <p className="text-[9px] tracking-[0.16em] text-white/40">
             ELEVATION RANGE
           </p>
-
-          <p className="text-xs text-neutral-200">
+          <p className="mt-1 text-xs font-medium text-white/85">
             {terrain
-              ? `${terrain.minElevation.toFixed(0)} m to ${terrain.maxElevation.toFixed(0)} m`
+              ? `${terrain.minElevation.toFixed(0)} m — ${terrain.maxElevation.toFixed(0)} m`
               : "Loading..."}
           </p>
         </div>
 
-        <div className="pointer-events-none absolute bottom-3 right-3 rounded-md border border-white/10 bg-black/65 px-3 py-2 text-[10px] text-neutral-300 backdrop-blur">
+        {selected && (
+          <div className="pointer-events-none absolute right-3 top-3 rounded-lg border border-[#e7c77d]/30 bg-black/75 px-3 py-2 backdrop-blur-md">
+            <p className="text-[9px] tracking-[0.16em] text-[#e7c77d]">
+              OBSERVER POSITION
+            </p>
+            <p className="mt-1 text-[10px] text-white/80">
+              {selected.pixel.column.toFixed(2)},{" "}
+              {selected.pixel.row.toFixed(2)}
+            </p>
+          </div>
+        )}
+
+        <div className="pointer-events-none absolute bottom-3 right-3 rounded-lg border border-white/10 bg-black/65 px-3 py-2 text-[9px] tracking-wider text-white/60 backdrop-blur-md">
           DRAG TO PAN · SCROLL TO ZOOM
         </div>
       </div>
 
-      <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
-        {selected ? (
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div>
-              <p className="text-[10px] tracking-[0.18em] text-neutral-500">
-                SELECTED LUNAR COORDINATES
-              </p>
+      {selected ? (
+        <div className="rounded-lg border border-[#e7c77d]/20 bg-[#e7c77d]/[0.035] p-3">
+          <p className="text-[9px] tracking-[0.16em] text-[#e7c77d]/75">
+            {interactiveSelection
+              ? "SELECTED COORDINATES"
+              : "API OBSERVER COORDINATES"}
+          </p>
 
-              <div className="mt-2 flex flex-wrap gap-x-6 gap-y-2">
-                <p className="font-mono text-sm text-white">
-                  {formatCoordinate(Math.abs(selected.coordinate.latitudeDeg))}°
-                  S
-                </p>
+          <div className="mt-2 flex flex-wrap gap-x-6 gap-y-2 font-mono text-xs text-white/85">
+            <span>
+              {formatCoordinate(Math.abs(selected.coordinate.latitudeDeg))}
+              ° {selected.coordinate.latitudeDeg < 0 ? "S" : "N"}
+            </span>
 
-                <p className="font-mono text-sm text-white">
-                  {formatCoordinate(selected.coordinate.longitudeEastDeg)}° E
-                </p>
-              </div>
+            <span>
+              {formatCoordinate(selected.coordinate.longitudeEastDeg)}° E
+            </span>
 
-              <p className="mt-2 text-xs text-neutral-500">
-                Raster pixel: {selected.pixel.column.toFixed(2)},{" "}
-                {selected.pixel.row.toFixed(2)}
-              </p>
-            </div>
-
-            <span className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-400">
-              LOCATION SELECTED
+            <span className="text-white/45">
+              Pixel {selected.pixel.column.toFixed(2)},{" "}
+              {selected.pixel.row.toFixed(2)}
             </span>
           </div>
-        ) : (
-          <div>
-            <p className="text-sm text-neutral-200">No location selected</p>
-
-            <p className="mt-1 text-xs text-neutral-500">
-              Click anywhere inside the displayed Product 78 raster.
-            </p>
-          </div>
-        )}
-      </div>
-
-      <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-neutral-500">
-        <p>Source: LOLA Product 78 · 5 m/pixel · South Polar Stereographic</p>
-
-        <p>
-          Shaded relief · Directional illumination · 1%–99% elevation contrast
+        </div>
+      ) : (
+        <p className="text-[11px] text-white/35">
+          {interactiveSelection
+            ? "Click inside the terrain raster to select a lunar coordinate."
+            : "The observer marker will appear when the mission API returns its raster position."}
         </p>
-      </div>
+      )}
+
+      {!compact && (
+        <div className="flex flex-wrap items-center justify-between gap-2 text-[10px] text-white/35">
+          <p>
+            Source: LOLA Product 78 ·{" "}
+            {terrain?.metadata.resolutionMeters ?? "—"} m/pixel
+          </p>
+
+          <p>
+            {terrain
+              ? `${terrain.width.toLocaleString()} × ${terrain.height.toLocaleString()} raster`
+              : "Raster dimensions loading"}
+            {" · "}Shaded relief · 1%–99% contrast
+          </p>
+        </div>
+      )}
     </section>
   );
 }

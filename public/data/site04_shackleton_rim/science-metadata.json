@@ -1,0 +1,83 @@
+{
+  "product": "NASA LOLA Product 78",
+  "archiveSite": "Site04",
+  "siteName": "Shackleton Rim",
+  "dimensions": {
+    "width": 3200,
+    "height": 3200
+  },
+  "resolutionMeters": 5,
+  "coordinateSystem": {
+    "projection": "South Polar Stereographic",
+    "referenceFrame": "MOON_ME",
+    "ephemeris": "DE421",
+    "linearUnits": "meters",
+    "pixelRegistration": "pixel area"
+  },
+  "georeferencing": {
+    "tiePoint": {
+      "column": 0,
+      "row": 0,
+      "x": -9000,
+      "y": 1000
+    },
+    "centralMeridianDegrees": 0,
+    "lunarRadiusMeters": 1737400
+  },
+  "pixelResolution": [
+    5,
+    -5,
+    0
+  ],
+  "bbox": [
+    -9000,
+    -15000,
+    7000,
+    1000
+  ],
+  "dataType": "Float32",
+  "byteOrder": "little-endian",
+  "layers": [
+    {
+      "key": "slope",
+      "source": "Site04_final_adj_5mpp_slp.tif",
+      "output": "slope.bin",
+      "description": "NASA Product 78 slope in degrees",
+      "minimum": 0,
+      "maximum": 69.64722442626953,
+      "noDataCount": 0,
+      "byteLength": 40960000
+    },
+    {
+      "key": "slopeUncertainty",
+      "source": "Site04_final_adj_5mpp_slperr.tif",
+      "output": "slope-uncertainty.bin",
+      "description": "NASA RMS slope uncertainty in degrees",
+      "minimum": 0.5000152587890625,
+      "maximum": 28.143030166625977,
+      "noDataCount": 0,
+      "byteLength": 40960000
+    },
+    {
+      "key": "elevationUncertainty",
+      "source": "Site04_final_adj_5mpp_toterr.tif",
+      "output": "elevation-uncertainty.bin",
+      "description": "NASA RMS elevation uncertainty in metres",
+      "minimum": 0.06385684758424759,
+      "maximum": 7.635095596313477,
+      "noDataCount": 0,
+      "byteLength": 40960000
+    },
+    {
+      "key": "observationCount",
+      "source": "Site04_final_adj_5mpp_ldec.tif",
+      "output": "observation-count.bin",
+      "description": "Number of LOLA observations contributing to each pixel",
+      "minimum": 0,
+      "maximum": 5,
+      "noDataCount": 0,
+      "byteLength": 40960000
+    }
+  ],
+  "sourceDirectory": "https://pgda.gsfc.nasa.gov/data/LOLA_5mpp/Site04/"
+}

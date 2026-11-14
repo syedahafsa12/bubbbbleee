@@ -30,7 +30,6 @@ export interface LolaTerrainMetadata {
   noDataPixelCount?: number;
   bbox: [number, number, number, number];
   pixelResolution: [number, number, number];
-
   coordinateSystem: {
     projection: string;
     referenceFrame: string;
@@ -38,7 +37,6 @@ export interface LolaTerrainMetadata {
     linearUnits: string;
     pixelRegistration: string;
   };
-
   georeferencing: {
     tiePoint: {
       column: number;
@@ -49,7 +47,6 @@ export interface LolaTerrainMetadata {
     centralMeridianDegrees: number;
     lunarRadiusMeters: number;
   };
-
   dataType: string;
   byteOrder: string;
 }
@@ -75,6 +72,53 @@ export interface LolaSample {
   elevationMeters: number;
 }
 
+export interface LolaScienceLayerMetadata {
+  key: string;
+  source: string;
+  output: string;
+  description: string;
+  minimum: number;
+  maximum: number;
+  noDataCount: number;
+  byteLength: number;
+}
+
+export interface LolaScienceMetadata {
+  product: string;
+  archiveSite: string;
+  siteName: string;
+  dimensions: {
+    width: number;
+    height: number;
+  };
+  resolutionMeters: number;
+  coordinateSystem: LolaTerrainMetadata["coordinateSystem"];
+  georeferencing: LolaTerrainMetadata["georeferencing"];
+  pixelResolution: [number, number, number];
+  bbox: [number, number, number, number];
+  dataType: string;
+  byteOrder: string;
+  layers: LolaScienceLayerMetadata[];
+  sourceDirectory: string;
+}
+
+export interface LolaScienceData {
+  metadata: LolaScienceMetadata;
+  slope: Float32Array;
+  slopeUncertainty: Float32Array;
+  elevationUncertainty: Float32Array;
+  observationCount: Float32Array;
+}
+
+export interface LolaScienceSample {
+  slopeDegrees: number;
+  slopeUncertaintyDegrees: number;
+  elevationUncertaintyMeters: number;
+  observationCount: number;
+  column: number;
+  row: number;
+}
+
 const ELEVATION_RANGE_TOLERANCE_METERS = 0.1;
 const GEOREFERENCE_TOLERANCE_METERS = 0.1;
 
@@ -83,10 +127,8 @@ export const SITE04_COORDINATES: GeographicCoordinate = {
   longitudeEastDeg: 188.13,
 };
 
-const terrainPromises = new Map<
-  Product78SiteId,
-  Promise<LolaTerrainData>
->();
+const terrainPromises = new Map<Product78SiteId, Promise<LolaTerrainData>>();
+const sciencePromises = new Map<Product78SiteId, Promise<LolaScienceData>>();
 
 export class LolaNoDataError extends Error {
   constructor(message = "Product 78 sample intersects a NoData pixel.") {
@@ -95,14 +137,9 @@ export class LolaNoDataError extends Error {
   }
 }
 
-/**
- * Validates a finite numeric value.
- */
 function assertFinite(value: number, name: string): void {
   if (!Number.isFinite(value)) {
-    throw new Error(
-      `${name} must be finite. Received: ${value}`
-    );
+    throw new Error(`${name} must be finite. Received: ${value}`);
   }
 }
 
@@ -110,214 +147,89 @@ function toRadians(degrees: number): number {
   return (degrees * Math.PI) / 180;
 }
 
-// function toDegrees(radians: number): number {
-//   return (radians * 180) / Math.PI;
-// }
-
-/**
- * Validates an object received from external JSON.
- */
-function requireObject(
-  value: unknown,
-  name: string
-): Record<string, unknown> {
-  if (
-    value === null ||
-    typeof value !== "object" ||
-    Array.isArray(value)
-  ) {
+function requireObject(value: unknown, name: string): Record<string, unknown> {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
     throw new Error(`${name} is missing or invalid.`);
   }
-
   return value as Record<string, unknown>;
 }
 
-/**
- * Validates a number received from external JSON.
- */
 function requireNumber(value: unknown, name: string): number {
-  if (
-    typeof value !== "number" ||
-    !Number.isFinite(value)
-  ) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
     throw new Error(`${name} is missing or invalid.`);
   }
-
   return value;
 }
 
-/**
- * Validates a non-empty string received from external JSON.
- */
 function requireString(value: unknown, name: string): string {
-  if (
-    typeof value !== "string" ||
-    value.trim().length === 0
-  ) {
+  if (typeof value !== "string" || !value.trim()) {
     throw new Error(`${name} is missing or invalid.`);
   }
-
   return value.trim();
 }
 
-/**
- * Normalizes metadata text for comparisons.
- *
- * Examples:
- * "South Polar Stereographic"
- * "south-polar-stereographic"
- *
- * Both become:
- * "southpolarstereographic"
- */
 function normalizeMetadataValue(value: string): string {
-  return value
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]/g, "");
+  return value.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
-/**
- * Compares two coordinates using a defined tolerance.
- */
 function approximatelyEqual(
   actual: number,
   expected: number,
-  tolerance: number
+  tolerance: number,
 ): boolean {
   return Math.abs(actual - expected) <= tolerance;
 }
 
-/**
- * Checks that the metadata bounding box agrees with
- * its tie point, pixel resolution and raster dimensions.
- *
- * Bounding box order:
- * [minimum X, minimum Y, maximum X, maximum Y]
- *
- * The tie point represents the outer corner of the
- * referenced pixel for PixelIsArea registration.
- */
-function validateBoundingBox(
-  metadata: LolaTerrainMetadata
-): void {
+function validateBoundingBox(metadata: LolaTerrainMetadata): void {
   const { width, height, bbox, pixelResolution } = metadata;
+  const tie = metadata.georeferencing.tiePoint;
+  const [pixelWidth, pixelHeight] = pixelResolution;
 
-  const tiePoint = metadata.georeferencing.tiePoint;
+  const x1 = tie.x - tie.column * pixelWidth;
+  const x2 = tie.x + (width - tie.column) * pixelWidth;
+  const y1 = tie.y - tie.row * pixelHeight;
+  const y2 = tie.y + (height - tie.row) * pixelHeight;
 
-  const pixelWidth = pixelResolution[0];
-  const pixelHeight = pixelResolution[1];
-
-  const xAtLeftEdge =
-    tiePoint.x - tiePoint.column * pixelWidth;
-
-  const xAtRightEdge =
-    tiePoint.x +
-    (width - tiePoint.column) * pixelWidth;
-
-  const yAtTopEdge =
-    tiePoint.y - tiePoint.row * pixelHeight;
-
-  const yAtBottomEdge =
-    tiePoint.y +
-    (height - tiePoint.row) * pixelHeight;
-
-  const expectedBoundingBox = {
-    minX: Math.min(xAtLeftEdge, xAtRightEdge),
-    minY: Math.min(yAtTopEdge, yAtBottomEdge),
-    maxX: Math.max(xAtLeftEdge, xAtRightEdge),
-    maxY: Math.max(yAtTopEdge, yAtBottomEdge),
-  };
-
-  const [actualMinX, actualMinY, actualMaxX, actualMaxY] =
-    bbox;
-
-  const tolerance = GEOREFERENCE_TOLERANCE_METERS;
-
-  const checks = [
-    {
-      name: "minimum X",
-      actual: actualMinX,
-      expected: expectedBoundingBox.minX,
-    },
-    {
-      name: "minimum Y",
-      actual: actualMinY,
-      expected: expectedBoundingBox.minY,
-    },
-    {
-      name: "maximum X",
-      actual: actualMaxX,
-      expected: expectedBoundingBox.maxX,
-    },
-    {
-      name: "maximum Y",
-      actual: actualMaxY,
-      expected: expectedBoundingBox.maxY,
-    },
+  const expected = [
+    Math.min(x1, x2),
+    Math.min(y1, y2),
+    Math.max(x1, x2),
+    Math.max(y1, y2),
   ];
 
-  for (const check of checks) {
-    if (
-      !approximatelyEqual(
-        check.actual,
-        check.expected,
-        tolerance
-      )
-    ) {
+  bbox.forEach((value, index) => {
+    if (!approximatelyEqual(value, expected[index], GEOREFERENCE_TOLERANCE_METERS)) {
       throw new Error(
-        `Raster bounding box ${check.name} mismatch. ` +
-        `Metadata: ${check.actual}; calculated: ${check.expected}.`
+        `Raster bounding box mismatch at index ${index}. ` +
+        `Metadata: ${value}; calculated: ${expected[index]}.`,
       );
     }
-  }
+  });
 }
 
-/**
- * Validates and converts raw metadata JSON into
- * a strongly typed LOLA metadata object.
- */
 function validateMetadata(raw: unknown): LolaTerrainMetadata {
   const root = requireObject(raw, "Root metadata");
+  const cs = requireObject(root.coordinateSystem, "coordinateSystem");
+  const geo = requireObject(root.georeferencing, "georeferencing");
+  const tie = requireObject(geo.tiePoint, "georeferencing.tiePoint");
 
-  const coordinateSystem = requireObject(
-    root.coordinateSystem,
-    "coordinateSystem"
-  );
-
-  const georeferencing = requireObject(
-    root.georeferencing,
-    "georeferencing"
-  );
-
-  const tiePoint = requireObject(
-    georeferencing.tiePoint,
-    "georeferencing.tiePoint"
-  );
-
-  const pixelResolution = root.pixelResolution;
-  const bbox = root.bbox;
-
-  if (
-    !Array.isArray(pixelResolution) ||
-    pixelResolution.length < 2
-  ) {
+  if (!Array.isArray(root.pixelResolution) || root.pixelResolution.length < 2) {
     throw new Error("Invalid pixelResolution.");
   }
 
-  if (!Array.isArray(bbox) || bbox.length !== 4) {
+  if (!Array.isArray(root.bbox) || root.bbox.length !== 4) {
     throw new Error("Invalid bounding box.");
   }
 
-  const rawNoDataValue = root.noDataValue;
+  const rawNoData = root.noDataValue;
   let noDataValue: number | "NaN" | undefined;
 
-  if (rawNoDataValue === "NaN") {
+  if (rawNoData === "NaN") {
     noDataValue = "NaN";
-  } else if (typeof rawNoDataValue === "number" && Number.isFinite(rawNoDataValue)) {
-    noDataValue = rawNoDataValue;
-  } else if (rawNoDataValue !== undefined && rawNoDataValue !== null) {
-    throw new Error("noDataValue must be a finite number or the string 'NaN'.");
+  } else if (typeof rawNoData === "number" && Number.isFinite(rawNoData)) {
+    noDataValue = rawNoData;
+  } else if (rawNoData !== undefined && rawNoData !== null) {
+    throw new Error("Invalid noDataValue.");
   }
 
   const noDataPixelCount =
@@ -329,7 +241,7 @@ function validateMetadata(raw: unknown): LolaTerrainMetadata {
     noDataPixelCount !== undefined &&
     (!Number.isSafeInteger(noDataPixelCount) || noDataPixelCount < 0)
   ) {
-    throw new Error("noDataPixelCount must be a non-negative safe integer.");
+    throw new Error("Invalid noDataPixelCount.");
   }
 
   if ((noDataValue === undefined) !== (noDataPixelCount === undefined)) {
@@ -339,432 +251,224 @@ function validateMetadata(raw: unknown): LolaTerrainMetadata {
   const metadata: LolaTerrainMetadata = {
     width: requireNumber(root.width, "width"),
     height: requireNumber(root.height, "height"),
-
-    minElevation: requireNumber(
-      root.minElevation,
-      "minElevation"
-    ),
-
-    maxElevation: requireNumber(
-      root.maxElevation,
-      "maxElevation"
-    ),
-
-    resolutionMeters: requireNumber(
-      root.resolutionMeters,
-      "resolutionMeters"
-    ),
-
-    ...(noDataValue !== undefined
-      ? { noDataValue, noDataPixelCount }
-      : {}),
-
+    minElevation: requireNumber(root.minElevation, "minElevation"),
+    maxElevation: requireNumber(root.maxElevation, "maxElevation"),
+    resolutionMeters: requireNumber(root.resolutionMeters, "resolutionMeters"),
+    ...(noDataValue !== undefined ? { noDataValue, noDataPixelCount } : {}),
     bbox: [
-      requireNumber(bbox[0], "bbox[0]"),
-      requireNumber(bbox[1], "bbox[1]"),
-      requireNumber(bbox[2], "bbox[2]"),
-      requireNumber(bbox[3], "bbox[3]"),
+      requireNumber(root.bbox[0], "bbox[0]"),
+      requireNumber(root.bbox[1], "bbox[1]"),
+      requireNumber(root.bbox[2], "bbox[2]"),
+      requireNumber(root.bbox[3], "bbox[3]"),
     ],
-
     pixelResolution: [
-      requireNumber(
-        pixelResolution[0],
-        "pixelResolution[0]"
-      ),
-      requireNumber(
-        pixelResolution[1],
-        "pixelResolution[1]"
-      ),
-      pixelResolution[2] === undefined
+      requireNumber(root.pixelResolution[0], "pixelResolution[0]"),
+      requireNumber(root.pixelResolution[1], "pixelResolution[1]"),
+      root.pixelResolution[2] === undefined
         ? 0
-        : requireNumber(
-          pixelResolution[2],
-          "pixelResolution[2]"
-        ),
+        : requireNumber(root.pixelResolution[2], "pixelResolution[2]"),
     ],
-
     coordinateSystem: {
-      projection: requireString(
-        coordinateSystem.projection,
-        "coordinateSystem.projection"
-      ),
-
-      referenceFrame: requireString(
-        coordinateSystem.referenceFrame,
-        "coordinateSystem.referenceFrame"
-      ),
-
-      ephemeris: requireString(
-        coordinateSystem.ephemeris,
-        "coordinateSystem.ephemeris"
-      ),
-
-      linearUnits: requireString(
-        coordinateSystem.linearUnits,
-        "coordinateSystem.linearUnits"
-      ),
-
-      pixelRegistration: requireString(
-        coordinateSystem.pixelRegistration,
-        "coordinateSystem.pixelRegistration"
-      ),
+      projection: requireString(cs.projection, "coordinateSystem.projection"),
+      referenceFrame: requireString(cs.referenceFrame, "coordinateSystem.referenceFrame"),
+      ephemeris: requireString(cs.ephemeris, "coordinateSystem.ephemeris"),
+      linearUnits: requireString(cs.linearUnits, "coordinateSystem.linearUnits"),
+      pixelRegistration: requireString(cs.pixelRegistration, "coordinateSystem.pixelRegistration"),
     },
-
     georeferencing: {
       tiePoint: {
-        column: requireNumber(
-          tiePoint.column,
-          "tiePoint.column"
-        ),
-
-        row: requireNumber(
-          tiePoint.row,
-          "tiePoint.row"
-        ),
-
-        x: requireNumber(
-          tiePoint.x,
-          "tiePoint.x"
-        ),
-
-        y: requireNumber(
-          tiePoint.y,
-          "tiePoint.y"
-        ),
+        column: requireNumber(tie.column, "tiePoint.column"),
+        row: requireNumber(tie.row, "tiePoint.row"),
+        x: requireNumber(tie.x, "tiePoint.x"),
+        y: requireNumber(tie.y, "tiePoint.y"),
       },
-
       centralMeridianDegrees: requireNumber(
-        georeferencing.centralMeridianDegrees,
-        "centralMeridianDegrees"
+        geo.centralMeridianDegrees,
+        "centralMeridianDegrees",
       ),
-
-      lunarRadiusMeters: requireNumber(
-        georeferencing.lunarRadiusMeters,
-        "lunarRadiusMeters"
-      ),
+      lunarRadiusMeters: requireNumber(geo.lunarRadiusMeters, "lunarRadiusMeters"),
     },
-
-    dataType: requireString(
-      root.dataType,
-      "dataType"
-    ),
-
-    byteOrder: requireString(
-      root.byteOrder,
-      "byteOrder"
-    ),
+    dataType: requireString(root.dataType, "dataType"),
+    byteOrder: requireString(root.byteOrder, "byteOrder"),
   };
 
-  // Validate raster dimensions.
   if (
     !Number.isSafeInteger(metadata.width) ||
-    metadata.width <= 0 ||
     !Number.isSafeInteger(metadata.height) ||
+    metadata.width <= 0 ||
     metadata.height <= 0
   ) {
-    throw new Error(
-      `Invalid raster dimensions: ${metadata.width} x ${metadata.height}.`
-    );
+    throw new Error("Invalid raster dimensions.");
   }
 
-  // Validate elevation range.
-  if (
-    metadata.minElevation >= metadata.maxElevation
-  ) {
-    throw new Error(
-      "Minimum elevation must be smaller than maximum elevation."
-    );
+  if (metadata.minElevation >= metadata.maxElevation) {
+    throw new Error("Invalid elevation range.");
   }
 
-  // Validate raster resolution.
   if (metadata.resolutionMeters <= 0) {
-    throw new Error(
-      "resolutionMeters must be greater than zero."
-    );
+    throw new Error("Invalid raster resolution.");
   }
 
-  const [pixelWidth, pixelHeight, pixelRotation] =
-    metadata.pixelResolution;
+  const [pw, ph, rotation] = metadata.pixelResolution;
+
+  if (pw === 0 || ph === 0 || Math.abs(rotation) > 1e-10) {
+    throw new Error("Unsupported raster pixel transform.");
+  }
+
+  const tolerance = Math.max(1e-6, metadata.resolutionMeters * 1e-6);
 
   if (
-    pixelWidth === 0 ||
-    pixelHeight === 0
+    !approximatelyEqual(Math.abs(pw), metadata.resolutionMeters, tolerance) ||
+    !approximatelyEqual(Math.abs(ph), metadata.resolutionMeters, tolerance)
   ) {
-    throw new Error(
-      "Invalid pixel resolution."
-    );
+    throw new Error("Pixel resolution does not match metadata.");
   }
 
-  // This implementation assumes a north-up raster without
-  // pixel rotation. The third pixelResolution entry is
-  // treated as the rotation term.
-  if (Math.abs(pixelRotation) > 1e-10) {
-    throw new Error(
-      `Rotated rasters are not supported. Pixel rotation: ${pixelRotation}.`
-    );
-  }
-
-  // Product 78 is expected to use square pixels.
-  const resolutionTolerance = Math.max(
-    1e-6,
-    metadata.resolutionMeters * 1e-6
-  );
-
-  if (
-    !approximatelyEqual(
-      Math.abs(pixelWidth),
-      metadata.resolutionMeters,
-      resolutionTolerance
-    ) ||
-    !approximatelyEqual(
-      Math.abs(pixelHeight),
-      metadata.resolutionMeters,
-      resolutionTolerance
-    )
-  ) {
-    throw new Error(
-      "Pixel resolution does not agree with resolutionMeters."
-    );
-  }
-
-  // Validate bounding-box ordering.
   const [minX, minY, maxX, maxY] = metadata.bbox;
 
   if (minX >= maxX || minY >= maxY) {
-    throw new Error(
-      "Invalid raster bounding box ordering."
-    );
+    throw new Error("Invalid raster bounding box ordering.");
   }
 
-  // Validate projection.
-  const projection = normalizeMetadataValue(
-    metadata.coordinateSystem.projection
+  if (
+    normalizeMetadataValue(metadata.coordinateSystem.projection) !==
+    "southpolarstereographic"
+  ) {
+    throw new Error("Unsupported projection.");
+  }
+
+  const units = normalizeMetadataValue(metadata.coordinateSystem.linearUnits);
+
+  if (!["meters", "metres", "m"].includes(units)) {
+    throw new Error("Expected metre coordinate units.");
+  }
+
+  const registration = normalizeMetadataValue(
+    metadata.coordinateSystem.pixelRegistration,
   );
 
-  if (projection !== "southpolarstereographic") {
-    throw new Error(
-      `Unsupported projection: ${metadata.coordinateSystem.projection}.`
-    );
+  if (!["pixelarea", "pixelisarea"].includes(registration)) {
+    throw new Error("Expected PixelIsArea registration.");
   }
 
-  // Validate horizontal units.
-  const linearUnits = normalizeMetadataValue(
-    metadata.coordinateSystem.linearUnits
-  );
-
-  if (
-    linearUnits !== "meters" &&
-    linearUnits !== "metres" &&
-    linearUnits !== "m"
-  ) {
-    throw new Error(
-      `Expected raster coordinates in metres. Received: ${metadata.coordinateSystem.linearUnits}.`
-    );
-  }
-
-  // Validate pixel registration.
-  const pixelRegistration = normalizeMetadataValue(
-    metadata.coordinateSystem.pixelRegistration
-  );
-
-  if (
-    pixelRegistration !== "pixelarea" &&
-    pixelRegistration !== "pixelisarea"
-  ) {
-    throw new Error(
-      `Expected PixelIsArea registration. Received: ${metadata.coordinateSystem.pixelRegistration}.`
-    );
-  }
-
-  // Validate reference geometry.
-  if (
-    metadata.georeferencing.lunarRadiusMeters <= 0
-  ) {
-    throw new Error(
-      "Invalid lunar radius."
-    );
+  if (metadata.georeferencing.lunarRadiusMeters <= 0) {
+    throw new Error("Invalid lunar radius.");
   }
 
   if (
-    metadata.georeferencing.centralMeridianDegrees < -360 ||
-    metadata.georeferencing.centralMeridianDegrees > 360
+    !Number.isSafeInteger(metadata.georeferencing.tiePoint.column) ||
+    !Number.isSafeInteger(metadata.georeferencing.tiePoint.row)
   ) {
-    throw new Error(
-      "Invalid central meridian."
-    );
+    throw new Error("Tie point pixel coordinates must be integers.");
   }
 
-  if (
-    !Number.isSafeInteger(
-      metadata.georeferencing.tiePoint.column
-    ) ||
-    !Number.isSafeInteger(
-      metadata.georeferencing.tiePoint.row
-    )
-  ) {
-    throw new Error(
-      "Tie point pixel coordinates must be integers."
-    );
+  if (normalizeMetadataValue(metadata.dataType) !== "float32") {
+    throw new Error("Expected Float32 raster data.");
   }
 
-  // Validate Float32 encoding.
-  const dataType = normalizeMetadataValue(
-    metadata.dataType
-  );
-
-  if (dataType !== "float32") {
-    throw new Error(
-      `Expected Float32 elevation data. Received: ${metadata.dataType}.`
-    );
+  if (!["littleendian", "le"].includes(normalizeMetadataValue(metadata.byteOrder))) {
+    throw new Error("Expected little-endian raster data.");
   }
 
-  // The decoder below explicitly reads little-endian values.
-  const byteOrder = normalizeMetadataValue(
-    metadata.byteOrder
-  );
-
-  if (
-    byteOrder !== "littleendian" &&
-    byteOrder !== "le"
-  ) {
-    throw new Error(
-      `Expected little-endian elevation data. Received: ${metadata.byteOrder}.`
-    );
-  }
-
-  // Make sure the advertised bounding box agrees with
-  // the georeferencing information.
   validateBoundingBox(metadata);
-
   return metadata;
 }
 
-/**
- * Decodes the raw Float32 little-endian LOLA raster.
- *
- * This is the single decoding implementation used by
- * both direct binary decoding and asynchronous loading.
- */
+function decodeFloat32(bytes: Uint8Array, expectedPixels: number, name: string): Float32Array {
+  const expectedBytes = expectedPixels * Float32Array.BYTES_PER_ELEMENT;
+
+  if (bytes.byteLength !== expectedBytes) {
+    throw new Error(
+      `${name} size mismatch. Expected ${expectedBytes} bytes; received ${bytes.byteLength}.`,
+    );
+  }
+
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const result = new Float32Array(expectedPixels);
+
+  for (let i = 0; i < expectedPixels; i++) {
+    const value = view.getFloat32(i * 4, true);
+
+    if (!Number.isFinite(value)) {
+      throw new Error(`${name} contains a non-finite value at pixel ${i}.`);
+    }
+
+    result[i] = value;
+  }
+
+  return result;
+}
+
 export function decodeLolaTerrain(
   rawMetadata: unknown,
-  bytes: Uint8Array
+  bytes: Uint8Array,
 ): LolaTerrainData {
   const metadata = validateMetadata(rawMetadata);
-
-  const expectedPixels =
-    metadata.width * metadata.height;
+  const expectedPixels = metadata.width * metadata.height;
 
   if (!Number.isSafeInteger(expectedPixels)) {
+    throw new Error("Terrain dimensions exceed safe pixel count.");
+  }
+
+  if (bytes.byteLength !== expectedPixels * 4) {
     throw new Error(
-      "Terrain dimensions exceed the maximum safe pixel count."
+      `LOLA raster size mismatch. Expected ${expectedPixels * 4}; received ${bytes.byteLength}.`,
     );
   }
 
-  const bytesPerElevation =
-    Float32Array.BYTES_PER_ELEMENT;
-
-  const expectedBytes =
-    expectedPixels * bytesPerElevation;
-
-  if (
-    !Number.isSafeInteger(expectedBytes) ||
-    bytes.byteLength !== expectedBytes
-  ) {
-    throw new Error(
-      `LOLA raster size mismatch. Expected ${expectedBytes} bytes, received ${bytes.byteLength}.`
-    );
-  }
-
-  // DataView allows explicit little-endian decoding,
-  // independent of the host machine's native byte order.
-  const view = new DataView(
-    bytes.buffer,
-    bytes.byteOffset,
-    bytes.byteLength
-  );
-
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const elevations = new Float32Array(expectedPixels);
 
   let actualMin = Infinity;
   let actualMax = -Infinity;
   let actualNoDataCount = 0;
 
-  for (
-    let index = 0;
-    index < expectedPixels;
-    index++
-  ) {
-    const byteOffset =
-      index * bytesPerElevation;
+  for (let i = 0; i < expectedPixels; i++) {
+    const value = view.getFloat32(i * 4, true);
 
-    const elevation = view.getFloat32(
-      byteOffset,
-      true
-    );
-
-    const isDeclaredNoData =
+    const isNoData =
       metadata.noDataValue === "NaN"
-        ? Number.isNaN(elevation)
+        ? Number.isNaN(value)
         : typeof metadata.noDataValue === "number"
-          ? elevation === Math.fround(metadata.noDataValue)
+          ? value === Math.fround(metadata.noDataValue)
           : false;
 
-    if (isDeclaredNoData) {
+    if (isNoData) {
       actualNoDataCount++;
-      elevations[index] = Number.NaN;
+      elevations[i] = Number.NaN;
       continue;
     }
 
-    if (!Number.isFinite(elevation)) {
-      throw new Error(
-        `Invalid elevation at binary index ${index}; non-finite values must match an explicitly declared NoData value.`
-      );
+    if (!Number.isFinite(value)) {
+      throw new Error(`Invalid elevation at binary index ${i}.`);
     }
 
-    elevations[index] = elevation;
-
-    if (elevation < actualMin) {
-      actualMin = elevation;
-    }
-
-    if (elevation > actualMax) {
-      actualMax = elevation;
-    }
+    elevations[i] = value;
+    actualMin = Math.min(actualMin, value);
+    actualMax = Math.max(actualMax, value);
   }
 
-  if (
-    actualNoDataCount !== (metadata.noDataPixelCount ?? 0)
-  ) {
-    throw new Error(
-      `NoData count mismatch. Metadata declares ${metadata.noDataPixelCount ?? 0}, raster contains ${actualNoDataCount}.`
-    );
+  if (actualNoDataCount !== (metadata.noDataPixelCount ?? 0)) {
+    throw new Error("Elevation NoData count does not match metadata.");
   }
 
   if (!Number.isFinite(actualMin) || !Number.isFinite(actualMax)) {
-    throw new Error("Terrain raster contains no valid finite elevations.");
+    throw new Error("Terrain contains no valid elevations.");
   }
 
   if (
-    actualMin < metadata.minElevation -
-    ELEVATION_RANGE_TOLERANCE_METERS ||
-    actualMax > metadata.maxElevation +
-    ELEVATION_RANGE_TOLERANCE_METERS
+    actualMin < metadata.minElevation - ELEVATION_RANGE_TOLERANCE_METERS ||
+    actualMax > metadata.maxElevation + ELEVATION_RANGE_TOLERANCE_METERS
   ) {
-    throw new Error(
-      "Actual raster elevation values fall outside the metadata elevation range. " +
-      `Actual: ${actualMin} to ${actualMax}; ` +
-      `metadata: ${metadata.minElevation} to ${metadata.maxElevation}.`
-    );
+    throw new Error("Elevation values fall outside the declared metadata range.");
   }
 
-  console.info("[LOLA] Binary decoded:", {
+  console.info("[LOLA] DEM decoded:", {
     dimensions: `${metadata.width} x ${metadata.height}`,
-    pixelCount: expectedPixels,
+    resolutionMeters: metadata.resolutionMeters,
     actualMin,
     actualMax,
-    metadataMin: metadata.minElevation,
-    metadataMax: metadata.maxElevation,
-    byteOrder: metadata.byteOrder,
+    noDataCount: actualNoDataCount,
   });
 
   return {
@@ -778,55 +482,146 @@ export function decodeLolaTerrain(
   };
 }
 
-/**
- * Loads one registered Product78 site's metadata and elevation raster.
- *
- * Concurrent callers for the same site share a promise. Failed loads are
- * removed from the cache so later requests can retry.
- */
-export async function loadLolaTerrainForSite(
-  siteId: Product78SiteId = DEFAULT_PRODUCT78_SITE_ID
-): Promise<LolaTerrainData> {
-  const site = getProduct78Site(siteId);
-  const cached = terrainPromises.get(siteId);
+function validateScienceMetadata(raw: unknown): LolaScienceMetadata {
+  const root = requireObject(raw, "Science metadata");
+  const dimensions = requireObject(root.dimensions, "Science dimensions");
 
+  if (!Array.isArray(root.layers)) {
+    throw new Error("Science metadata layers are missing.");
+  }
+
+  const layers = root.layers.map((item, index) => {
+    const layer = requireObject(item, `layers[${index}]`);
+
+    const result: LolaScienceLayerMetadata = {
+      key: requireString(layer.key, `layers[${index}].key`),
+      source: requireString(layer.source, `layers[${index}].source`),
+      output: requireString(layer.output, `layers[${index}].output`),
+      description: requireString(layer.description, `layers[${index}].description`),
+      minimum: requireNumber(layer.minimum, `layers[${index}].minimum`),
+      maximum: requireNumber(layer.maximum, `layers[${index}].maximum`),
+      noDataCount: requireNumber(layer.noDataCount, `layers[${index}].noDataCount`),
+      byteLength: requireNumber(layer.byteLength, `layers[${index}].byteLength`),
+    };
+
+    if (
+      result.minimum > result.maximum ||
+      result.noDataCount !== 0 ||
+      result.byteLength !== 3200 * 3200 * 4
+    ) {
+      throw new Error(`Invalid science layer metadata: ${result.key}.`);
+    }
+
+    return result;
+  });
+
+  const expectedKeys = [
+    "slope",
+    "slopeUncertainty",
+    "elevationUncertainty",
+    "observationCount",
+  ];
+
+  for (const key of expectedKeys) {
+    if (!layers.some((layer) => layer.key === key)) {
+      throw new Error(`Science metadata is missing the ${key} layer.`);
+    }
+  }
+
+  const metadata: LolaScienceMetadata = {
+    product: requireString(root.product, "product"),
+    archiveSite: requireString(root.archiveSite, "archiveSite"),
+    siteName: requireString(root.siteName, "siteName"),
+    dimensions: {
+      width: requireNumber(dimensions.width, "dimensions.width"),
+      height: requireNumber(dimensions.height, "dimensions.height"),
+    },
+    resolutionMeters: requireNumber(root.resolutionMeters, "resolutionMeters"),
+    coordinateSystem: root.coordinateSystem as LolaTerrainMetadata["coordinateSystem"],
+    georeferencing: root.georeferencing as LolaTerrainMetadata["georeferencing"],
+    pixelResolution: root.pixelResolution as [number, number, number],
+    bbox: root.bbox as [number, number, number, number],
+    dataType: requireString(root.dataType, "dataType"),
+    byteOrder: requireString(root.byteOrder, "byteOrder"),
+    layers,
+    sourceDirectory: requireString(root.sourceDirectory, "sourceDirectory"),
+  };
+
+  if (
+    metadata.dimensions.width !== 3200 ||
+    metadata.dimensions.height !== 3200 ||
+    metadata.resolutionMeters !== 5 ||
+    normalizeMetadataValue(metadata.dataType) !== "float32" ||
+    !["littleendian", "le"].includes(normalizeMetadataValue(metadata.byteOrder))
+  ) {
+    throw new Error("Science raster dimensions, resolution, or encoding are unexpected.");
+  }
+
+  return metadata;
+}
+
+function validateScienceArray(
+  values: Float32Array,
+  layer: LolaScienceLayerMetadata,
+): void {
+  let actualMin = Infinity;
+  let actualMax = -Infinity;
+
+  for (let i = 0; i < values.length; i++) {
+    const value = values[i];
+
+    if (!Number.isFinite(value)) {
+      throw new Error(`${layer.key} contains an invalid value at pixel ${i}.`);
+    }
+
+    actualMin = Math.min(actualMin, value);
+    actualMax = Math.max(actualMax, value);
+  }
+
+  const tolerance = 0.001;
+
+  if (
+    actualMin < layer.minimum - tolerance ||
+    actualMax > layer.maximum + tolerance
+  ) {
+    throw new Error(
+      `${layer.key} values do not match science metadata. ` +
+      `Actual ${actualMin}–${actualMax}; expected ${layer.minimum}–${layer.maximum}.`,
+    );
+  }
+}
+
+async function fetchBinary(path: string): Promise<Uint8Array> {
+  const response = await fetch(path, { cache: "force-cache" });
+
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status} loading ${path}`);
+  }
+
+  return new Uint8Array(await response.arrayBuffer());
+}
+
+export async function loadLolaTerrainForSite(
+  siteId: Product78SiteId = DEFAULT_PRODUCT78_SITE_ID,
+): Promise<LolaTerrainData> {
+  const cached = terrainPromises.get(siteId);
   if (cached) return cached;
 
   const pending = (async () => {
-    console.info(`[LOLA] Loading Product78 ${site.archiveSite}...`);
+    const site = getProduct78Site(siteId);
+    const base = `/data/${site.dataDirectory}`;
 
-    const dataPath = `/data/${site.dataDirectory}`;
-    const [metadataResponse, elevationResponse] = await Promise.all([
-      fetch(`${dataPath}/metadata.json`, { cache: "no-store" }),
-      fetch(`${dataPath}/elevation.bin`, { cache: "no-store" }),
+    const [metadataResponse, elevationBytes] = await Promise.all([
+      fetch(`${base}/metadata.json`, { cache: "force-cache" }),
+      fetchBinary(`${base}/elevation.bin`),
     ]);
 
     if (!metadataResponse.ok) {
-      throw new Error(
-        `Product78 ${site.archiveSite} metadata HTTP error: ${metadataResponse.status}`
-      );
+      throw new Error(`Terrain metadata HTTP error: ${metadataResponse.status}`);
     }
 
-    if (!elevationResponse.ok) {
-      throw new Error(
-        `Product78 ${site.archiveSite} elevation HTTP error: ${elevationResponse.status}`
-      );
-    }
-
-    const rawMetadata: unknown = await metadataResponse.json();
-    const buffer = await elevationResponse.arrayBuffer();
-    const terrain = decodeLolaTerrain(rawMetadata, new Uint8Array(buffer));
-
-    console.info("[LOLA] Product78 site loaded:", {
-      siteId,
-      archiveSite: site.archiveSite,
-      dimensions: `${terrain.width} x ${terrain.height}`,
-      resolutionMeters: terrain.resolutionMeters,
-      noDataPixelCount: terrain.metadata.noDataPixelCount ?? 0,
-      binarySizeBytes: buffer.byteLength,
-    });
-
-    return terrain;
+    const metadata: unknown = await metadataResponse.json();
+    return decodeLolaTerrain(metadata, elevationBytes);
   })();
 
   terrainPromises.set(siteId, pending);
@@ -834,45 +629,114 @@ export async function loadLolaTerrainForSite(
   try {
     return await pending;
   } catch (error) {
-    if (terrainPromises.get(siteId) === pending) {
-      terrainPromises.delete(siteId);
-    }
-    console.error(`[LOLA] Product78 ${site.archiveSite} load failed:`, error);
+    if (terrainPromises.get(siteId) === pending) terrainPromises.delete(siteId);
     throw error;
   }
 }
 
-/**
- * Backwards-compatible Site04 loader.
- */
 export async function loadLolaTerrain(): Promise<LolaTerrainData> {
   return loadLolaTerrainForSite(DEFAULT_PRODUCT78_SITE_ID);
 }
 
-/**
- * Normalizes east longitude to [0, 360).
- */
-function normalizeEastLongitude(
-  longitudeDeg: number
-): number {
+export async function loadLolaScienceLayersForSite(
+  siteId: Product78SiteId = DEFAULT_PRODUCT78_SITE_ID,
+): Promise<LolaScienceData> {
+  const cached = sciencePromises.get(siteId);
+  if (cached) return cached;
+
+  const pending = (async () => {
+    const site = getProduct78Site(siteId);
+    const base = `/data/${site.dataDirectory}`;
+
+    const metadataResponse = await fetch(
+      `${base}/science-metadata.json`,
+      { cache: "force-cache" },
+    );
+
+    if (!metadataResponse.ok) {
+      throw new Error(
+        `NASA science metadata HTTP error: ${metadataResponse.status}`,
+      );
+    }
+
+    const metadata = validateScienceMetadata(await metadataResponse.json());
+
+    const expectedPixels =
+      metadata.dimensions.width * metadata.dimensions.height;
+
+    const layerByKey = (key: string) => {
+      const layer = metadata.layers.find((item) => item.key === key);
+      if (!layer) throw new Error(`Missing science layer: ${key}`);
+      return layer;
+    };
+
+    const [slopeBytes, slopeErrorBytes, elevationErrorBytes, countBytes] =
+      await Promise.all([
+        fetchBinary(`${base}/${layerByKey("slope").output}`),
+        fetchBinary(`${base}/${layerByKey("slopeUncertainty").output}`),
+        fetchBinary(`${base}/${layerByKey("elevationUncertainty").output}`),
+        fetchBinary(`${base}/${layerByKey("observationCount").output}`),
+      ]);
+
+    const slope = decodeFloat32(slopeBytes, expectedPixels, "NASA slope");
+    const slopeUncertainty = decodeFloat32(
+      slopeErrorBytes,
+      expectedPixels,
+      "NASA slope uncertainty",
+    );
+    const elevationUncertainty = decodeFloat32(
+      elevationErrorBytes,
+      expectedPixels,
+      "NASA elevation uncertainty",
+    );
+    const observationCount = decodeFloat32(
+      countBytes,
+      expectedPixels,
+      "LOLA observation count",
+    );
+
+    validateScienceArray(slope, layerByKey("slope"));
+    validateScienceArray(slopeUncertainty, layerByKey("slopeUncertainty"));
+    validateScienceArray(elevationUncertainty, layerByKey("elevationUncertainty"));
+    validateScienceArray(observationCount, layerByKey("observationCount"));
+
+    console.info("[NASA Product 78] Science layers loaded:", {
+      siteId,
+      dimensions: `${metadata.dimensions.width} x ${metadata.dimensions.height}`,
+      resolutionMeters: metadata.resolutionMeters,
+      layers: metadata.layers.map((layer) => layer.key),
+    });
+
+    return {
+      metadata,
+      slope,
+      slopeUncertainty,
+      elevationUncertainty,
+      observationCount,
+    };
+  })();
+
+  sciencePromises.set(siteId, pending);
+
+  try {
+    return await pending;
+  } catch (error) {
+    if (sciencePromises.get(siteId) === pending) sciencePromises.delete(siteId);
+    throw error;
+  }
+}
+
+export async function loadLolaScienceLayers(): Promise<LolaScienceData> {
+  return loadLolaScienceLayersForSite(DEFAULT_PRODUCT78_SITE_ID);
+}
+
+function normalizeEastLongitude(longitudeDeg: number): number {
   return ((longitudeDeg % 360) + 360) % 360;
 }
 
-/**
- * Converts geographic coordinates to South Polar
- * Stereographic projected coordinates.
- *
- * Assumptions:
- * - Southern lunar polar projection.
- * - Spherical lunar reference radius from metadata.
- * - East longitude.
- * - Central meridian from metadata.
- *
- * Returned coordinates are in metres.
- */
 export function geographicToLolaProjected(
   coordinate: GeographicCoordinate,
-  metadata: LolaTerrainMetadata
+  metadata: LolaTerrainMetadata,
 ): ProjectedCoordinate {
   const latitude = coordinate.latitudeDeg;
   const longitude = coordinate.longitudeEastDeg;
@@ -881,148 +745,52 @@ export function geographicToLolaProjected(
   assertFinite(longitude, "Longitude");
 
   if (latitude < -90 || latitude > 0) {
-    throw new Error(
-      "Latitude must be between -90 and 0 degrees."
-    );
+    throw new Error("Latitude must be between -90 and 0 degrees.");
   }
 
-  const radius =
-    metadata.georeferencing.lunarRadiusMeters;
-
-  const centralMeridian =
-    metadata.georeferencing.centralMeridianDegrees;
-
-  if (!Number.isFinite(radius) || radius <= 0) {
-    throw new Error(
-      "Invalid lunar radius in terrain metadata."
-    );
-  }
-
-  const latitudeFromSouthPole =
-    toRadians(90 + latitude);
+  const radius = metadata.georeferencing.lunarRadiusMeters;
+  const centralMeridian = metadata.georeferencing.centralMeridianDegrees;
+  const latitudeFromSouthPole = toRadians(90 + latitude);
 
   const longitudeDifference = toRadians(
     normalizeEastLongitude(longitude) -
-    normalizeEastLongitude(centralMeridian)
+    normalizeEastLongitude(centralMeridian),
   );
 
-  // Polar stereographic radial distance.
-  const rho =
-    2 *
-    radius *
-    Math.tan(latitudeFromSouthPole / 2);
-
-  const xMeters =
-    rho * Math.sin(longitudeDifference);
-
-  const yMeters =
-    rho * Math.cos(longitudeDifference);
-
-  if (
-    !Number.isFinite(xMeters) ||
-    !Number.isFinite(yMeters)
-  ) {
-    throw new Error(
-      "Geographic projection produced invalid coordinates."
-    );
-  }
+  const rho = 2 * radius * Math.tan(latitudeFromSouthPole / 2);
 
   return {
-    xMeters,
-    yMeters,
+    xMeters: rho * Math.sin(longitudeDifference),
+    yMeters: rho * Math.cos(longitudeDifference),
   };
 }
 
-/**
- * Converts projected coordinates to fractional raster
- * pixel-centre indices.
- *
- * PixelIsArea means the tie point represents an outer
- * pixel corner, while array positions represent pixel
- * centres. The half-pixel offset is therefore required.
- *
- * This implementation assumes the north-up raster
- * rotation term is zero.
- */
 export function projectedToLolaPixel(
   projected: ProjectedCoordinate,
-  metadata: LolaTerrainMetadata
+  metadata: LolaTerrainMetadata,
 ): RasterPixelCoordinate {
-  assertFinite(projected.xMeters, "Projected X");
-  assertFinite(projected.yMeters, "Projected Y");
+  const tie = metadata.georeferencing.tiePoint;
+  const [pixelWidth, pixelHeight, rotation] = metadata.pixelResolution;
 
-  const tiePoint =
-    metadata.georeferencing.tiePoint;
-
-  const [
-    pixelWidth,
-    pixelHeight,
-    pixelRotation,
-  ] = metadata.pixelResolution;
-
-  if (
-    pixelWidth === 0 ||
-    pixelHeight === 0 ||
-    Math.abs(pixelRotation) > 1e-10
-  ) {
-    throw new Error(
-      "Unsupported raster pixel transform."
-    );
-  }
-
-  const column =
-    tiePoint.column +
-    (projected.xMeters - tiePoint.x) /
-    pixelWidth -
-    0.5;
-
-  const row =
-    tiePoint.row +
-    (projected.yMeters - tiePoint.y) /
-    pixelHeight -
-    0.5;
-
-  if (
-    !Number.isFinite(column) ||
-    !Number.isFinite(row)
-  ) {
-    throw new Error(
-      "Projected-to-pixel conversion produced invalid coordinates."
-    );
+  if (pixelWidth === 0 || pixelHeight === 0 || Math.abs(rotation) > 1e-10) {
+    throw new Error("Unsupported raster pixel transform.");
   }
 
   return {
-    column,
-    row,
+    column:
+      tie.column + (projected.xMeters - tie.x) / pixelWidth - 0.5,
+    row:
+      tie.row + (projected.yMeters - tie.y) / pixelHeight - 0.5,
   };
 }
 
-/**
- * Checks whether a fractional pixel coordinate lies
- * inside the actual PixelIsArea raster footprint.
- *
- * Pixel array centres range from 0 to width - 1.
- * The physical raster footprint extends half a pixel
- * beyond the first and last pixel centres.
- *
- * The maximum boundary is exclusive.
- */
 export function isLolaPixelInsideRaster(
   pixel: RasterPixelCoordinate,
-  terrain: LolaTerrainData
+  terrain: LolaTerrainData,
 ): boolean {
-  if (
-    !Number.isFinite(pixel.column) ||
-    !Number.isFinite(pixel.row) ||
-    !Number.isSafeInteger(terrain.width) ||
-    !Number.isSafeInteger(terrain.height) ||
-    terrain.width <= 0 ||
-    terrain.height <= 0
-  ) {
-    return false;
-  }
-
   return (
+    Number.isFinite(pixel.column) &&
+    Number.isFinite(pixel.row) &&
     pixel.column >= -0.5 &&
     pixel.row >= -0.5 &&
     pixel.column < terrain.width - 0.5 &&
@@ -1030,201 +798,98 @@ export function isLolaPixelInsideRaster(
   );
 }
 
-function lerp(
-  a: number,
-  b: number,
-  t: number
-): number {
+function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * t;
 }
 
-/**
- * Samples terrain elevation using bilinear interpolation.
- *
- * For locations inside the outer half-pixel edge region,
- * interpolation is clamped to the nearest edge pixel.
- */
 export function sampleLolaHeightAtPixel(
   terrain: LolaTerrainData,
-  pixel: RasterPixelCoordinate
+  pixel: RasterPixelCoordinate,
 ): number {
-  assertFinite(pixel.column, "Pixel column");
-  assertFinite(pixel.row, "Pixel row");
-
   if (!isLolaPixelInsideRaster(pixel, terrain)) {
     throw new Error(
-      `Pixel outside raster: column=${pixel.column.toFixed(4)}, ` +
-      `row=${pixel.row.toFixed(4)}.`
+      `Pixel outside raster: ${pixel.column.toFixed(4)}, ${pixel.row.toFixed(4)}.`,
     );
   }
 
-  if (
-    terrain.elevations.length !==
-    terrain.width * terrain.height
-  ) {
-    throw new Error(
-      "Elevation array dimensions do not match the terrain raster."
-    );
-  }
+  const column = Math.max(0, Math.min(terrain.width - 1, pixel.column));
+  const row = Math.max(0, Math.min(terrain.height - 1, pixel.row));
 
-  // Convert footprint coordinates to valid pixel-centre
-  // coordinates before interpolation.
-  const sampleColumn = Math.max(
-    0,
-    Math.min(terrain.width - 1, pixel.column)
-  );
+  const x0 = Math.floor(column);
+  const y0 = Math.floor(row);
+  const x1 = Math.min(x0 + 1, terrain.width - 1);
+  const y1 = Math.min(y0 + 1, terrain.height - 1);
 
-  const sampleRow = Math.max(
-    0,
-    Math.min(terrain.height - 1, pixel.row)
-  );
+  const tx = column - x0;
+  const ty = row - y0;
 
-  const x0 = Math.floor(sampleColumn);
-  const y0 = Math.floor(sampleRow);
+  const a = terrain.elevations[y0 * terrain.width + x0];
+  const b = terrain.elevations[y0 * terrain.width + x1];
+  const c = terrain.elevations[y1 * terrain.width + x0];
+  const d = terrain.elevations[y1 * terrain.width + x1];
 
-  const x1 = Math.min(
-    x0 + 1,
-    terrain.width - 1
-  );
-
-  const y1 = Math.min(
-    y0 + 1,
-    terrain.height - 1
-  );
-
-  const tx = sampleColumn - x0;
-  const ty = sampleRow - y0;
-
-  const topLeft =
-    terrain.elevations[y0 * terrain.width + x0];
-
-  const topRight =
-    terrain.elevations[y0 * terrain.width + x1];
-
-  const bottomLeft =
-    terrain.elevations[y1 * terrain.width + x0];
-
-  const bottomRight =
-    terrain.elevations[y1 * terrain.width + x1];
-
-  const neighbours = [topLeft, topRight, bottomLeft, bottomRight];
-
-  if (neighbours.some(Number.isNaN)) {
-    if (
-      terrain.metadata.noDataValue === undefined ||
-      terrain.metadata.noDataPixelCount === undefined
-    ) {
-      throw new Error(
-        "Unexpected NaN elevation: the Product78 metadata does not declare a NoData value."
-      );
-    }
-
+  if (![a, b, c, d].every(Number.isFinite)) {
     throw new LolaNoDataError();
   }
 
-  if (!neighbours.every(Number.isFinite)) {
-    throw new Error(
-      "Invalid non-finite elevation during bilinear interpolation."
-    );
-  }
-
-  const top = lerp(
-    topLeft,
-    topRight,
-    tx
-  );
-
-  const bottom = lerp(
-    bottomLeft,
-    bottomRight,
-    tx
-  );
-
-  const elevation = lerp(
-    top,
-    bottom,
-    ty
-  );
-
-  if (!Number.isFinite(elevation)) {
-    throw new Error(
-      "Elevation interpolation produced a non-finite result."
-    );
-  }
-
-  return elevation;
+  return lerp(lerp(a, b, tx), lerp(c, d, tx), ty);
 }
 
-/**
- * Samples LOLA terrain at a geographic location.
- *
- * Returns the original geographic position, projected
- * coordinates, fractional pixel coordinates, nearest
- * pixel and interpolated elevation.
- */
-export function sampleLolaHeightAtLocation(
+export function sampleLolaScienceAtPixel(
+  science: LolaScienceData,
   terrain: LolaTerrainData,
-  coordinate: GeographicCoordinate
-): LolaSample {
-  const projected = geographicToLolaProjected(
-    coordinate,
-    terrain.metadata
-  );
-
-  const pixel = projectedToLolaPixel(
-    projected,
-    terrain.metadata
-  );
-
+  pixel: RasterPixelCoordinate,
+): LolaScienceSample {
   if (!isLolaPixelInsideRaster(pixel, terrain)) {
-    throw new Error(
-      `Location outside raster: ` +
-      `column=${pixel.column.toFixed(4)}, ` +
-      `row=${pixel.row.toFixed(4)}.`
-    );
+    throw new Error("Science sample is outside raster coverage.");
   }
 
-  const elevationMeters =
-    sampleLolaHeightAtPixel(terrain, pixel);
-
-  const nearestColumn = Math.max(
+  const column = Math.max(
     0,
-    Math.min(
-      terrain.width - 1,
-      Math.round(pixel.column)
-    )
+    Math.min(terrain.width - 1, Math.round(pixel.column)),
+  );
+  const row = Math.max(
+    0,
+    Math.min(terrain.height - 1, Math.round(pixel.row)),
   );
 
-  const nearestRow = Math.max(
-    0,
-    Math.min(
-      terrain.height - 1,
-      Math.round(pixel.row)
-    )
-  );
+  const index = row * terrain.width + column;
+
+  return {
+    slopeDegrees: science.slope[index],
+    slopeUncertaintyDegrees: science.slopeUncertainty[index],
+    elevationUncertaintyMeters: science.elevationUncertainty[index],
+    observationCount: science.observationCount[index],
+    column,
+    row,
+  };
+}
+
+export function sampleLolaHeightAtLocation(
+  terrain: LolaTerrainData,
+  coordinate: GeographicCoordinate,
+): LolaSample {
+  const projected = geographicToLolaProjected(coordinate, terrain.metadata);
+  const pixel = projectedToLolaPixel(projected, terrain.metadata);
+
+  if (!isLolaPixelInsideRaster(pixel, terrain)) {
+    throw new Error("Location is outside raster coverage.");
+  }
+
+  const elevationMeters = sampleLolaHeightAtPixel(terrain, pixel);
 
   return {
     geographic: coordinate,
     projected,
     pixel,
-
     nearestPixel: {
-      column: nearestColumn,
-      row: nearestRow,
+      column: Math.max(0, Math.min(terrain.width - 1, Math.round(pixel.column))),
+      row: Math.max(0, Math.min(terrain.height - 1, Math.round(pixel.row))),
     },
-
     elevationMeters,
   };
 }
 
-/**
- * Samples the predefined Site04 observer location.
- */
-export function sampleSite04Elevation(
-  terrain: LolaTerrainData
-): LolaSample {
-  return sampleLolaHeightAtLocation(
-    terrain,
-    SITE04_COORDINATES
-  );
+export function sampleSite04Elevation(terrain: LolaTerrainData): LolaSample {
+  return sampleLolaHeightAtLocation(terrain, SITE04_COORDINATES);
 }
