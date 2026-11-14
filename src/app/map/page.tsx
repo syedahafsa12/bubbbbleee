@@ -126,6 +126,7 @@ export default function MapPage() {
           row: String(localLocation.pixel.row),
           date: missionDate,
           time: missionTime,
+          durationHours: missionDuration,
         }).toString()}`
       : null;
 
