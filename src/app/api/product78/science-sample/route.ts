@@ -109,7 +109,13 @@ export async function GET(request: NextRequest) {
 
     const index = row * width + column;
     const offset = index * Float32Array.BYTES_PER_ELEMENT;
-    const values: Record<string, number> = {};
+    const elevationMeters = await readFloat32At(
+      path.join(directory, "elevation.bin"),
+      offset
+    );
+    const values: Record<string, number> = {
+      elevationMeters,
+    };
 
     for (const expected of EXPECTED_LAYERS) {
       const layer = metadata.layers.find((item) => item.key === expected.key);
@@ -142,6 +148,7 @@ export async function GET(request: NextRequest) {
       pixel: { column, row },
       resolutionMeters: metadata.resolutionMeters,
       values: {
+        elevationMeters: values.elevationMeters,
         elevationUncertaintyMeters: values.elevationUncertainty,
         slopeDegrees: values.slope,
         slopeUncertaintyDegrees: values.slopeUncertainty,
