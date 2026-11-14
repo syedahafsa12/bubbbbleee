@@ -128,6 +128,8 @@ interface HorizonsResponse {
   mission?: {
     date: string;
     time: string;
+    durationHours?: number;
+    sampleIntervalMinutes?: number;
     startTime: string;
     stopTime: string;
   };
@@ -154,14 +156,7 @@ interface HorizonsResponse {
 
   horizonProfile?: HorizonProfileDirection[];
 
-  mission?: {
-    date: string;
-    time: string;
-    durationHours: number;
-    sampleIntervalMinutes: number;
-    startTime: string;
-    stopTime: string;
-  };
+
 
   terrainModel?: {
     product: string;
