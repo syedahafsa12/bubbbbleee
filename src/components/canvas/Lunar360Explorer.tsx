@@ -19,8 +19,10 @@ import {
   useFrame,
 } from "@react-three/fiber";
 
-import { useGLTF } from "@react-three/drei";
 import * as THREE from "three";
+
+import { EarthVisual } from "@/components/canvas/celestial/EarthVisual";
+import { SunVisual } from "@/components/canvas/celestial/SunVisual";
 
 import {
   geographicToLolaProjected,
@@ -215,7 +217,6 @@ const LUNAR_RADIUS_METERS = 1_737_400;
 const CELESTIAL_DISTANCE = 8000;
 
 
-const CELESTIAL_VISUAL_SCALE = 6;
 
 const STAR_COUNT = 9000;
 const STAR_RADIUS = 12000;
@@ -1016,140 +1017,6 @@ function AnimatedStarField() {
 }
 
 /* =====================================================
-   SUN AND EARTH MODELS
-===================================================== */
-function CelestialModel({
-  url,
-  position,
-  diameter,
-  emissive = false,
-  rotationSpeed = 0,
-  opacity = 1,
-}: {
-  url: string;
-  position: THREE.Vector3;
-  diameter: number;
-  emissive?: boolean;
-  rotationSpeed?: number;
-  opacity?: number;
-}) {
-  const { scene } = useGLTF(url);
-  const modelRef = useRef<THREE.Group>(null);
-
-  const model = useMemo(() => {
-    const clone = scene.clone(true);
-    clone.updateMatrixWorld(true);
-
-    const bounds = new THREE.Box3().setFromObject(clone);
-    const size = bounds.getSize(new THREE.Vector3());
-    const center = bounds.getCenter(new THREE.Vector3());
-
-    const largestDimension = Math.max(
-      size.x,
-      size.y,
-      size.z
-    );
-
-    const group = new THREE.Group();
-
-    clone.position.sub(center);
-    group.add(clone);
-
-    if (largestDimension > 0) {
-      group.scale.setScalar(
-        diameter / largestDimension
-      );
-    }
-
-    group.traverse((object) => {
-      object.layers.set(1);
-
-      if (!(object instanceof THREE.Mesh)) {
-        return;
-      }
-
-      const materials = Array.isArray(object.material)
-        ? object.material
-        : [object.material];
-
-      const clonedMaterials = materials.map(
-        (sourceMaterial) => {
-          const material = sourceMaterial.clone();
-
-          if (opacity < 1) {
-            material.transparent = true;
-            material.opacity *= opacity;
-            material.depthWrite = false;
-          }
-
-          if (
-            emissive &&
-            material instanceof THREE.MeshStandardMaterial
-          ) {
-            material.emissive.set("#ffb24d");
-            material.emissiveIntensity = 4.0;
-            material.toneMapped = false;
-          }
-
-          if (
-            emissive &&
-            material instanceof THREE.MeshBasicMaterial
-          ) {
-            material.color.set("#fff2d5");
-            material.toneMapped = false;
-          }
-
-          return material;
-        }
-      );
-
-      object.material = Array.isArray(object.material)
-        ? clonedMaterials
-        : clonedMaterials[0];
-
-      object.castShadow = false;
-      object.receiveShadow = false;
-    });
-
-    group.layers.set(1);
-
-    return group;
-  }, [scene, diameter, emissive, opacity]);
-
-  useEffect(() => {
-    return () => {
-      model.traverse((object) => {
-        if (!(object instanceof THREE.Mesh)) {
-          return;
-        }
-
-        const materials = Array.isArray(object.material)
-          ? object.material
-          : [object.material];
-
-        materials.forEach((material) => material.dispose());
-      });
-    };
-  }, [model]);
-
-  useFrame((_, delta) => {
-    if (modelRef.current && rotationSpeed !== 0) {
-      modelRef.current.rotation.y +=
-        rotationSpeed * Math.min(delta, 0.05);
-    }
-  });
-
-  return (
-    <group
-      ref={modelRef}
-      position={[position.x, position.y, position.z]}
-    >
-      <primitive object={model} />
-    </group>
-  );
-}
-
-/* =====================================================
    REAL CELESTIAL POSITIONS AND LIGHTING
 ===================================================== */
 
@@ -1236,8 +1103,7 @@ function CelestialBodies({
       CELESTIAL_DISTANCE *
       Math.tan(
         THREE.MathUtils.degToRad(sunAngularRadiusDeg)
-      ) *
-      CELESTIAL_VISUAL_SCALE
+      )
       : null;
 
   const earthDiameter =
@@ -1246,8 +1112,7 @@ function CelestialBodies({
       CELESTIAL_DISTANCE *
       Math.tan(
         THREE.MathUtils.degToRad(earthAngularRadiusDeg)
-      ) *
-      CELESTIAL_VISUAL_SCALE
+      )
       : null;
 
   const modelAmbient = useMemo(() => {
@@ -1293,27 +1158,20 @@ function CelestialBodies({
       {sunVisible &&
         sunPosition &&
         sunDiameter !== null && (
-          <CelestialModel
-            url="/models/sun.glb"
+          <SunVisual
             position={sunPosition}
             diameter={sunDiameter}
-            emissive
-            rotationSpeed={0.0015}
             opacity={sunOpacity}
-
           />
         )}
 
       {earthVisible &&
         earthPosition &&
         earthDiameter !== null && (
-          <CelestialModel
-            url="/models/earth.glb"
+          <EarthVisual
             position={earthPosition}
             diameter={earthDiameter}
-            rotationSpeed={0.0005}
             opacity={earthOpacity}
-
           />
         )}
     </>
@@ -2022,9 +1880,3 @@ export default function Lunar360Explorer({
     </main>
   );
 }
-/* =====================================================
-   PRELOAD MODELS
-===================================================== */
-
-useGLTF.preload("/models/sun.glb");
-useGLTF.preload("/models/earth.glb");
