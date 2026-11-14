@@ -255,6 +255,39 @@ function getNearestHorizonDirection(
   });
 }
 
+function buildHorizonPaths(
+  profile: HorizonProfileDirection[] | undefined
+): string[] {
+  if (!profile?.length) return [];
+  const sorted = [...profile].sort((a, b) => a.azimuthDeg - b.azimuthDeg);
+  const paths: string[] = [];
+  let current: string[] = [];
+
+  const finishSegment = () => {
+    if (current.length >= 2) paths.push(current.join(" "));
+    current = [];
+  };
+
+  for (const direction of sorted) {
+    const elevation = direction.horizonElevationDeg;
+    if (
+      direction.coverageStatus === "no_data" ||
+      typeof elevation !== "number" ||
+      !Number.isFinite(elevation)
+    ) {
+      finishSegment();
+      continue;
+    }
+
+    const x = 10 + (normalizeAzimuth(direction.azimuthDeg) / 360) * 300;
+    const y = 82 - clamp((elevation + 10) / 45, 0, 1) * 64;
+    current.push(`${current.length === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`);
+  }
+
+  finishSegment();
+  return paths;
+}
+
 function getFirstObservation(
   target?: HorizonsObservation | null
 ): HorizonsObservation | null {
@@ -1651,6 +1684,10 @@ export default function Lunar360Explorer({
     () => getNearestHorizonDirection(horizons?.horizonProfile, cameraHeading),
     [horizons, cameraHeading]
   );
+  const horizonPaths = useMemo(
+    () => buildHorizonPaths(horizons?.horizonProfile),
+    [horizons]
+  );
 
   useEffect(() => {
     setSelectedObservationIndex(0);
@@ -1890,6 +1927,22 @@ export default function Lunar360Explorer({
             <p className="mt-2 text-xs text-amber-100/75">UNKNOWN — no valid terrain sample in this direction.</p>
           )}
           <p className="mt-2 text-[9px] text-amber-100/60">Terrain beyond known coverage remains unknown. The 15 km search limit is not a claim of complete horizon coverage.</p>
+        </div>
+
+        <div className="mt-3 rounded-lg border border-white/10 bg-white/[0.025] p-3">
+          <div className="flex items-center justify-between">
+            <p className="text-[9px] tracking-[0.15em] text-white/45">360° SAMPLED SKYLINE</p>
+            <span className="text-[9px] text-white/35">Gaps = unknown</span>
+          </div>
+          <svg viewBox="0 0 320 100" role="img" aria-label="Sampled terrain horizon by azimuth" className="mt-2 h-24 w-full overflow-visible">
+            <line x1="10" y1="82" x2="310" y2="82" stroke="rgba(255,255,255,.18)" strokeDasharray="3 4" />
+            <line x1="160" y1="10" x2="160" y2="86" stroke="rgba(255,255,255,.10)" strokeDasharray="3 4" />
+            {horizonPaths.map((path, index) => <path key={index} d={path} fill="none" stroke="#79cbb7" strokeWidth="2" strokeLinejoin="round" />)}
+            <text x="10" y="96" fill="rgba(255,255,255,.5)" fontSize="8">N</text>
+            <text x="85" y="96" fill="rgba(255,255,255,.5)" fontSize="8">E</text>
+            <text x="160" y="96" fill="rgba(255,255,255,.5)" fontSize="8">S</text>
+            <text x="235" y="96" fill="rgba(255,255,255,.5)" fontSize="8">W</text>
+          </svg>
         </div>
 
         <div className="mt-3 grid grid-cols-2 gap-3">
