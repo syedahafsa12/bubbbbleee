@@ -72,6 +72,7 @@ interface Lunar360ExplorerProps {
   pixelRow: number;
   missionDate: string;
   missionTime: string;
+  durationHours: string;
 }
 
 type TerrainVisibilityStatus =
@@ -94,6 +95,7 @@ interface TerrainVisibility {
 
 interface HorizonsObservation {
   time: string;
+  timeUtc: string;
   azimuthDeg: number;
   elevationDeg: number;
   angularDiameterArcsec: number | null;
@@ -135,6 +137,19 @@ interface HorizonsResponse {
   targets?: {
     sun?: HorizonsObservation;
     earth?: HorizonsObservation;
+    sunObservations?: HorizonsObservation[];
+    earthObservations?: HorizonsObservation[];
+  };
+
+  horizonProfile?: HorizonProfileDirection[];
+
+  mission?: {
+    date: string;
+    time: string;
+    durationHours: number;
+    sampleIntervalMinutes: number;
+    startTime: string;
+    stopTime: string;
   };
 
   terrainModel?: {
@@ -159,6 +174,23 @@ interface HorizonsResponse {
 interface LookState {
   yaw: number;
   pitch: number;
+  targetYaw: number;
+  targetPitch: number;
+}
+
+interface ScienceSample {
+  success: boolean;
+  available: boolean;
+  pixel?: { column: number; row: number };
+  resolutionMeters?: number;
+  values?: {
+    elevationUncertaintyMeters: number;
+    slopeDegrees: number;
+    slopeUncertaintyDegrees: number;
+    observationCount: number;
+  };
+  reason?: string;
+  error?: string;
 }
 
 /* =====================================================
@@ -190,6 +222,27 @@ function clamp(
   max: number
 ): number {
   return Math.max(min, Math.min(max, value));
+}
+
+function normalizeAzimuth(value: number): number {
+  return ((value % 360) + 360) % 360;
+}
+
+function getNearestHorizonDirection(
+  profile: HorizonProfileDirection[] | undefined,
+  azimuthDeg: number
+): HorizonProfileDirection | null {
+  if (!profile?.length) return null;
+  const azimuth = normalizeAzimuth(azimuthDeg);
+  return profile.reduce((nearest, current) => {
+    const currentDelta = Math.abs(
+      ((current.azimuthDeg - azimuth + 540) % 360) - 180
+    );
+    const nearestDelta = Math.abs(
+      ((nearest.azimuthDeg - azimuth + 540) % 360) - 180
+    );
+    return currentDelta < nearestDelta ? current : nearest;
+  });
 }
 
 function getFirstObservation(
@@ -1230,22 +1283,40 @@ function CelestialBodies({
 
 function ObserverCamera({
   look,
+  onHeadingChange,
 }: {
   look: RefObject<LookState>;
+  onHeadingChange: (heading: number) => void;
 }) {
-  useFrame(({ camera }) => {
-    camera.layers.enable(1);
+  const headingAccumulator = useRef(0);
+  const lastHeading = useRef(-1);
 
-    camera.position.set(
-      0,
-      OBSERVER_HEIGHT_METERS,
-      0
-    );
+  useFrame(({ camera }, delta) => {
+    camera.layers.enable(1);
+    camera.position.set(0, OBSERVER_HEIGHT_METERS, 0);
+
+    const damping = 1 - Math.exp(-12 * Math.min(delta, 0.05));
+    look.current.yaw +=
+      (look.current.targetYaw - look.current.yaw) * damping;
+    look.current.pitch +=
+      (look.current.targetPitch - look.current.pitch) * damping;
 
     camera.rotation.order = "YXZ";
     camera.rotation.y = look.current.yaw;
     camera.rotation.x = look.current.pitch;
     camera.rotation.z = 0;
+
+    headingAccumulator.current += delta;
+    if (headingAccumulator.current >= 0.1) {
+      headingAccumulator.current = 0;
+      const heading = normalizeAzimuth(
+        THREE.MathUtils.radToDeg(-look.current.yaw)
+      );
+      if (Math.abs(heading - lastHeading.current) >= 0.5) {
+        lastHeading.current = heading;
+        onHeadingChange(heading);
+      }
+    }
   });
 
   return null;
@@ -1263,6 +1334,7 @@ function LunarScene({
   sun,
   earth,
   observer,
+  onHeadingChange,
 }: {
   terrain: LolaTerrainData | null;
   pixelColumn: number;
@@ -1274,6 +1346,7 @@ function LunarScene({
     latitudeDeg: number;
     longitudeEastDeg: number;
   } | null;
+  onHeadingChange: (heading: number) => void;
 }) {
   return (
     <>
@@ -1301,7 +1374,7 @@ function LunarScene({
         </Suspense>
       )}
 
-      <ObserverCamera look={look} />
+      <ObserverCamera look={look} onHeadingChange={onHeadingChange} />
     </>
   );
 }
@@ -1317,6 +1390,7 @@ export default function Lunar360Explorer({
   pixelRow,
   missionDate,
   missionTime,
+  durationHours,
 }: Lunar360ExplorerProps) {
   const terrainRequestKey = JSON.stringify([
     siteId,
@@ -1355,7 +1429,14 @@ export default function Lunar360Explorer({
   const look = useRef<LookState>({
     yaw: 0,
     pitch: 0,
+    targetYaw: 0,
+    targetPitch: 0,
   });
+
+  const [cameraHeading, setCameraHeading] = useState(0);
+  const [selectedObservationIndex, setSelectedObservationIndex] = useState(0);
+  const [scienceSample, setScienceSample] = useState<ScienceSample | null>(null);
+  const [scienceLoading, setScienceLoading] = useState(false);
 
   const pointer = useRef({
     active: false,
@@ -1441,6 +1522,7 @@ export default function Lunar360Explorer({
         const query = new URLSearchParams({
           date: missionDate,
           time: missionTime,
+          durationHours,
           lat: String(latitude),
           lon: String(longitude),
           pixelColumn: String(pixelColumn),
@@ -1523,18 +1605,85 @@ export default function Lunar360Explorer({
     pixelRow,
     missionDate,
     missionTime,
+    durationHours,
     horizonsRequestKey,
   ]);
 
-  const sun = useMemo(
-    () => getFirstObservation(horizons?.targets?.sun),
-    [horizons]
+  const sunObservations = horizons?.targets?.sun?.observations ?? [];
+  const earthObservations = horizons?.targets?.earth?.observations ?? [];
+  const timelineLength = Math.max(sunObservations.length, earthObservations.length);
+  const safeObservationIndex = Math.min(
+    selectedObservationIndex,
+    Math.max(0, timelineLength - 1)
+  );
+  const selectedTimeUtc =
+    sunObservations[safeObservationIndex]?.timeUtc ??
+    earthObservations[safeObservationIndex]?.timeUtc ??
+    null;
+
+  const sun = useMemo(() => {
+    if (selectedTimeUtc) {
+      const exact = sunObservations.find((item) => item.timeUtc === selectedTimeUtc);
+      if (exact) return getFirstObservation(exact);
+    }
+    return getFirstObservation(horizons?.targets?.sun);
+  }, [horizons, selectedTimeUtc, sunObservations]);
+
+  const earth = useMemo(() => {
+    if (selectedTimeUtc) {
+      const exact = earthObservations.find((item) => item.timeUtc === selectedTimeUtc);
+      if (exact) return getFirstObservation(exact);
+    }
+    return getFirstObservation(horizons?.targets?.earth);
+  }, [horizons, selectedTimeUtc, earthObservations]);
+
+  const horizonAtHeading = useMemo(
+    () => getNearestHorizonDirection(horizons?.horizonProfile, cameraHeading),
+    [horizons, cameraHeading]
   );
 
-  const earth = useMemo(
-    () => getFirstObservation(horizons?.targets?.earth),
-    [horizons]
-  );
+  useEffect(() => {
+    setSelectedObservationIndex(0);
+  }, [horizonsRequestKey]);
+
+  useEffect(() => {
+    let active = true;
+    setScienceLoading(true);
+    setScienceSample(null);
+
+    const query = new URLSearchParams({
+      siteId,
+      col: String(Math.round(pixelColumn)),
+      row: String(Math.round(pixelRow)),
+    });
+
+    fetch(`/api/product78/science-sample?${query.toString()}`, {
+      cache: "no-store",
+    })
+      .then(async (response) => {
+        const payload = (await response.json()) as ScienceSample;
+        if (!response.ok || !payload.success) {
+          throw new Error(payload.error ?? `Science sample failed: HTTP ${response.status}`);
+        }
+        if (active) setScienceSample(payload);
+      })
+      .catch((error: unknown) => {
+        if (active) {
+          setScienceSample({
+            success: false,
+            available: false,
+            reason: error instanceof Error ? error.message : "Science sample unavailable.",
+          });
+        }
+      })
+      .finally(() => {
+        if (active) setScienceLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [siteId, pixelColumn, pixelRow]);
 
   const observer = useMemo(() => {
     if (!horizons?.observer) {
@@ -1580,10 +1729,10 @@ export default function Lunar360Explorer({
     pointer.current.x = event.clientX;
     pointer.current.y = event.clientY;
 
-    look.current.yaw -= dx * 0.0035;
+    look.current.targetYaw -= dx * 0.0035;
 
-    look.current.pitch = clamp(
-      look.current.pitch - dy * 0.0035,
+    look.current.targetPitch = clamp(
+      look.current.targetPitch - dy * 0.0035,
       -Math.PI / 2 + 0.02,
       Math.PI / 2 - 0.02
     );
@@ -1649,6 +1798,7 @@ export default function Lunar360Explorer({
           sun={sun}
           earth={earth}
           observer={observer}
+          onHeadingChange={setCameraHeading}
         />
       </Canvas>
 
@@ -1697,6 +1847,100 @@ export default function Lunar360Explorer({
           </div>
         </div>
       </div>
+
+      <section className="pointer-events-auto absolute right-4 top-4 z-40 w-[min(410px,calc(100vw-2rem))] max-h-[78vh] overflow-y-auto rounded-xl border border-white/15 bg-black/80 p-4 text-white shadow-2xl backdrop-blur-md">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-[9px] font-semibold tracking-[0.18em] text-white/50">OBSERVER HUD · TRUE NORTH</p>
+            <p className="mt-1 text-2xl font-semibold tabular-nums">{cameraHeading.toFixed(1)}°</p>
+            <p className="text-[10px] text-white/45">Camera heading · {cameraHeading < 22.5 || cameraHeading >= 337.5 ? "N" : cameraHeading < 67.5 ? "NE" : cameraHeading < 112.5 ? "E" : cameraHeading < 157.5 ? "SE" : cameraHeading < 202.5 ? "S" : cameraHeading < 247.5 ? "SW" : cameraHeading < 292.5 ? "W" : "NW"}</p>
+          </div>
+          <div className="grid grid-cols-3 gap-1 text-center text-[9px] text-white/45">
+            <span />
+            <span className="rounded border border-white/20 px-2 py-1">N</span>
+            <span />
+            <span className="rounded border border-white/20 px-2 py-1">W</span>
+            <span className="rounded border border-amber-300/40 bg-amber-300/10 px-2 py-1 text-amber-100">↑</span>
+            <span className="rounded border border-white/20 px-2 py-1">E</span>
+            <span />
+            <span className="rounded border border-white/20 px-2 py-1">S</span>
+            <span />
+          </div>
+        </div>
+
+        <div className="mt-3 rounded-lg border border-white/10 bg-white/[0.035] p-3">
+          <p className="text-[9px] tracking-[0.15em] text-white/45">LOOK-DIRECTION TERRAIN</p>
+          {horizonAtHeading?.horizonElevationDeg !== null && horizonAtHeading?.horizonElevationDeg !== undefined ? (
+            <div className="mt-2 grid grid-cols-2 gap-3">
+              <div><p className="text-[9px] text-white/40">Sampled horizon</p><strong className="text-sm">{horizonAtHeading.horizonElevationDeg.toFixed(2)}°</strong></div>
+              <div><p className="text-[9px] text-white/40">Farthest known sample</p><strong className="text-sm">{horizonAtHeading.lastKnownSampleDistanceMeters?.toFixed(0) ?? "—"} m</strong></div>
+              <p className="col-span-2 text-[9px] text-white/45">Bearing {horizonAtHeading.azimuthDeg.toFixed(2)}° · {horizonAtHeading.horizonSource ?? "unknown"} · {horizonAtHeading.horizonResolutionMeters ?? "—"} m grid</p>
+            </div>
+          ) : (
+            <p className="mt-2 text-xs text-amber-100/75">UNKNOWN — no valid terrain sample in this direction.</p>
+          )}
+          <p className="mt-2 text-[9px] text-amber-100/60">Terrain beyond known coverage remains unknown. The 15 km search limit is not a claim of complete horizon coverage.</p>
+        </div>
+
+        <div className="mt-3 grid grid-cols-2 gap-3">
+          <div className="rounded-lg border border-amber-200/15 bg-amber-200/[0.04] p-3">
+            <p className="text-[9px] tracking-wider text-amber-100/60">SUN BEARING</p>
+            <strong className="mt-1 block text-sm">{sun ? `${sun.azimuthDeg.toFixed(1)}°` : "Unknown"}</strong>
+            <p className="text-[9px] text-white/45">{sun ? getTerrainVisibilityLabel(sun) : "No selected sample"}</p>
+          </div>
+          <div className="rounded-lg border border-sky-200/15 bg-sky-200/[0.04] p-3">
+            <p className="text-[9px] tracking-wider text-sky-100/60">EARTH BEARING</p>
+            <strong className="mt-1 block text-sm">{earth ? `${earth.azimuthDeg.toFixed(1)}°` : "Unknown"}</strong>
+            <p className="text-[9px] text-white/45">{earth ? getTerrainVisibilityLabel(earth) : "No selected sample"}</p>
+          </div>
+        </div>
+
+        <div className="mt-3 rounded-lg border border-white/10 p-3">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-[9px] tracking-[0.15em] text-white/45">MISSION TIMELINE · JPL SAMPLES</p>
+            <span className="text-[9px] tabular-nums text-white/55">{timelineLength ? `${safeObservationIndex + 1}/${timelineLength}` : "No samples"}</span>
+          </div>
+          {timelineLength > 0 ? (
+            <>
+              <input
+                aria-label="Select actual JPL mission observation"
+                className="mt-3 w-full accent-amber-300"
+                type="range"
+                min="0"
+                max={timelineLength - 1}
+                step="1"
+                value={safeObservationIndex}
+                onChange={(event) => setSelectedObservationIndex(Number(event.target.value))}
+              />
+              <div className="mt-1 flex justify-between text-[9px] text-white/40">
+                <span>{sunObservations[0]?.timeUtc ?? "—"}</span>
+                <span>{sunObservations[sunObservations.length - 1]?.timeUtc ?? "—"}</span>
+              </div>
+              <p className="mt-2 text-[10px] text-white/65">{selectedTimeUtc ?? "Observation unavailable"}</p>
+            </>
+          ) : (
+            <p className="mt-2 text-xs text-white/45">Waiting for exact-observer JPL samples.</p>
+          )}
+        </div>
+
+        <div className="mt-3 rounded-lg border border-white/10 p-3">
+          <p className="text-[9px] tracking-[0.15em] text-white/45">PRODUCT78 SCIENCE · SELECTED PIXEL</p>
+          {scienceLoading ? (
+            <p className="mt-2 text-xs text-white/45">Reading science values…</p>
+          ) : scienceSample?.available && scienceSample.values ? (
+            <div className="mt-2 grid grid-cols-2 gap-3 text-xs">
+              <div><p className="text-[9px] text-white/40">Slope</p><strong>{scienceSample.values.slopeDegrees.toFixed(2)}°</strong></div>
+              <div><p className="text-[9px] text-white/40">Slope uncertainty</p><strong>±{scienceSample.values.slopeUncertaintyDegrees.toFixed(2)}°</strong></div>
+              <div><p className="text-[9px] text-white/40">Elevation uncertainty</p><strong>±{scienceSample.values.elevationUncertaintyMeters.toFixed(2)} m</strong></div>
+              <div><p className="text-[9px] text-white/40">LOLA observations</p><strong>{scienceSample.values.observationCount.toFixed(0)}</strong></div>
+            </div>
+          ) : (
+            <p className="mt-2 text-[10px] text-amber-100/70">{scienceSample?.reason ?? "Science layers not prepared for this site."}</p>
+          )}
+        </div>
+
+        <p className="mt-3 text-[9px] leading-4 text-white/40">Camera rotation changes only the look-direction HUD. JPL mission time and celestial observations change only when the timeline sample changes. Earth visibility is geometric only, not an RF link budget.</p>
+      </section>
 
       <a
         href="/map"
