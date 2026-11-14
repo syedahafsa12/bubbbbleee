@@ -102,6 +102,17 @@ interface HorizonsObservation {
   terrainVisibility: TerrainVisibility;
 }
 
+interface HorizonsTarget extends Partial<HorizonsObservation> {
+  observations?: HorizonsObservation[];
+  visibilityWindows?: Array<{
+    state: TerrainVisibilityStatus;
+    startTimeUtc: string;
+    endTimeUtc: string;
+    durationMinutes: number;
+    observationCount: number;
+  }>;
+}
+
 interface HorizonsResponse {
   success: boolean;
 
@@ -135,10 +146,8 @@ interface HorizonsResponse {
   };
 
   targets?: {
-    sun?: HorizonsObservation;
-    earth?: HorizonsObservation;
-    sunObservations?: HorizonsObservation[];
-    earthObservations?: HorizonsObservation[];
+    sun?: HorizonsTarget;
+    earth?: HorizonsTarget;
   };
 
   horizonProfile?: HorizonProfileDirection[];
