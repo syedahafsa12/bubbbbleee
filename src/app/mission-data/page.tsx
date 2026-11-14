@@ -348,9 +348,8 @@ function Metric({
       </div>
 
       <div
-        className={`mt-3 break-words font-semibold tracking-tight text-white ${
-          large ? "text-2xl sm:text-3xl" : "text-lg"
-        }`}
+        className={`mt-3 break-words font-semibold tracking-tight text-white ${large ? "text-2xl sm:text-3xl" : "text-lg"
+          }`}
       >
         {value}
 
@@ -810,15 +809,13 @@ function TargetPanel({
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <span
-            className={`h-2.5 w-2.5 rounded-full ${
-              isSun ? "bg-amber-300" : "bg-white/75"
-            }`}
+            className={`h-2.5 w-2.5 rounded-full ${isSun ? "bg-amber-300" : "bg-white/75"
+              }`}
           />
 
           <h3
-            className={`text-sm font-semibold tracking-[0.16em] ${
-              isSun ? "text-amber-200" : "text-white/85"
-            }`}
+            className={`text-sm font-semibold tracking-[0.16em] ${isSun ? "text-amber-200" : "text-white/85"
+              }`}
           >
             {name}
           </h3>
@@ -908,7 +905,7 @@ function TargetPanel({
               label="Target disk visible"
               value={
                 visibility?.targetDiskVisible === null ||
-                visibility?.targetDiskVisible === undefined
+                  visibility?.targetDiskVisible === undefined
                   ? "Undetermined"
                   : visibility.targetDiskVisible
                     ? "Yes, according to sampled terrain"
@@ -955,33 +952,28 @@ function MissionDataDashboardContent() {
   const dateParam = searchParams.get("date") || "";
   const timeParam = searchParams.get("time") || "";
 
-  const [dateDraft, setDateDraft] = useState("");
-  const [timeDraft, setTimeDraft] = useState("");
+  const [initialRequest] = useState<MissionRequest>(() => {
+    const now = new Date();
 
-  const [request, setRequest] = useState<MissionRequest | null>(null);
+    return {
+      date: dateParam || now.toISOString().slice(0, 10),
+      time: timeParam || now.toISOString().slice(11, 19),
+    };
+  });
+
+  const [dateDraft, setDateDraft] = useState(initialRequest.date);
+  const [timeDraft, setTimeDraft] = useState(initialRequest.time);
+
+  const [request, setRequest] = useState<MissionRequest | null>(
+    initialRequest
+  );
   const [data, setData] = useState<MissionApiResponse | null>(null);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
 
-  useEffect(() => {
-    const now = new Date();
 
-    const initialDate =
-      dateParam || now.toISOString().slice(0, 10);
-
-    const initialTime =
-      timeParam || now.toISOString().slice(11, 19);
-
-    setDateDraft(initialDate);
-    setTimeDraft(initialTime);
-
-    setRequest({
-      date: initialDate,
-      time: initialTime,
-    });
-  }, [dateParam, timeParam]);
 
   useEffect(() => {
     if (request === null) return;
@@ -1031,13 +1023,13 @@ function MissionDataDashboardContent() {
 
         const normalizedPixelColumn =
           pixelColumnParam === "undefined" ||
-          pixelColumnParam === "null"
+            pixelColumnParam === "null"
             ? null
             : pixelColumnParam;
 
         const normalizedPixelRow =
           pixelRowParam === "undefined" ||
-          pixelRowParam === "null"
+            pixelRowParam === "null"
             ? null
             : pixelRowParam;
 
@@ -1075,7 +1067,7 @@ function MissionDataDashboardContent() {
         if (!response.ok || !result.success) {
           throw new Error(
             result.error ||
-              `Mission data request failed with HTTP ${response.status}.`,
+            `Mission data request failed with HTTP ${response.status}.`,
           );
         }
 
@@ -1205,15 +1197,14 @@ function MissionDataDashboardContent() {
           <div className="mt-7 flex flex-wrap items-center justify-between gap-3 border-t border-white/[0.06] pt-4">
             <div className="flex items-center gap-2">
               <span
-                className={`h-1.5 w-1.5 rounded-full ${
-                  loading
+                className={`h-1.5 w-1.5 rounded-full ${loading
                     ? "animate-pulse bg-amber-300"
                     : error
                       ? "bg-red-400"
                       : isReady
                         ? "bg-emerald-300"
                         : "bg-white/30"
-                }`}
+                  }`}
               />
 
               <span className="text-[9px] font-semibold uppercase tracking-[0.17em] text-white/45">
@@ -1323,15 +1314,14 @@ function MissionDataDashboardContent() {
         <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/[0.07] bg-white/[0.018] px-4 py-3">
           <div className="flex items-center gap-3">
             <span
-              className={`h-2 w-2 rounded-full ${
-                loading
+              className={`h-2 w-2 rounded-full ${loading
                   ? "animate-pulse bg-amber-300"
                   : error
                     ? "bg-red-400"
                     : data
                       ? "bg-emerald-300"
                       : "bg-white/30"
-              }`}
+                }`}
             />
 
             <span className="text-[9px] font-semibold uppercase tracking-[0.15em] text-white/55">

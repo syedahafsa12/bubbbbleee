@@ -40,7 +40,7 @@ function InvalidSelection() {
         <p className="mt-4 text-sm leading-6 text-white/55">
           A valid Product 78 location is required. Return to the mission
           planner, select a landing site, and choose a point inside that
-          site's terrain dataset.
+          site&apos;s terrain dataset.
         </p>
 
         <Link

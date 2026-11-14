@@ -37,7 +37,33 @@ import type {
 /* =====================================================
    TYPES
 ===================================================== */
+interface HorizonProfileDirection {
+  azimuthDeg: number;
 
+  horizonElevationDeg: number | null;
+  distanceMeters: number | null;
+  terrainElevationMeters: number | null;
+
+  horizonSource: "product78" | "product90" | null;
+  horizonResolutionMeters: number | null;
+
+  lastKnownSampleDistanceMeters: number | null;
+  coverageStatus: "partial" | "no_data";
+  terrainBeyondKnownCoverageUnknown: true;
+
+  samplesChecked: number;
+  product78SamplesChecked: number;
+  product90SamplesChecked: number;
+
+  terminationReason:
+    | "search_limit"
+    | "product78_boundary"
+    | "product78_nodata"
+    | "product90_boundary"
+    | "product90_nodata";
+
+  coverageLimited: true;
+}
 interface Lunar360ExplorerProps {
   siteId: Product78SiteId;
   latitude: number;
@@ -146,8 +172,6 @@ const LUNAR_RADIUS_METERS = 1_737_400;
 
 const CELESTIAL_DISTANCE = 8000;
 
-const SUN_FALLBACK_ANGULAR_RADIUS_DEG = 0.2666;
-const EARTH_FALLBACK_ANGULAR_RADIUS_DEG = 0.95;
 
 const CELESTIAL_VISUAL_SCALE = 6;
 
@@ -199,44 +223,44 @@ function getAngularRadiusDeg(
   return diameter / 7200;
 }
 
-function isConfirmedBlockedByTerrain(
+function canRenderCelestialDisk(
   observation: HorizonsObservation | null
 ): boolean {
   if (!observation) {
-    return true;
+    return false;
   }
 
   const visibility = observation.terrainVisibility;
 
-  if (!visibility) {
+  // No terrain assessment or no positive visibility result.
+  if (
+    !visibility ||
+    visibility.targetDiskVisible !== true
+  ) {
     return false;
   }
 
-  return (
-    visibility.status === "target_disk_below_sampled_terrain" ||
-    visibility.targetDiskVisible === false
-  );
-}
+  // Never invent a celestial disk size.
+  const angularRadiusDeg = getAngularRadiusDeg(observation);
 
-function canRenderCelestialDisk(
-  observation: HorizonsObservation | null,
-  fallbackAngularRadiusDeg: number
-): boolean {
-  if (!observation) {
+  if (angularRadiusDeg === null) {
     return false;
   }
 
-  if (isConfirmedBlockedByTerrain(observation)) {
-    return false;
+  // Only these two states are eligible for rendering.
+  switch (visibility.status) {
+    case "target_disk_intersects_sampled_terrain":
+      return true;
+
+    case "target_disk_above_sampled_terrain_unconfirmed":
+      return true;
+
+    case "target_disk_below_sampled_terrain":
+    case "target_disk_size_unavailable":
+    case "terrain_horizon_unavailable":
+    default:
+      return false;
   }
-
-  const angularRadiusDeg =
-    getAngularRadiusDeg(observation) ??
-    fallbackAngularRadiusDeg;
-
-  return (
-    observation.elevationDeg + angularRadiusDeg > 0
-  );
 }
 
 function getDiskFractionAboveHorizon(
@@ -261,9 +285,9 @@ function getDiskFractionAboveHorizon(
     (
       Math.acos(-normalized) +
       normalized *
-        Math.sqrt(
-          Math.max(0, 1 - normalized * normalized)
-        )
+      Math.sqrt(
+        Math.max(0, 1 - normalized * normalized)
+      )
     ) / Math.PI,
     0,
     1
@@ -279,34 +303,14 @@ function getSunlightFraction(
 
   const visibility = sun.terrainVisibility;
 
-  if (!visibility) {
-    return 0;
-  }
-
+  // Do not turn incomplete terrain coverage into confirmed
+  // direct sunlight.
   if (
-    visibility.status === "target_disk_below_sampled_terrain" ||
-    visibility.targetDiskVisible === false
-  ) {
-    return 0;
-  }
-
-  if (
-    visibility.status ===
-    "target_disk_above_sampled_terrain_unconfirmed"
-  ) {
-    return 1;
-  }
-
-  if (
-    visibility.status === "terrain_horizon_unavailable"
-  ) {
-    return 0;
-  }
-
-  if (
+    !visibility ||
+    visibility.targetDiskVisible !== true ||
+    visibility.terrainCoverageComplete !== true ||
     visibility.status !==
-      "target_disk_intersects_sampled_terrain" &&
-    visibility.status !== "target_disk_size_unavailable"
+    "target_disk_intersects_sampled_terrain"
   ) {
     return 0;
   }
@@ -318,14 +322,96 @@ function getSunlightFraction(
     return 0;
   }
 
-  const angularRadiusDeg =
-    getAngularRadiusDeg(sun) ??
-    SUN_FALLBACK_ANGULAR_RADIUS_DEG;
+  const angularRadiusDeg = getAngularRadiusDeg(sun);
+
+  if (angularRadiusDeg === null) {
+    return 0;
+  }
 
   return getDiskFractionAboveHorizon(
     visibility.clearanceDeg,
     angularRadiusDeg
   );
+}
+
+function getCelestialVisualOpacity(
+  observation: HorizonsObservation | null
+): number {
+  if (!observation) {
+    return 0;
+  }
+
+  const visibility = observation.terrainVisibility;
+
+  if (!visibility) {
+    return 0;
+  }
+
+  switch (visibility.status) {
+    case "target_disk_above_sampled_terrain_unconfirmed":
+      return 0.32;
+
+    case "target_disk_intersects_sampled_terrain": {
+      const angularRadiusDeg =
+        getAngularRadiusDeg(observation);
+
+      if (
+        angularRadiusDeg === null ||
+        visibility.clearanceDeg === null ||
+        !Number.isFinite(visibility.clearanceDeg)
+      ) {
+        return 0.25;
+      }
+
+      const visibleFraction = getDiskFractionAboveHorizon(
+        visibility.clearanceDeg,
+        angularRadiusDeg
+      );
+
+      return clamp(
+        0.25 + visibleFraction * 0.35,
+        0.25,
+        0.6
+      );
+    }
+
+    default:
+      return 0;
+  }
+}
+
+function getTerrainVisibilityLabel(
+  observation: HorizonsObservation | null
+): string {
+  if (!observation) {
+    return "JPL position unavailable";
+  }
+
+  const visibility = observation.terrainVisibility;
+
+  if (!visibility) {
+    return "Unknown — terrain assessment unavailable";
+  }
+
+  switch (visibility.status) {
+    case "target_disk_below_sampled_terrain":
+      return "Blocked by sampled terrain";
+
+    case "target_disk_intersects_sampled_terrain":
+      return "Intersects sampled terrain horizon";
+
+    case "target_disk_above_sampled_terrain_unconfirmed":
+      return "Above sampled terrain — unconfirmed";
+
+    case "target_disk_size_unavailable":
+      return "Unknown — angular diameter unavailable";
+
+    case "terrain_horizon_unavailable":
+      return "Unknown — terrain horizon unavailable";
+
+    default:
+      return "Unknown";
+  }
 }
 
 /* =====================================================
@@ -350,8 +436,8 @@ function destinationOnMoon(
   const sinLat2 =
     Math.sin(lat1) * Math.cos(angularDistance) +
     Math.cos(lat1) *
-      Math.sin(angularDistance) *
-      Math.cos(bearingRadians);
+    Math.sin(angularDistance) *
+    Math.cos(bearingRadians);
 
   const lat2 = Math.asin(clamp(sinLat2, -1, 1));
 
@@ -800,16 +886,28 @@ function AnimatedStarField() {
     []
   );
 
-  useFrame(({ clock }) => {
-    material.uniforms.uTime.value = clock.elapsedTime;
-  });
+  const materialRef = useRef<THREE.ShaderMaterial | null>(null);
 
   useEffect(() => {
+    materialRef.current = material;
+
     return () => {
+      if (materialRef.current === material) {
+        materialRef.current = null;
+      }
+
       geometry.dispose();
       material.dispose();
     };
   }, [geometry, material]);
+
+  useFrame(({ clock }) => {
+    const activeMaterial = materialRef.current;
+
+    if (activeMaterial) {
+      activeMaterial.uniforms.uTime.value = clock.elapsedTime;
+    }
+  });
 
   return (
     <points
@@ -824,19 +922,20 @@ function AnimatedStarField() {
 /* =====================================================
    SUN AND EARTH MODELS
 ===================================================== */
-
 function CelestialModel({
   url,
   position,
   diameter,
   emissive = false,
   rotationSpeed = 0,
+  opacity = 1,
 }: {
   url: string;
   position: THREE.Vector3;
   diameter: number;
   emissive?: boolean;
   rotationSpeed?: number;
+  opacity?: number;
 }) {
   const { scene } = useGLTF(url);
   const modelRef = useRef<THREE.Group>(null);
@@ -881,6 +980,12 @@ function CelestialModel({
         (sourceMaterial) => {
           const material = sourceMaterial.clone();
 
+          if (opacity < 1) {
+            material.transparent = true;
+            material.opacity *= opacity;
+            material.depthWrite = false;
+          }
+
           if (
             emissive &&
             material instanceof THREE.MeshStandardMaterial
@@ -913,7 +1018,7 @@ function CelestialModel({
     group.layers.set(1);
 
     return group;
-  }, [scene, diameter, emissive]);
+  }, [scene, diameter, emissive, opacity]);
 
   useEffect(() => {
     return () => {
@@ -966,26 +1071,17 @@ function CelestialBodies({
   earth: HorizonsObservation | null;
 }) {
   const sunAngularRadiusDeg =
-    sun
-      ? getAngularRadiusDeg(sun) ??
-        SUN_FALLBACK_ANGULAR_RADIUS_DEG
-      : null;
+    sun ? getAngularRadiusDeg(sun) : null;
 
   const earthAngularRadiusDeg =
-    earth
-      ? getAngularRadiusDeg(earth) ??
-        EARTH_FALLBACK_ANGULAR_RADIUS_DEG
-      : null;
+    earth ? getAngularRadiusDeg(earth) : null;
 
-  const sunVisible = canRenderCelestialDisk(
-    sun,
-    SUN_FALLBACK_ANGULAR_RADIUS_DEG
-  );
+  const sunVisible = canRenderCelestialDisk(sun);
 
-  const earthVisible = canRenderCelestialDisk(
-    earth,
-    EARTH_FALLBACK_ANGULAR_RADIUS_DEG
-  );
+  const earthVisible = canRenderCelestialDisk(earth);
+  const sunOpacity = getCelestialVisualOpacity(sun);
+
+  const earthOpacity = getCelestialVisualOpacity(earth);
 
   const sunlightFraction = getSunlightFraction(sun);
 
@@ -996,11 +1092,11 @@ function CelestialBodies({
     () =>
       sunVisible && sun
         ? getLocalSkyDirection(
-            sun,
-            terrain,
-            latitude,
-            longitude
-          )
+          sun,
+          terrain,
+          latitude,
+          longitude
+        )
         : null,
     [sun, sunVisible, terrain, latitude, longitude]
   );
@@ -1009,11 +1105,11 @@ function CelestialBodies({
     () =>
       earthVisible && earth
         ? getLocalSkyDirection(
-            earth,
-            terrain,
-            latitude,
-            longitude
-          )
+          earth,
+          terrain,
+          latitude,
+          longitude
+        )
         : null,
     [earth, earthVisible, terrain, latitude, longitude]
   );
@@ -1022,8 +1118,8 @@ function CelestialBodies({
     () =>
       sunDirection
         ? sunDirection.clone().multiplyScalar(
-            CELESTIAL_DISTANCE
-          )
+          CELESTIAL_DISTANCE
+        )
         : null,
     [sunDirection]
   );
@@ -1032,8 +1128,8 @@ function CelestialBodies({
     () =>
       earthDirection
         ? earthDirection.clone().multiplyScalar(
-            CELESTIAL_DISTANCE
-          )
+          CELESTIAL_DISTANCE
+        )
         : null,
     [earthDirection]
   );
@@ -1041,21 +1137,21 @@ function CelestialBodies({
   const sunDiameter =
     sunAngularRadiusDeg !== null
       ? 2 *
-        CELESTIAL_DISTANCE *
-        Math.tan(
-          THREE.MathUtils.degToRad(sunAngularRadiusDeg)
-        ) *
-        CELESTIAL_VISUAL_SCALE
+      CELESTIAL_DISTANCE *
+      Math.tan(
+        THREE.MathUtils.degToRad(sunAngularRadiusDeg)
+      ) *
+      CELESTIAL_VISUAL_SCALE
       : null;
 
   const earthDiameter =
     earthAngularRadiusDeg !== null
       ? 2 *
-        CELESTIAL_DISTANCE *
-        Math.tan(
-          THREE.MathUtils.degToRad(earthAngularRadiusDeg)
-        ) *
-        CELESTIAL_VISUAL_SCALE
+      CELESTIAL_DISTANCE *
+      Math.tan(
+        THREE.MathUtils.degToRad(earthAngularRadiusDeg)
+      ) *
+      CELESTIAL_VISUAL_SCALE
       : null;
 
   const modelAmbient = useMemo(() => {
@@ -1107,6 +1203,8 @@ function CelestialBodies({
             diameter={sunDiameter}
             emissive
             rotationSpeed={0.0015}
+            opacity={sunOpacity}
+
           />
         )}
 
@@ -1118,6 +1216,8 @@ function CelestialBodies({
             position={earthPosition}
             diameter={earthDiameter}
             rotationSpeed={0.0005}
+            opacity={earthOpacity}
+
           />
         )}
     </>
@@ -1209,7 +1309,6 @@ function LunarScene({
 /* =====================================================
    MAIN COMPONENT
 ===================================================== */
-
 export default function Lunar360Explorer({
   siteId,
   latitude,
@@ -1219,11 +1318,39 @@ export default function Lunar360Explorer({
   missionDate,
   missionTime,
 }: Lunar360ExplorerProps) {
-  const [terrain, setTerrain] =
-    useState<LolaTerrainData | null>(null);
+  const terrainRequestKey = JSON.stringify([
+    siteId,
+    pixelColumn,
+    pixelRow,
+  ]);
 
-  const [horizons, setHorizons] =
-    useState<HorizonsResponse | null>(null);
+  const [terrainResult, setTerrainResult] = useState<{
+    key: string;
+    data: LolaTerrainData;
+  } | null>(null);
+
+  const terrain =
+    terrainResult?.key === terrainRequestKey
+      ? terrainResult.data
+      : null;
+
+  const horizonsRequestKey = JSON.stringify([
+    terrainRequestKey,
+    latitude,
+    longitude,
+    missionDate,
+    missionTime,
+  ]);
+
+  const [horizonsResult, setHorizonsResult] = useState<{
+    key: string;
+    data: HorizonsResponse;
+  } | null>(null);
+
+  const horizons =
+    horizonsResult?.key === horizonsRequestKey
+      ? horizonsResult.data
+      : null;
 
   const look = useRef<LookState>({
     yaw: 0,
@@ -1244,9 +1371,6 @@ export default function Lunar360Explorer({
   useEffect(() => {
     let cancelled = false;
 
-    setTerrain(null);
-    setHorizons(null);
-
     async function initializeTerrain() {
       try {
         const loaded = await loadLolaTerrainForSite(siteId);
@@ -1260,7 +1384,10 @@ export default function Lunar360Explorer({
           row: pixelRow,
         });
 
-        setTerrain(loaded);
+        setTerrainResult({
+          key: terrainRequestKey,
+          data: loaded,
+        });
 
         console.info("[LUNAPATH] Loaded selected LOLA site:", {
           siteId,
@@ -1273,10 +1400,6 @@ export default function Lunar360Explorer({
           `[LUNAPATH] NASA terrain unavailable for ${siteId}:`,
           error
         );
-
-        if (!cancelled) {
-          setTerrain(null);
-        }
       }
     }
 
@@ -1285,7 +1408,7 @@ export default function Lunar360Explorer({
     return () => {
       cancelled = true;
     };
-  }, [siteId, pixelColumn, pixelRow]);
+  }, [siteId, pixelColumn, pixelRow, terrainRequestKey]);
 
   /* -----------------------------------------------
      Fetch JPL Horizons at the selected location.
@@ -1295,8 +1418,6 @@ export default function Lunar360Explorer({
     let cancelled = false;
 
     const controller = new AbortController();
-
-    setHorizons(null);
 
     if (!terrain) {
       return () => {
@@ -1341,7 +1462,7 @@ export default function Lunar360Explorer({
         if (!response.ok || !result.success) {
           throw new Error(
             result.error ||
-              `JPL Horizons request failed: HTTP ${response.status}.`
+            `JPL Horizons request failed: HTTP ${response.status}.`
           );
         }
 
@@ -1355,7 +1476,10 @@ export default function Lunar360Explorer({
           );
         }
 
-        setHorizons(result);
+        setHorizonsResult({
+          key: horizonsRequestKey,
+          data: result,
+        });
 
         console.info(
           "[LUNAPATH] JPL selected-location result:",
@@ -1380,8 +1504,6 @@ export default function Lunar360Explorer({
             "[LUNAPATH] JPL Horizons data unavailable:",
             error
           );
-
-          setHorizons(null);
         }
       }
     }
@@ -1401,6 +1523,7 @@ export default function Lunar360Explorer({
     pixelRow,
     missionDate,
     missionTime,
+    horizonsRequestKey,
   ]);
 
   const sun = useMemo(
@@ -1529,6 +1652,52 @@ export default function Lunar360Explorer({
         />
       </Canvas>
 
+      <div className="pointer-events-none absolute left-5 top-5 z-40 w-[min(390px,calc(100vw-2.5rem))] border border-white/15 bg-black/75 p-4 text-white shadow-xl backdrop-blur-md">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-[9px] font-semibold tracking-[0.18em] text-white/60">
+            NASA / JPL HORIZONS
+          </p>
+
+          <span className="text-[9px] tracking-wider text-white/40">
+            {horizons ? "RESPONSE RECEIVED" : "NO RESPONSE"}
+          </span>
+        </div>
+
+        <p className="mt-2 text-[10px] text-white/40">
+          Mission time: {missionDate} {missionTime} UTC
+        </p>
+
+        <div className="mt-4 grid grid-cols-2 gap-4">
+          <div>
+            <p className="text-[10px] font-semibold tracking-wider text-amber-200">
+              SUN
+            </p>
+
+            <p className="mt-2 text-[10px] leading-5 text-white/75">
+              {getTerrainVisibilityLabel(sun)}
+            </p>
+
+            <p className="mt-2 text-[9px] text-white/35">
+              JPL: {sun?.time ?? "Unavailable"}
+            </p>
+          </div>
+
+          <div>
+            <p className="text-[10px] font-semibold tracking-wider text-blue-200">
+              EARTH
+            </p>
+
+            <p className="mt-2 text-[10px] leading-5 text-white/75">
+              {getTerrainVisibilityLabel(earth)}
+            </p>
+
+            <p className="mt-2 text-[9px] text-white/35">
+              JPL: {earth?.time ?? "Unavailable"}
+            </p>
+          </div>
+        </div>
+      </div>
+
       <a
         href="/map"
         onPointerDown={(
@@ -1545,7 +1714,6 @@ export default function Lunar360Explorer({
     </main>
   );
 }
-
 /* =====================================================
    PRELOAD MODELS
 ===================================================== */

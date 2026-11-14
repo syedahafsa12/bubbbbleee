@@ -330,7 +330,18 @@ export default function LunarMap({
     offsetY: 0,
   });
 
-  const [selected, setSelected] = useState<LunarMapSelection | null>(null);
+  const [selectedOverride, setSelectedOverride] =
+    useState<LunarMapSelection | null>(null);
+
+  const selected =
+    selectedOverride ??
+    (
+      terrain &&
+        initialSelection &&
+        isLolaPixelInsideRaster(initialSelection.pixel, terrain)
+        ? initialSelection
+        : null
+    );
 
   useEffect(() => {
     let cancelled = false;
@@ -340,7 +351,7 @@ export default function LunarMap({
       setError(null);
       setTerrain(null);
       rasterRef.current = null;
-      setSelected(null);
+      setSelectedOverride(null);
 
       try {
         const loadedTerrain = await loadLolaTerrainForSite(siteId);
@@ -375,18 +386,7 @@ export default function LunarMap({
     };
   }, [siteId]);
 
-  useEffect(() => {
-    if (!terrain) return;
 
-    if (
-      initialSelection &&
-      isLolaPixelInsideRaster(initialSelection.pixel, terrain)
-    ) {
-      setSelected(initialSelection);
-    } else {
-      setSelected(null);
-    }
-  }, [terrain, initialSelection]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -395,23 +395,27 @@ export default function LunarMap({
     if (!container) return;
 
     const observer = new ResizeObserver(([entry]) => {
-      setViewport({
+      const nextViewport = {
         width: entry.contentRect.width,
         height: entry.contentRect.height,
-      });
+      };
+
+      setViewport(nextViewport);
+
+      if (
+        terrain &&
+        nextViewport.width > 0 &&
+        nextViewport.height > 0
+      ) {
+        setView(getFittedView(terrain, nextViewport));
+      }
     });
 
     observer.observe(container);
+
     return () => observer.disconnect();
-  }, []);
+  }, [terrain]);
 
-  useEffect(() => {
-    if (!terrain || viewport.width <= 0 || viewport.height <= 0) {
-      return;
-    }
-
-    setView(getFittedView(terrain, viewport));
-  }, [terrain, viewport]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -522,7 +526,7 @@ export default function LunarMap({
 
         const selection = { coordinate, pixel };
 
-        setSelected(selection);
+        setSelectedOverride(selection);
         onLocationSelect?.(coordinate, pixel);
       } catch (err) {
         console.error("[LunarMap] Coordinate conversion failed:", err);
@@ -688,9 +692,8 @@ export default function LunarMap({
       </div>
 
       <div
-        className={`relative w-full overflow-hidden rounded-xl border border-white/10 bg-[#101214] ${
-          compact ? "h-[260px]" : "h-[min(65vh,620px)] min-h-[380px]"
-        }`}
+        className={`relative w-full overflow-hidden rounded-xl border border-white/10 bg-[#101214] ${compact ? "h-[260px]" : "h-[min(65vh,620px)] min-h-[380px]"
+          }`}
       >
         <canvas
           ref={canvasRef}

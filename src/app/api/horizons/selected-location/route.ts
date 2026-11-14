@@ -346,9 +346,9 @@ function getDateAndTime(
   if (
     Number.isNaN(start.getTime()) ||
     start.toISOString().slice(0, 10) !==
-      dateValue ||
+    dateValue ||
     start.toISOString().slice(11, 19) !==
-      normalizedTime
+    normalizedTime
   ) {
     throw new Error(
       "The selected date or time is invalid."
@@ -495,7 +495,7 @@ function parseHorizonsObservation(
 
     angularDiameterArcsec:
       Number.isFinite(angularDiameter) &&
-      angularDiameter > 0
+        angularDiameter > 0
         ? angularDiameter
         : null,
   };
@@ -636,7 +636,7 @@ function getTerrainHorizonAtAzimuth(
 
     const next =
       directions[
-        (index + 1) % directions.length
+      (index + 1) % directions.length
       ];
 
     const lowerAzimuth =
@@ -708,7 +708,7 @@ function getTerrainHorizonAtAzimuth(
   return (
     lowerHorizon +
     (upperHorizon - lowerHorizon) *
-      amount
+    amount
   );
 }
 
@@ -938,14 +938,14 @@ export async function GET(
       requestedLatitude === null
         ? site.observer.latitudeDeg
         : Math.sign(
-            site.observer.latitudeDeg
-          ) *
-          Math.abs(requestedLatitude);
+          site.observer.latitudeDeg
+        ) *
+        Math.abs(requestedLatitude);
 
     const longitudeEastDeg =
       normalizeLongitudeEast(
         requestedLongitude ??
-          site.observer.longitudeEastDeg
+        site.observer.longitudeEastDeg
       );
 
     if (
@@ -1007,10 +1007,10 @@ export async function GET(
       const pixelDifference =
         Math.hypot(
           suppliedPixelColumn -
-            observerSample.pixel.column,
+          observerSample.pixel.column,
 
           suppliedPixelRow -
-            observerSample.pixel.row
+          observerSample.pixel.row
         );
 
       if (pixelDifference > 1.5) {
@@ -1101,6 +1101,7 @@ export async function GET(
       },
 
       mission,
+      horizonProfile: terrainHorizon.directions,
 
       observer: {
         latitudeDeg:
