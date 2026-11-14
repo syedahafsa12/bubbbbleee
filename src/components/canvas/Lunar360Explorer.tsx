@@ -102,7 +102,7 @@ interface HorizonsObservation {
   terrainVisibility: TerrainVisibility;
 }
 
-interface HorizonsTarget extends Partial<HorizonsObservation> {
+interface HorizonsTarget extends HorizonsObservation {
   observations?: HorizonsObservation[];
   visibilityWindows?: Array<{
     state: TerrainVisibilityStatus;
