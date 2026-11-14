@@ -193,6 +193,7 @@ interface ScienceSample {
   pixel?: { column: number; row: number };
   resolutionMeters?: number;
   values?: {
+    elevationMeters: number;
     elevationUncertaintyMeters: number;
     slopeDegrees: number;
     slopeUncertaintyDegrees: number;
@@ -1938,6 +1939,7 @@ export default function Lunar360Explorer({
             <p className="mt-2 text-xs text-white/45">Reading science values…</p>
           ) : scienceSample?.available && scienceSample.values ? (
             <div className="mt-2 grid grid-cols-2 gap-3 text-xs">
+              <div><p className="text-[9px] text-white/40">Elevation</p><strong>{scienceSample.values.elevationMeters.toFixed(2)} m</strong></div>
               <div><p className="text-[9px] text-white/40">Slope</p><strong>{scienceSample.values.slopeDegrees.toFixed(2)}°</strong></div>
               <div><p className="text-[9px] text-white/40">Slope uncertainty</p><strong>±{scienceSample.values.slopeUncertaintyDegrees.toFixed(2)}°</strong></div>
               <div><p className="text-[9px] text-white/40">Elevation uncertainty</p><strong>±{scienceSample.values.elevationUncertaintyMeters.toFixed(2)} m</strong></div>
