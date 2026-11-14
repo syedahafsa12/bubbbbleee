@@ -32,13 +32,37 @@ const TERRAIN_OPTIONS = {
   regionalSampleStepMeters: 20,
   maxDistanceMeters: 15000,
   directionConcurrency: 8,
+  // Product90 is optional: the sampler preserves the Product78 baseline
+  // if metadata, compatibility checks, COG access or tile sampling fail.
+  enableProduct90: true,
 };
+
+const JPL_SAMPLE_INTERVAL_MINUTES = 10;
+const ALLOWED_DURATION_HOURS = [6, 12, 24, 48, 72] as const;
 
 type HorizonsObservation = {
   time: string;
+  timeUtc: string;
   azimuthDeg: number;
   elevationDeg: number;
   angularDiameterArcsec: number | null;
+};
+
+type AssessedHorizonsObservation = HorizonsObservation & {
+  terrainVisibility: TerrainVisibility;
+};
+
+type VisibilityWindow = {
+  state: TerrainVisibilityStatus;
+  startTimeUtc: string;
+  endTimeUtc: string;
+  durationMinutes: number;
+  observationCount: number;
+};
+
+type HorizonsTarget = Partial<AssessedHorizonsObservation> & {
+  observations: AssessedHorizonsObservation[];
+  visibilityWindows: VisibilityWindow[];
 };
 
 type TerrainVisibilityStatus =
@@ -309,71 +333,53 @@ async function getTerrainHorizon(
 
 function getDateAndTime(
   dateValue: string | null,
-  timeValue: string | null
+  timeValue: string | null,
+  durationValue: string | null
 ): {
   date: string;
   time: string;
+  durationHours: number;
+  sampleIntervalMinutes: number;
   startTime: string;
   stopTime: string;
 } {
-  if (
-    !dateValue ||
-    !/^\d{4}-\d{2}-\d{2}$/.test(dateValue)
-  ) {
-    throw new Error(
-      "A valid date is required in YYYY-MM-DD format."
-    );
+  if (!dateValue || !/^\\d{4}-\\d{2}-\\d{2}$/.test(dateValue)) {
+    throw new Error("A valid date is required in YYYY-MM-DD format.");
   }
 
-  if (
-    !timeValue ||
-    !/^\d{2}:\d{2}(?::\d{2})?$/.test(timeValue)
-  ) {
-    throw new Error(
-      "A valid time is required in HH:mm or HH:mm:ss format."
-    );
+  if (!timeValue || !/^\\d{2}:\\d{2}(?::\\d{2})?$/.test(timeValue)) {
+    throw new Error("A valid time is required in HH:mm or HH:mm:ss format.");
   }
 
-  const normalizedTime =
-    timeValue.length === 5
-      ? `${timeValue}:00`
-      : timeValue;
-
-  const start = new Date(
-    `${dateValue}T${normalizedTime}.000Z`
-  );
-
+  const normalizedTime = timeValue.length === 5 ? `${timeValue}:00` : timeValue;
+  const start = new Date(`${dateValue}T${normalizedTime}.000Z`);
   if (
     Number.isNaN(start.getTime()) ||
-    start.toISOString().slice(0, 10) !==
-    dateValue ||
-    start.toISOString().slice(11, 19) !==
-    normalizedTime
+    start.toISOString().slice(0, 10) !== dateValue ||
+    start.toISOString().slice(11, 19) !== normalizedTime
   ) {
-    throw new Error(
-      "The selected date or time is invalid."
-    );
+    throw new Error("The selected date or time is invalid.");
   }
 
-  const stop = new Date(
-    start.getTime() + 60_000
-  );
+  const requestedDuration = durationValue === null || durationValue.trim() === ""
+    ? 24
+    : Number(durationValue);
 
-  const stopDate =
-    stop.toISOString().slice(0, 10);
+  if (
+    !Number.isSafeInteger(requestedDuration) ||
+    !ALLOWED_DURATION_HOURS.includes(requestedDuration as (typeof ALLOWED_DURATION_HOURS)[number])
+  ) {
+    throw new Error("Duration must be one of 6, 12, 24, 48 or 72 hours.");
+  }
 
-  const stopTime =
-    stop.toISOString().slice(11, 19);
-
+  const stop = new Date(start.getTime() + requestedDuration * 60 * 60 * 1000);
   return {
     date: dateValue,
     time: normalizedTime,
-
-    startTime:
-      `${dateValue} ${normalizedTime}`,
-
-    stopTime:
-      `${stopDate} ${stopTime}`,
+    durationHours: requestedDuration,
+    sampleIntervalMinutes: JPL_SAMPLE_INTERVAL_MINUTES,
+    startTime: `${dateValue} ${normalizedTime}`,
+    stopTime: `${stop.toISOString().slice(0, 10)} ${stop.toISOString().slice(11, 19)}`,
   };
 }
 
@@ -391,114 +397,83 @@ function getDateAndTime(
  *
  * Quantity 13 is in arcseconds.
  */
-function parseHorizonsObservation(
+function parseHorizonsObservations(
   responseText: string
-): HorizonsObservation {
-  const startIndex =
-    responseText.indexOf("$$SOE");
+): HorizonsObservation[] {
+  const startIndex = responseText.indexOf("$$SOE");
+  const endIndex = responseText.indexOf("$$EOE");
 
-  const endIndex =
-    responseText.indexOf("$$EOE");
-
-  if (
-    startIndex === -1 ||
-    endIndex === -1 ||
-    endIndex <= startIndex
-  ) {
-    throw new Error(
-      "JPL Horizons did not return an observation table."
-    );
+  if (startIndex === -1 || endIndex === -1 || endIndex <= startIndex) {
+    throw new Error("JPL Horizons did not return an observation table.");
   }
 
-  const table = responseText.slice(
-    startIndex + "$$SOE".length,
-    endIndex
-  );
+  const table = responseText.slice(startIndex + "$$SOE".length, endIndex);
+  const monthIndex: Record<string, string> = {
+    Jan: "01", Feb: "02", Mar: "03", Apr: "04",
+    May: "05", Jun: "06", Jul: "07", Aug: "08",
+    Sep: "09", Oct: "10", Nov: "11", Dec: "12",
+  };
+  const numericPattern = /[-+]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:[Ee][-+]?\\d+)?/g;
+  const observations: HorizonsObservation[] = [];
 
-  const line = table
-    .split(/\r?\n/)
-    .map((item) => item.trim())
-    .find((item) =>
-      /^\d{4}-[A-Za-z]{3}-\d{2}\s+\d{2}:\d{2}/.test(
-        item
-      )
+  for (const rawLine of table.split(/\\r?\\n/)) {
+    const line = rawLine.trim();
+    if (!line) continue;
+
+    const timeMatch = line.match(
+      /^(\\d{4})-([A-Za-z]{3})-(\\d{2})\\s+(\\d{2}):(\\d{2})(?::(\\d{2})(?:\\.(\\d+))?)?/
     );
+    if (!timeMatch) continue;
 
-  if (!line) {
-    throw new Error(
-      "JPL Horizons returned no observation for the requested time."
-    );
-  }
+    const [, year, monthName, day, hour, minute, second = "00", fraction = ""] = timeMatch;
+    const month = monthIndex[monthName];
+    if (!month) continue;
 
-  const timeMatch = line.match(
-    /^(\d{4}-[A-Za-z]{3}-\d{2}\s+\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?)/
-  );
+    const remaining = line.slice(timeMatch[0].length);
+    const numericValues = [...remaining.matchAll(numericPattern)].map((match) => Number(match[0]));
+    if (numericValues.length < 2) continue;
 
-  if (!timeMatch) {
-    throw new Error(
-      "Could not parse the JPL Horizons timestamp."
-    );
-  }
-
-  const remaining =
-    line.slice(timeMatch[0].length);
-
-  /*
-   * The table can contain marker characters between the
-   * timestamp and the numeric fields. Extract the numeric
-   * fields after the timestamp.
-   *
-   * With QUANTITIES=4,13:
-   * values[0] = azimuth in degrees
-   * values[1] = elevation in degrees
-   * values[2] = angular diameter in arcseconds
-   */
-  const values = remaining.match(
-    /[-+]?\d+(?:\.\d+)?(?:[Ee][-+]?\d+)?/g
-  );
-
-  if (!values || values.length < 2) {
-    throw new Error(
-      "JPL Horizons did not return azimuth and elevation values."
-    );
-  }
-
-  const azimuthDeg =
-    Number(values[0]);
-
-  const elevationDeg =
-    Number(values[1]);
-
-  const angularDiameter =
-    values.length >= 3
-      ? Number(values[2])
+    const azimuthDeg = numericValues[0];
+    const elevationDeg = numericValues[1];
+    const angularDiameter = numericValues.length >= 3
+      ? numericValues[2]
       : Number.NaN;
 
-  if (
-    !Number.isFinite(azimuthDeg) ||
-    !Number.isFinite(elevationDeg) ||
-    elevationDeg < -90 ||
-    elevationDeg > 90
-  ) {
-    throw new Error(
-      "JPL Horizons returned invalid sky coordinates."
-    );
+    if (
+      !Number.isFinite(azimuthDeg) ||
+      azimuthDeg < 0 ||
+      azimuthDeg > 360 ||
+      !Number.isFinite(elevationDeg) ||
+      elevationDeg < -90 ||
+      elevationDeg > 90
+    ) {
+      continue;
+    }
+
+    const milliseconds = (fraction + "000").slice(0, 3);
+    const timeUtc = `${year}-${month}-${day}T${hour}:${minute}:${second}.${milliseconds}Z`;
+
+    observations.push({
+      time: `${year}-${monthName}-${day} ${hour}:${minute}:${second}`,
+      timeUtc,
+      azimuthDeg: normalizeLongitudeEast(azimuthDeg),
+      elevationDeg,
+      angularDiameterArcsec:
+        Number.isFinite(angularDiameter) && angularDiameter > 0
+          ? angularDiameter
+          : null,
+    });
   }
 
-  return {
-    time: timeMatch[1],
+  observations.sort((left, right) =>
+    Date.parse(left.timeUtc) - Date.parse(right.timeUtc)
+  );
 
-    azimuthDeg:
-      normalizeLongitudeEast(azimuthDeg),
+  if (observations.length === 0) {
+    throw new Error("JPL Horizons returned no parseable observations.");
+  }
 
-    elevationDeg,
-
-    angularDiameterArcsec:
-      Number.isFinite(angularDiameter) &&
-        angularDiameter > 0
-        ? angularDiameter
-        : null,
-  };
+  return observations;
 }
 
 /* =====================================================
@@ -511,7 +486,7 @@ async function requestHorizonsTarget(
   altitudeKm: number,
   startTime: string,
   stopTime: string
-): Promise<HorizonsObservation> {
+): Promise<HorizonsObservation[]> {
   const params = new URLSearchParams({
     format: "text",
 
@@ -532,7 +507,7 @@ async function requestHorizonsTarget(
     START_TIME: `'${startTime}'`,
     STOP_TIME: `'${stopTime}'`,
 
-    STEP_SIZE: "'1m'",
+    STEP_SIZE: "'10m'",
 
     /*
      * 4  = apparent AZ/EL
@@ -579,9 +554,7 @@ async function requestHorizonsTarget(
     );
   }
 
-  return parseHorizonsObservation(
-    responseText
-  );
+  return parseHorizonsObservations(responseText);
 }
 
 /* =====================================================
@@ -883,6 +856,79 @@ function assessTargetVisibility(
   };
 }
 
+function buildVisibilityWindows(
+  observations: AssessedHorizonsObservation[]
+): VisibilityWindow[] {
+  if (observations.length === 0) return [];
+
+  const windows: VisibilityWindow[] = [];
+  const sorted = [...observations].sort(
+    (left, right) => Date.parse(left.timeUtc) - Date.parse(right.timeUtc)
+  );
+
+  let currentState: TerrainVisibilityStatus | null = null;
+  let startIndex = 0;
+
+  const closeWindow = (endIndex: number) => {
+    if (currentState === null) return;
+    const first = sorted[startIndex];
+    const last = sorted[endIndex];
+    const elapsed = Math.max(
+      0,
+      (Date.parse(last.timeUtc) - Date.parse(first.timeUtc)) / 60_000
+    );
+
+    windows.push({
+      state: currentState,
+      startTimeUtc: first.timeUtc,
+      endTimeUtc: last.timeUtc,
+      durationMinutes: elapsed + JPL_SAMPLE_INTERVAL_MINUTES,
+      observationCount: endIndex - startIndex + 1,
+    });
+  };
+
+  for (let index = 0; index < sorted.length; index += 1) {
+    const observation = sorted[index];
+    const state = observation.terrainVisibility.status;
+    const previous = sorted[index - 1];
+    const hasTimeGap = previous
+      ? Date.parse(observation.timeUtc) - Date.parse(previous.timeUtc) >
+        JPL_SAMPLE_INTERVAL_MINUTES * 60_000 + 1_000
+      : false;
+
+    if (index === 0) {
+      currentState = state;
+      startIndex = 0;
+      continue;
+    }
+
+    if (state !== currentState || hasTimeGap) {
+      closeWindow(index - 1);
+      currentState = state;
+      startIndex = index;
+    }
+  }
+
+  closeWindow(sorted.length - 1);
+  return windows;
+}
+
+function buildTarget(
+  observations: HorizonsObservation[],
+  horizon: TerrainHorizonResult
+): HorizonsTarget {
+  const assessed = observations.map((observation) => ({
+    ...observation,
+    terrainVisibility: assessTargetVisibility(observation, horizon),
+  }));
+
+  return {
+    ...(assessed[0] ?? {}),
+    observations: assessed,
+    visibilityWindows: buildVisibilityWindows(assessed),
+  };
+}
+
 /* =====================================================
    ERROR HANDLING
 ===================================================== */
@@ -915,7 +961,8 @@ export async function GET(
 
     const mission = getDateAndTime(
       params.get("date"),
-      params.get("time")
+      params.get("time"),
+      params.get("durationHours")
     );
 
     const requestedLatitude =
@@ -1043,8 +1090,8 @@ export async function GET(
     ------------------------------------------------ */
 
     const [
-      sunObservation,
-      earthObservation,
+      sunObservations,
+      earthObservations,
     ] = await Promise.all([
       requestHorizonsTarget(
         "10",
@@ -1067,17 +1114,8 @@ export async function GET(
        Assess both disks against the sampled terrain.
     ------------------------------------------------ */
 
-    const sunVisibility =
-      assessTargetVisibility(
-        sunObservation,
-        terrainHorizon
-      );
-
-    const earthVisibility =
-      assessTargetVisibility(
-        earthObservation,
-        terrainHorizon
-      );
+    const sunTarget = buildTarget(sunObservations, terrainHorizon);
+    const earthTarget = buildTarget(earthObservations, terrainHorizon);
 
     /* -----------------------------------------------
        Return flat target objects.
@@ -1100,7 +1138,10 @@ export async function GET(
         dataDirectory: site.dataDirectory,
       },
 
-      mission,
+      mission: {
+        ...mission,
+        sampleIntervalMinutes: JPL_SAMPLE_INTERVAL_MINUTES,
+      },
       horizonProfile: terrainHorizon.directions,
 
       observer: {
@@ -1123,15 +1164,8 @@ export async function GET(
       },
 
       targets: {
-        sun: {
-          ...sunObservation,
-          terrainVisibility: sunVisibility,
-        },
-
-        earth: {
-          ...earthObservation,
-          terrainVisibility: earthVisibility,
-        },
+        sun: sunTarget,
+        earth: earthTarget,
       },
 
       terrainModel: {
@@ -1166,6 +1200,13 @@ export async function GET(
         product90SamplesChecked:
           terrainHorizon.product90SamplesChecked,
 
+        product90Status: terrainHorizon.product90Status,
+        product90Error: terrainHorizon.product90Error,
+        regionalResolutionMeters:
+          terrainHorizon.product90SamplesChecked > 0
+            ? terrainHorizon.product90ResolutionMeters
+            : null,
+
         rasterBoundaryLimitedDirections:
           terrainHorizon.rasterBoundaryLimitedDirections,
 
@@ -1178,7 +1219,21 @@ export async function GET(
       sources: {
         ephemeris: "NASA/JPL Horizons",
         localTerrain: "NASA LOLA Product 78",
-        regionalTerrain: "NASA LOLA Product 90",
+        regionalTerrain:
+          terrainHorizon.product90SamplesChecked > 0
+            ? "NASA LOLA Product 90 (20 m pixel spacing; optional regional samples)"
+            : "Not used — regional terrain samples unavailable or not required",
+      },
+
+      interpretation: {
+        horizonProfile:
+          "Each azimuth reports the highest sampled terrain elevation angle within known coverage. Terrain beyond the last known sample or coverage boundary remains unknown.",
+        sunVisibility:
+          "Each observation is assessed against the sampled terrain profile. Above-sampled-terrain status is not proof of complete visibility.",
+        earthVisibility:
+          "Earth terrain visibility is a geometric line-of-sight screening only. No radio-frequency link budget, antenna gain, transmit power, pointing loss, or data-rate analysis is included.",
+        visibilityWindows:
+          "10-minute sampled windows. Boundaries are observation timestamps, not exact interpolated crossings.",
       },
     });
   } catch (error) {
