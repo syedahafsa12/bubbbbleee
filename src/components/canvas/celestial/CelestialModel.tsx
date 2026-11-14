@@ -12,9 +12,9 @@ export interface CelestialModelProps {
 }
 
 /**
- * Loads a NASA glTF model while preserving its authored geometry and materials.
- * JPL Horizons supplies the apparent position and angular diameter; this
- * component only normalizes the source model's bounding size to that diameter.
+ * Loads the selected glTF appearance model while preserving its authored
+ * geometry and materials. JPL Horizons supplies the apparent position and
+ * angular diameter; this component only normalizes the source model's bounds.
  */
 export default function CelestialModel({
   url,
