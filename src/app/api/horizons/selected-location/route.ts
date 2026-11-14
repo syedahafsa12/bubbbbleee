@@ -343,11 +343,11 @@ function getDateAndTime(
   startTime: string;
   stopTime: string;
 } {
-  if (!dateValue || !/^\\d{4}-\\d{2}-\\d{2}$/.test(dateValue)) {
+  if (!dateValue || !/^\d{4}-\d{2}-\d{2}$/.test(dateValue)) {
     throw new Error("A valid date is required in YYYY-MM-DD format.");
   }
 
-  if (!timeValue || !/^\\d{2}:\\d{2}(?::\\d{2})?$/.test(timeValue)) {
+  if (!timeValue || !/^\d{2}:\d{2}(?::\d{2})?$/.test(timeValue)) {
     throw new Error("A valid time is required in HH:mm or HH:mm:ss format.");
   }
 
@@ -413,15 +413,15 @@ function parseHorizonsObservations(
     May: "05", Jun: "06", Jul: "07", Aug: "08",
     Sep: "09", Oct: "10", Nov: "11", Dec: "12",
   };
-  const numericPattern = /[-+]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:[Ee][-+]?\\d+)?/g;
+  const numericPattern = /[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[Ee][-+]?\d+)?/g;
   const observations: HorizonsObservation[] = [];
 
-  for (const rawLine of table.split(/\\r?\\n/)) {
+  for (const rawLine of table.split(/\r?\n/)) {
     const line = rawLine.trim();
     if (!line) continue;
 
     const timeMatch = line.match(
-      /^(\\d{4})-([A-Za-z]{3})-(\\d{2})\\s+(\\d{2}):(\\d{2})(?::(\\d{2})(?:\\.(\\d+))?)?/
+      /^(\d{4})-([A-Za-z]{3})-(\d{2})\s+(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d+))?)?/
     );
     if (!timeMatch) continue;
 
