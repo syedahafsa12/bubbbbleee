@@ -47,7 +47,7 @@ type MissionPayload = {
     completeHorizonVerified: false;
     horizonProfile: Array<{
       coverageStatus: "partial" | "no_data";
-      horizonElevationDeg: number | null;
+      maxTerrainElevationAngleDeg: number | null;
       lastKnownSampleDistanceM: number | null;
       source: "product78" | null;
     }>;
@@ -212,7 +212,7 @@ export default function SciencePage() {
           {results.map(({ site, payload, error: siteError }) => {
             const terrain = payload?.terrainModel;
             const profile = terrain?.horizonProfile ?? [];
-            const known = profile.filter((direction) => direction.coverageStatus === "partial" && typeof direction.horizonElevationDeg === "number").length;
+            const known = profile.filter((direction) => direction.coverageStatus === "partial" && typeof direction.maxTerrainElevationAngleDeg === "number").length;
             const unknown = profile.length - known;
             return (
               <article key={site.id} className="min-w-0 rounded-xl border border-white/10 bg-[#0d0f11] p-5">
