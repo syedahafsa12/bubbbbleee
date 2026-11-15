@@ -3,6 +3,7 @@
 
 import {
   Suspense,
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -11,7 +12,6 @@ import {
 
 import type {
   PointerEvent as ReactPointerEvent,
-  RefObject,
 } from "react";
 
 import {
@@ -185,6 +185,8 @@ interface LookState {
   targetYaw: number;
   targetPitch: number;
 }
+
+type LookController = (deltaX: number, deltaY: number) => void;
 
 interface ScienceSample {
   success: boolean;
@@ -1526,20 +1528,41 @@ function CelestialBodies({
 ===================================================== */
 
 function ObserverCamera({
-  look,
   terrain,
   latitude,
   longitude,
   onHeadingChange,
+  onLookControllerReady,
 }: {
-  look: RefObject<LookState>;
   terrain: LolaTerrainData | null;
   latitude: number;
   longitude: number;
   onHeadingChange: (heading: number) => void;
+  onLookControllerReady: (controller: LookController | null) => void;
 }) {
+  // The animation loop owns this ref and updates it outside React rendering.
+  const look = useRef<LookState>({
+    yaw: 0,
+    pitch: 0,
+    targetYaw: 0,
+    targetPitch: 0,
+  });
   const headingAccumulator = useRef(0);
   const lastHeading = useRef(-1);
+
+  const handleLookInput = useCallback((deltaX: number, deltaY: number) => {
+    look.current.targetYaw -= deltaX * 0.0035;
+    look.current.targetPitch = clamp(
+      look.current.targetPitch - deltaY * 0.0035,
+      -Math.PI / 2 + 0.02,
+      Math.PI / 2 - 0.02
+    );
+  }, []);
+
+  useEffect(() => {
+    onLookControllerReady(handleLookInput);
+    return () => onLookControllerReady(null);
+  }, [handleLookInput, onLookControllerReady]);
 
   const localMapBasis = useMemo(
     () => terrain ? getLocalMapBasis(terrain, latitude, longitude) : null,
@@ -1585,7 +1608,6 @@ function LunarScene({
   terrain,
   pixelColumn,
   pixelRow,
-  look,
   sun,
   earth,
   observer,
@@ -1593,11 +1615,11 @@ function LunarScene({
   longitude,
   imageryTexture,
   onHeadingChange,
+  onLookControllerReady,
 }: {
   terrain: LolaTerrainData | null;
   pixelColumn: number;
   pixelRow: number;
-  look: RefObject<LookState>;
   sun: HorizonsObservation | null;
   earth: HorizonsObservation | null;
   observer: {
@@ -1608,6 +1630,7 @@ function LunarScene({
   longitude: number;
   imageryTexture: THREE.Texture | null;
   onHeadingChange: (heading: number) => void;
+  onLookControllerReady: (controller: LookController | null) => void;
 }) {
   return (
     <>
@@ -1637,11 +1660,11 @@ function LunarScene({
       )}
 
       <ObserverCamera
-        look={look}
         terrain={terrain}
         latitude={latitude}
         longitude={longitude}
         onHeadingChange={onHeadingChange}
+        onLookControllerReady={onLookControllerReady}
       />
     </>
   );
@@ -1703,15 +1726,80 @@ export default function Lunar360Explorer({
   });
 
   const [cameraHeading, setCameraHeading] = useState(0);
-  const [selectedObservationIndex, setSelectedObservationIndex] = useState(0);
-  const [horizonsLoading, setHorizonsLoading] = useState(false);
-  const [horizonsError, setHorizonsError] = useState<string | null>(null);
+  const [selectedObservation, setSelectedObservation] = useState<{
+    key: string;
+    index: number;
+  }>({ key: "", index: 0 });
   const [jplRetryCount, setJplRetryCount] = useState(0);
-  const [scienceSample, setScienceSample] = useState<ScienceSample | null>(null);
-  const [scienceLoading, setScienceLoading] = useState(false);
-  const [surfaceImagery, setSurfaceImagery] = useState<THREE.Texture | null>(null);
-  const [surfaceImageryStatus, setSurfaceImageryStatus] =
-    useState<"loading" | "available" | "unavailable">("loading");
+  const [horizonsRequestResult, setHorizonsRequestResult] = useState<{
+    key: string;
+    status: "complete" | "error";
+    error?: string;
+  } | null>(null);
+  const [scienceResult, setScienceResult] = useState<{
+    key: string;
+    data: ScienceSample;
+  } | null>(null);
+  const [surfaceImageryState, setSurfaceImageryState] = useState<{
+    key: string;
+    texture: THREE.Texture | null;
+    status: "available" | "unavailable";
+  } | null>(null);
+
+  const selectedObservationIndex =
+    selectedObservation.key === horizonsRequestKey
+      ? selectedObservation.index
+      : 0;
+  const horizonsAttemptKey = JSON.stringify([
+    horizonsRequestKey,
+    jplRetryCount,
+  ]);
+  const horizonsRequestIsValid =
+    /^\d{4}-\d{2}-\d{2}$/.test(missionDate) &&
+    /^\d{2}:\d{2}(?::\d{2})?$/.test(missionTime);
+  const currentHorizonsRequestResult =
+    horizonsRequestResult?.key === horizonsAttemptKey
+      ? horizonsRequestResult
+      : null;
+  const horizonsLoading = Boolean(
+    terrain && horizonsRequestIsValid && !currentHorizonsRequestResult
+  );
+  const horizonsError =
+    currentHorizonsRequestResult?.status === "error"
+      ? currentHorizonsRequestResult.error ?? "JPL Horizons request failed."
+      : null;
+
+  const scienceRequestKey = JSON.stringify([
+    siteId,
+    Math.round(pixelColumn),
+    Math.round(pixelRow),
+  ]);
+  const scienceSample =
+    scienceResult?.key === scienceRequestKey ? scienceResult.data : null;
+  const scienceLoading = scienceResult?.key !== scienceRequestKey;
+
+  const surfaceImageryRequestKey = JSON.stringify([
+    siteId,
+    latitude,
+    longitude,
+    pixelColumn,
+    pixelRow,
+  ]);
+  const currentSurfaceImageryState =
+    surfaceImageryState?.key === surfaceImageryRequestKey
+      ? surfaceImageryState
+      : null;
+  const surfaceImagery = currentSurfaceImageryState?.texture ?? null;
+  const surfaceImageryStatus =
+    currentSurfaceImageryState?.status ?? "loading";
+
+  const lookController = useRef<LookController | null>(null);
+  const handleLookControllerReady = useCallback(
+    (controller: LookController | null) => {
+      lookController.current = controller;
+    },
+    []
+  );
 
   const pointer = useRef({
     active: false,
@@ -1776,8 +1864,6 @@ export default function Lunar360Explorer({
     if (!terrain) return;
 
     let active = true;
-    setSurfaceImagery(null);
-    setSurfaceImageryStatus("loading");
 
     const query = new URLSearchParams({
       siteId,
@@ -1804,14 +1890,21 @@ export default function Lunar360Explorer({
         loaded.anisotropy = 4;
         loaded.needsUpdate = true;
 
-        setSurfaceImagery(loaded);
-        setSurfaceImageryStatus("available");
+        setSurfaceImageryState({
+          key: surfaceImageryRequestKey,
+          texture: loaded,
+          status: "available",
+        });
       },
       undefined,
       (error) => {
         if (!active) return;
         console.warn("[LUNAPATH] LROC NAC imagery unavailable; using LOLA-only shaded terrain.", error);
-        setSurfaceImageryStatus("unavailable");
+        setSurfaceImageryState({
+          key: surfaceImageryRequestKey,
+          texture: null,
+          status: "unavailable",
+        });
       }
     );
 
@@ -1819,7 +1912,15 @@ export default function Lunar360Explorer({
       active = false;
       texture.dispose();
     };
-  }, [terrain, siteId, latitude, longitude, pixelColumn, pixelRow]);
+  }, [
+    terrain,
+    siteId,
+    latitude,
+    longitude,
+    pixelColumn,
+    pixelRow,
+    surfaceImageryRequestKey,
+  ]);
 
   /* -----------------------------------------------
      Fetch JPL Horizons at the selected location.
@@ -1827,6 +1928,7 @@ export default function Lunar360Explorer({
 
   useEffect(() => {
     let cancelled = false;
+    let requestError: string | null = null;
 
     const controller = new AbortController();
 
@@ -1846,9 +1948,6 @@ export default function Lunar360Explorer({
         controller.abort();
       };
     }
-
-    setHorizonsLoading(true);
-    setHorizonsError(null);
 
     async function loadJplHorizons() {
       try {
@@ -1922,15 +2021,18 @@ export default function Lunar360Explorer({
             error.name === "AbortError"
           )
         ) {
-          const message = error instanceof Error
+          requestError = error instanceof Error
             ? error.message
             : "Unknown JPL Horizons request failure.";
-          setHorizonsError(message);
           console.error("[LUNAPATH] JPL Horizons data unavailable:", error);
         }
       } finally {
         if (!cancelled) {
-          setHorizonsLoading(false);
+          setHorizonsRequestResult({
+            key: horizonsAttemptKey,
+            status: requestError ? "error" : "complete",
+            ...(requestError ? { error: requestError } : {}),
+          });
         }
       }
     }
@@ -1952,11 +2054,17 @@ export default function Lunar360Explorer({
     missionTime,
     durationHours,
     horizonsRequestKey,
-    jplRetryCount,
+    horizonsAttemptKey,
   ]);
 
-  const sunObservations = horizons?.targets?.sun?.observations ?? [];
-  const earthObservations = horizons?.targets?.earth?.observations ?? [];
+  const sunObservations = useMemo(
+    () => horizons?.targets?.sun?.observations ?? [],
+    [horizons]
+  );
+  const earthObservations = useMemo(
+    () => horizons?.targets?.earth?.observations ?? [],
+    [horizons]
+  );
   const timelineLength = Math.max(sunObservations.length, earthObservations.length);
   const safeObservationIndex = Math.min(
     selectedObservationIndex,
@@ -1993,13 +2101,7 @@ export default function Lunar360Explorer({
   );
 
   useEffect(() => {
-    setSelectedObservationIndex(0);
-  }, [horizonsRequestKey]);
-
-  useEffect(() => {
     let active = true;
-    setScienceLoading(true);
-    setScienceSample(null);
 
     const query = new URLSearchParams({
       siteId,
@@ -2015,25 +2117,30 @@ export default function Lunar360Explorer({
         if (!response.ok || !payload.success) {
           throw new Error(payload.error ?? `Science sample failed: HTTP ${response.status}`);
         }
-        if (active) setScienceSample(payload);
-      })
-      .catch((error: unknown) => {
         if (active) {
-          setScienceSample({
-            success: false,
-            available: false,
-            reason: error instanceof Error ? error.message : "Science sample unavailable.",
+          setScienceResult({
+            key: scienceRequestKey,
+            data: payload,
           });
         }
       })
-      .finally(() => {
-        if (active) setScienceLoading(false);
+      .catch((error: unknown) => {
+        if (active) {
+          setScienceResult({
+            key: scienceRequestKey,
+            data: {
+              success: false,
+              available: false,
+              reason: error instanceof Error ? error.message : "Science sample unavailable.",
+            },
+          });
+        }
       });
 
     return () => {
       active = false;
     };
-  }, [siteId, pixelColumn, pixelRow]);
+  }, [siteId, pixelColumn, pixelRow, scienceRequestKey]);
 
   const observer = useMemo(() => {
     if (!horizons?.observer) {
@@ -2079,13 +2186,7 @@ export default function Lunar360Explorer({
     pointer.current.x = event.clientX;
     pointer.current.y = event.clientY;
 
-    look.current.targetYaw -= dx * 0.0035;
-
-    look.current.targetPitch = clamp(
-      look.current.targetPitch - dy * 0.0035,
-      -Math.PI / 2 + 0.02,
-      Math.PI / 2 - 0.02
-    );
+    lookController.current?.(dx, dy);
   }
 
   function handlePointerUp(
@@ -2146,7 +2247,6 @@ export default function Lunar360Explorer({
           terrain={terrain}
           pixelColumn={pixelColumn}
           pixelRow={pixelRow}
-          look={look}
           sun={sun}
           earth={earth}
           observer={observer}
@@ -2154,6 +2254,7 @@ export default function Lunar360Explorer({
           longitude={longitude}
           imageryTexture={surfaceImagery}
           onHeadingChange={setCameraHeading}
+          onLookControllerReady={handleLookControllerReady}
         />
       </Canvas>
 
@@ -2373,7 +2474,10 @@ export default function Lunar360Explorer({
                 max={timelineLength - 1}
                 step="1"
                 value={safeObservationIndex}
-                onChange={(event) => setSelectedObservationIndex(Number(event.target.value))}
+                onChange={(event) => setSelectedObservation({
+                  key: horizonsRequestKey,
+                  index: Number(event.target.value),
+                })}
               />
               <div className="mt-1 flex justify-between text-[9px] text-white/40">
                 <span>{sunObservations[0]?.timeUtc ?? "—"}</span>
