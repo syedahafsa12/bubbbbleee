@@ -2150,6 +2150,17 @@ export default function Lunar360Explorer({
         <p className="mt-1 text-[8px] leading-3 text-white/30">
           LROC imagery supplies average surface morphology, not live illumination or elevation.
         </p>
+        <a
+          href="https://data.lroc.im-ldi.com/lroc/view_rdr/NAC_POLE_SOUTH_CM_AVG"
+          target="_blank"
+          rel="noreferrer"
+          className="mt-1 inline-block text-[8px] text-white/45 underline underline-offset-2 hover:text-white/75"
+        >
+          LROC source product · NASA / ASU
+        </a>
+        <p className="mt-1 text-[8px] text-white/30">
+          Celestial disk diameters use JPL apparent angular sizes (1× scale).
+        </p>
 
         {horizonsError && (
           <div className="mt-2 rounded-md border border-red-300/20 bg-red-300/[0.06] p-2">
@@ -2338,8 +2349,8 @@ export default function Lunar360Explorer({
             <div className="mt-2 grid grid-cols-2 gap-3 text-xs">
               <div><p className="text-[9px] text-white/40">Elevation</p><strong>{scienceSample.values.elevationMeters.toFixed(2)} m</strong></div>
               <div><p className="text-[9px] text-white/40">Slope</p><strong>{scienceSample.values.slopeDegrees.toFixed(2)}°</strong></div>
-              <div><p className="text-[9px] text-white/40">Slope RMS error</p><strong>±{scienceSample.values.slopeUncertaintyDegrees.toFixed(2)}°</strong></div>
-              <div><p className="text-[9px] text-white/40">Elevation RMS error</p><strong>±{scienceSample.values.elevationUncertaintyMeters.toFixed(2)} m</strong></div>
+              <div><p className="text-[9px] text-white/40">Slope RMS uncertainty</p><strong>{scienceSample.values.slopeUncertaintyDegrees.toFixed(2)}°</strong></div>
+              <div><p className="text-[9px] text-white/40">Elevation RMS uncertainty</p><strong>{scienceSample.values.elevationUncertaintyMeters.toFixed(2)} m</strong></div>
               <div><p className="text-[9px] text-white/40">Direct LOLA shots / pixel</p><strong>{scienceSample.values.observationCount.toFixed(0)}</strong></div>
             </div>
             <p className="mt-3 text-[9px] leading-4 text-white/45">
