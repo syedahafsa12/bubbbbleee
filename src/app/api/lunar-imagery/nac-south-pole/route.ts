@@ -68,6 +68,7 @@ function isMetadata(value: unknown): value is LolaTerrainMetadata {
     (candidate.georeferencing.lunarRadiusMeters ?? 0) > 0 &&
     typeof coordinateSystem === "object" &&
     coordinateSystem !== null &&
+    typeof coordinateSystem.projection === "string" &&
     coordinateSystem.projection.toLowerCase().includes("south polar stereographic")
   );
 }
