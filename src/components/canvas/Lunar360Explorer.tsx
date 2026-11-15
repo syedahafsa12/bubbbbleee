@@ -1019,12 +1019,14 @@ function LunarSurface({
           <mesh
             geometry={regionalGeometry}
             material={imageryMaterial}
+            receiveShadow
             renderOrder={1}
             frustumCulled={false}
           />
           <mesh
             geometry={localGeometry}
             material={imageryMaterial}
+            receiveShadow
             renderOrder={1}
             frustumCulled={false}
           />
