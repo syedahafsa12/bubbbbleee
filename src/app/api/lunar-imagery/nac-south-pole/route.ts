@@ -40,17 +40,35 @@ function isMetadata(value: unknown): value is LolaTerrainMetadata {
   }
 
   const candidate = value as Partial<LolaTerrainMetadata>;
+  const tiePoint = candidate.georeferencing?.tiePoint;
+  const coordinateSystem = candidate.coordinateSystem;
+
   return (
     Number.isSafeInteger(candidate.width) &&
     Number.isSafeInteger(candidate.height) &&
+    candidate.width! > 0 &&
+    candidate.height! > 0 &&
+    candidate.resolutionMeters === 5 &&
     Array.isArray(candidate.pixelResolution) &&
-    candidate.pixelResolution.length >= 2 &&
+    candidate.pixelResolution.length >= 3 &&
+    candidate.pixelResolution.every(Number.isFinite) &&
     Array.isArray(candidate.bbox) &&
     candidate.bbox.length === 4 &&
+    candidate.bbox.every(Number.isFinite) &&
     typeof candidate.georeferencing === "object" &&
     candidate.georeferencing !== null &&
-    typeof candidate.coordinateSystem === "object" &&
-    candidate.coordinateSystem !== null
+    typeof tiePoint === "object" &&
+    tiePoint !== null &&
+    Number.isFinite(tiePoint.column) &&
+    Number.isFinite(tiePoint.row) &&
+    Number.isFinite(tiePoint.x) &&
+    Number.isFinite(tiePoint.y) &&
+    Number.isFinite(candidate.georeferencing.centralMeridianDegrees) &&
+    Number.isFinite(candidate.georeferencing.lunarRadiusMeters) &&
+    (candidate.georeferencing.lunarRadiusMeters ?? 0) > 0 &&
+    typeof coordinateSystem === "object" &&
+    coordinateSystem !== null &&
+    coordinateSystem.projection.toLowerCase().includes("south polar stereographic")
   );
 }
 
@@ -155,15 +173,23 @@ export async function GET(request: NextRequest) {
     wmsUrl.searchParams.set("TRANSPARENT", "TRUE");
     wmsUrl.searchParams.set("BGCOLOR", "0x111111");
 
-    const upstream = await fetch(wmsUrl, {
-      method: "GET",
-      cache: "force-cache",
-      headers: {
-        Accept: "image/png",
-        "User-Agent": "LunaPath/1.0 (NASA lunar terrain visualization)",
-      },
-      signal: AbortSignal.timeout(25_000),
-    });
+    let upstream: Response;
+    try {
+      upstream = await fetch(wmsUrl, {
+        method: "GET",
+        cache: "force-cache",
+        headers: {
+          Accept: "image/png",
+          "User-Agent": "LunaPath/1.0 (NASA lunar terrain visualization)",
+        },
+        signal: AbortSignal.timeout(25_000),
+      });
+    } catch (error) {
+      return jsonError(
+        `Could not retrieve LROC imagery from Lunaserv: ${error instanceof Error ? error.message : "network request failed"}`,
+        502
+      );
+    }
 
     if (!upstream.ok) {
       const detail = (await upstream.text().catch(() => "")).slice(0, 600);
