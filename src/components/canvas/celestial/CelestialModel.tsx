@@ -4,10 +4,13 @@ import { useEffect, useMemo } from "react";
 import { useGLTF } from "@react-three/drei";
 import * as THREE from "three";
 
+export const CELESTIAL_DISPLAY_SCALE = 3.5;
+
 export interface CelestialModelProps {
   url: string;
   position: THREE.Vector3;
   diameter: number;
+  displayScale?: number;
   opacity?: number;
 }
 
@@ -19,6 +22,7 @@ export default function CelestialModel({
   url,
   position,
   diameter,
+  displayScale = 1,
   opacity = 1,
 }: CelestialModelProps) {
   const { scene } = useGLTF(url);
@@ -37,7 +41,7 @@ export default function CelestialModel({
     group.add(clone);
 
     if (largestDimension > 0 && Number.isFinite(diameter) && diameter > 0) {
-      group.scale.setScalar(diameter / largestDimension);
+      group.scale.setScalar((diameter * displayScale) / largestDimension);
     }
 
     group.traverse((object) => {
@@ -71,7 +75,7 @@ export default function CelestialModel({
 
     group.layers.set(1);
     return group;
-  }, [scene, diameter, opacity]);
+  }, [scene, diameter, displayScale, opacity]);
 
   useEffect(() => {
     return () => {

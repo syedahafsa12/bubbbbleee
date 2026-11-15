@@ -2,13 +2,23 @@
 
 import { useGLTF } from "@react-three/drei";
 import CelestialModel, {
+  CELESTIAL_DISPLAY_SCALE,
   type CelestialModelProps,
 } from "./CelestialModel";
 
-export type EarthVisualProps = Omit<CelestialModelProps, "url">;
+export type EarthVisualProps = Omit<
+  CelestialModelProps,
+  "url" | "displayScale"
+>;
 
 export function EarthVisual(props: EarthVisualProps) {
-  return <CelestialModel url="/models/earth.glb" {...props} />;
+  return (
+    <CelestialModel
+      url="/models/earth.glb"
+      displayScale={CELESTIAL_DISPLAY_SCALE}
+      {...props}
+    />
+  );
 }
 
 useGLTF.preload("/models/earth.glb");

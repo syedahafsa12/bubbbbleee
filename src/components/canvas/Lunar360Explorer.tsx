@@ -23,6 +23,7 @@ import * as THREE from "three";
 
 import { EarthVisual } from "@/components/canvas/celestial/EarthVisual";
 import { SunVisual } from "@/components/canvas/celestial/SunVisual";
+import { CELESTIAL_DISPLAY_SCALE } from "@/components/canvas/celestial/CelestialModel";
 
 import {
   geographicToLolaProjected,
@@ -221,7 +222,7 @@ const CELESTIAL_DISTANCE = 8000;
 const STAR_COUNT = 9000;
 const STAR_RADIUS = 12000;
 
-const LUNAR_REGOLITH_COLOR = "#777777";
+const LUNAR_REGOLITH_COLOR = "#898883";
 
 /* =====================================================
    GENERAL HELPERS
@@ -954,7 +955,7 @@ function LunarSurface({
     () =>
       new THREE.MeshStandardMaterial({
         map: imageryTexture ?? null,
-        color: imageryTexture ? "#dedbd3" : LUNAR_REGOLITH_COLOR,
+        color: imageryTexture ? "#f1f0ec" : LUNAR_REGOLITH_COLOR,
         roughness: 1,
         metalness: 0,
         side: THREE.DoubleSide,
@@ -1513,9 +1514,9 @@ export default function Lunar360Explorer({
   // Start with a slight downward view so the local LOLA/LROC surface is visible.
   const look = useRef<LookState>({
     yaw: 0,
-    pitch: -0.18,
+    pitch: -0.28,
     targetYaw: 0,
-    targetPitch: -0.18,
+    targetPitch: -0.28,
   });
 
   const [cameraHeading, setCameraHeading] = useState(0);
@@ -1617,7 +1618,7 @@ export default function Lunar360Explorer({
         loaded.minFilter = THREE.LinearMipmapLinearFilter;
         loaded.magFilter = THREE.LinearFilter;
         loaded.generateMipmaps = true;
-        loaded.anisotropy = 4;
+        loaded.anisotropy = 8;
         loaded.needsUpdate = true;
 
         setSurfaceImagery(loaded);
@@ -1950,12 +1951,12 @@ export default function Lunar360Explorer({
         {/* Neutral visualization fill keeps LOLA relief legible during
             JPL outages. Only a measured Sun sample drives directional light. */}
         <ambientLight
-          color="#b8b8b2"
-          intensity={0.14}
+          color="#a8a8a4"
+          intensity={0.08}
         />
 
         <hemisphereLight
-          args={["#c8c8c2", "#202020", 0.18]}
+          args={["#bcbcb7", "#171717", 0.10]}
         />
 
         <LunarScene
@@ -2020,7 +2021,10 @@ export default function Lunar360Explorer({
           LROC source product · NASA / ASU
         </a>
         <p className="mt-1 text-[8px] text-white/30">
-          Celestial disk diameters use JPL apparent angular sizes (1× scale).
+          Celestial display: {CELESTIAL_DISPLAY_SCALE.toFixed(1)}× presentation scale · JPL angular data unchanged.
+        </p>
+        <p className="mt-1 text-[8px] text-white/30">
+          Sun detail: NASA SDO / AIA 304 Å · historical false-color reference, not live data.
         </p>
 
         {horizonsError && (
