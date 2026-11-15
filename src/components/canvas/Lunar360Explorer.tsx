@@ -2193,7 +2193,7 @@ export default function Lunar360Explorer({
           TERRAIN MESH: 5 m near-field · 30 m regional context
         </p>
         <p className="mt-1 text-[8px] leading-3 text-white/30">
-          LROC imagery supplies average surface morphology, not live illumination or elevation.
+          Average morphology only — not live illumination or elevation. Native mosaic: 1 m/px; this 24 km texture is resampled to about 11.7 m/texel.
         </p>
         <a
           href="https://data.lroc.im-ldi.com/lroc/view_rdr/NAC_POLE_SOUTH_CM_AVG"
