@@ -234,56 +234,6 @@ function normalizeAzimuth(value: number): number {
   return ((value % 360) + 360) % 360;
 }
 
-function getNearestHorizonDirection(
-  profile: HorizonProfileDirection[] | undefined,
-  azimuthDeg: number
-): HorizonProfileDirection | null {
-  if (!profile?.length) return null;
-  const azimuth = normalizeAzimuth(azimuthDeg);
-  return profile.reduce((nearest, current) => {
-    const currentDelta = Math.abs(
-      ((current.azimuthDeg - azimuth + 540) % 360) - 180
-    );
-    const nearestDelta = Math.abs(
-      ((nearest.azimuthDeg - azimuth + 540) % 360) - 180
-    );
-    return currentDelta < nearestDelta ? current : nearest;
-  });
-}
-
-function buildHorizonPaths(
-  profile: HorizonProfileDirection[] | undefined
-): string[] {
-  if (!profile?.length) return [];
-  const sorted = [...profile].sort((a, b) => a.azimuthDeg - b.azimuthDeg);
-  const paths: string[] = [];
-  let current: string[] = [];
-
-  const finishSegment = () => {
-    if (current.length >= 2) paths.push(current.join(" "));
-    current = [];
-  };
-
-  for (const direction of sorted) {
-    const elevation = direction.horizonElevationDeg;
-    if (
-      direction.coverageStatus === "no_data" ||
-      typeof elevation !== "number" ||
-      !Number.isFinite(elevation)
-    ) {
-      finishSegment();
-      continue;
-    }
-
-    const x = 10 + (normalizeAzimuth(direction.azimuthDeg) / 360) * 300;
-    const y = 82 - clamp((elevation + 10) / 45, 0, 1) * 64;
-    current.push(`${current.length === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`);
-  }
-
-  finishSegment();
-  return paths;
-}
-
 function getFirstObservation(
   target?: HorizonsObservation | null
 ): HorizonsObservation | null {
@@ -474,69 +424,6 @@ function getCelestialVisualOpacity(
 
     default:
       return 0;
-  }
-}
-
-function getTerrainVisibilityLabel(
-  observation: HorizonsObservation | null
-): string {
-  if (!observation) {
-    return "JPL position unavailable";
-  }
-
-  const visibility = observation.terrainVisibility;
-
-  if (!visibility) {
-    return "Unknown — terrain assessment unavailable";
-  }
-
-  switch (visibility.status) {
-    case "target_disk_below_sampled_terrain":
-      return "Blocked by sampled terrain";
-
-    case "target_disk_intersects_sampled_terrain":
-      return "Intersects sampled terrain horizon";
-
-    case "target_disk_above_sampled_terrain_unconfirmed":
-      return "Above sampled horizon";
-
-    case "target_disk_size_unavailable":
-      return "Unknown — angular diameter unavailable";
-
-    case "terrain_horizon_unavailable":
-      return "JPL position known · terrain occlusion unknown";
-
-    default:
-      return "Unknown";
-  }
-}
-
-function getTerrainVisibilityQualification(
-  observation: HorizonsObservation | null,
-  profile: HorizonProfileDirection[] | undefined
-): string {
-  if (!observation) return "No JPL sample is available for this timestamp.";
-
-  const direction = getNearestHorizonDirection(profile, observation.azimuthDeg);
-  const distance = direction?.lastKnownSampleDistanceMeters;
-
-  switch (observation.terrainVisibility.status) {
-    case "target_disk_above_sampled_terrain_unconfirmed":
-      return Number.isFinite(distance)
-        ? `Above the measured local horizon. Terrain was sampled to ${(distance! / 1000).toFixed(2)} km along this bearing; beyond that remains unknown.`
-        : "Above the measured local horizon; full directional coverage is not verified.";
-    case "target_disk_intersects_sampled_terrain":
-      return "The modeled disk intersects the sampled terrain skyline; the visible fraction is an estimate.";
-    case "target_disk_below_sampled_terrain":
-      return Number.isFinite(distance)
-        ? `The modeled disk is blocked by sampled terrain. Known samples extend ${(distance! / 1000).toFixed(2)} km along this bearing; beyond that remains unknown.`
-        : "The modeled disk is blocked by the available sampled terrain profile.";
-    case "terrain_horizon_unavailable":
-      return "JPL sky position is available, but no valid terrain horizon sample exists for this bearing.";
-    case "target_disk_size_unavailable":
-      return "The sky position is available, but disk visibility cannot be estimated without angular diameter.";
-    default:
-      return "Terrain visibility qualification is unavailable.";
   }
 }
 
@@ -1725,7 +1612,6 @@ export default function Lunar360Explorer({
   const [surfaceImageryState, setSurfaceImageryState] = useState<{
     key: string;
     texture: THREE.Texture | null;
-    status: "available" | "unavailable";
   } | null>(null);
 
   const selectedObservationIndex =
@@ -1743,9 +1629,6 @@ export default function Lunar360Explorer({
     horizonsRequestResult?.key === horizonsAttemptKey
       ? horizonsRequestResult
       : null;
-  const horizonsLoading = Boolean(
-    terrain && horizonsRequestIsValid && !currentHorizonsRequestResult
-  );
   const horizonsError =
     currentHorizonsRequestResult?.status === "error"
       ? currentHorizonsRequestResult.error ?? "JPL Horizons request failed."
@@ -1756,10 +1639,6 @@ export default function Lunar360Explorer({
     Math.round(pixelColumn),
     Math.round(pixelRow),
   ]);
-  const scienceSample =
-    scienceResult?.key === scienceRequestKey ? scienceResult.data : null;
-  const scienceLoading = scienceResult?.key !== scienceRequestKey;
-
   const surfaceImageryRequestKey = JSON.stringify([
     siteId,
     latitude,
@@ -1772,8 +1651,6 @@ export default function Lunar360Explorer({
       ? surfaceImageryState
       : null;
   const surfaceImagery = currentSurfaceImageryState?.texture ?? null;
-  const surfaceImageryStatus =
-    currentSurfaceImageryState?.status ?? "loading";
 
   const lookController = useRef<LookController | null>(null);
   const handleLookControllerReady = useCallback(
@@ -1875,7 +1752,6 @@ export default function Lunar360Explorer({
         setSurfaceImageryState({
           key: surfaceImageryRequestKey,
           texture: loaded,
-          status: "available",
         });
       },
       undefined,
@@ -1885,7 +1761,6 @@ export default function Lunar360Explorer({
         setSurfaceImageryState({
           key: surfaceImageryRequestKey,
           texture: null,
-          status: "unavailable",
         });
       }
     );
@@ -2072,15 +1947,6 @@ export default function Lunar360Explorer({
     }
     return getFirstObservation(horizons?.targets?.earth);
   }, [horizons, selectedTimeUtc, earthObservations]);
-
-  const horizonAtHeading = useMemo(
-    () => getNearestHorizonDirection(horizons?.horizonProfile, cameraHeading),
-    [horizons, cameraHeading]
-  );
-  const horizonPaths = useMemo(
-    () => buildHorizonPaths(horizons?.horizonProfile),
-    [horizons]
-  );
 
   useEffect(() => {
     let active = true;
