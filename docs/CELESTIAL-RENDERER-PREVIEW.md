@@ -24,3 +24,10 @@ NASA source pages:
 ## Preserved systems
 
 No changes are made to JPL Horizons request/response logic, apparent positions, angular-diameter calculations, terrain-horizon classification, Product78/LOLA geometry generation, Product90 sampling, LROC image registration, observer pixel mapping, mission timeline or site registry.
+
+## Terrain restoration
+
+- The 360° Explorer's terrain rendering now matches the validated terrain layering at `0d4b0254b1d285ca37980d4c98ae2d760a461888`: a standalone LOLA shaded-relief base (5 m near-field and 30 m regional geometry) plus a separate translucent LROC morphology/albedo overlay.
+- The local 5 m and regional 30 m geometry builders, Product78 decoder, site registry, site planner handoff, and prepared DEM assets are unchanged from that validated reference.
+- The initial observer camera starts level with the local horizon so distant crater rims and ridges are visible; the existing drag/look interaction remains in place.
+- The selected-location and Product78 science-sample API file-tracing entries are included for production output tracing.
