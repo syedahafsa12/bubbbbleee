@@ -106,7 +106,6 @@ export default function SciencePage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    setDate(new Date().toISOString().slice(0, 10));
     let active = true;
     fetch("/api/product78/sites", { cache: "no-store" })
       .then(async (response) => {
@@ -125,7 +124,10 @@ export default function SciencePage() {
         if (active) setError(caught instanceof Error ? caught.message : "Could not load site catalogue.");
       })
       .finally(() => {
-        if (active) setLoadingSites(false);
+        if (active) {
+          setDate((current) => current || new Date().toISOString().slice(0, 10));
+          setLoadingSites(false);
+        }
       });
     return () => { active = false; };
   }, []);
@@ -244,7 +246,7 @@ export default function SciencePage() {
           })}
         </section>
         <p className="mt-8 text-[10px] leading-5 text-white/30">
-          All metrics are measured from each site's own prepared Product78 raster and JPL Horizons response. A missing horizon direction remains unknown. Windows are based on 10-minute observations, not exact crossing times.
+          All metrics are measured from each site&apos;s own prepared Product78 raster and JPL Horizons response. A missing horizon direction remains unknown. Windows are based on 10-minute observations, not exact crossing times.
         </p>
       </div>
     </main>
