@@ -950,16 +950,37 @@ function LunarSurface({
     [terrain, pixelColumn, pixelRow]
   );
 
-  const material = useMemo(
+  // LOLA geometry is always present. Transparent or missing LROC mosaic
+  // pixels reveal this shaded-relief base instead of deleting the ground.
+  const baseMaterial = useMemo(
     () =>
       new THREE.MeshStandardMaterial({
-        map: imageryTexture ?? null,
-        color: imageryTexture ? "#dedbd3" : LUNAR_REGOLITH_COLOR,
+        color: LUNAR_REGOLITH_COLOR,
         roughness: 1,
         metalness: 0,
         side: THREE.DoubleSide,
-        alphaTest: imageryTexture ? 0.02 : 0,
       }),
+    []
+  );
+
+  const imageryMaterial = useMemo(
+    () =>
+      imageryTexture
+        ? new THREE.MeshStandardMaterial({
+            map: imageryTexture,
+            color: "#ffffff",
+            roughness: 1,
+            metalness: 0,
+            side: THREE.DoubleSide,
+            transparent: true,
+            opacity: 0.9,
+            alphaTest: 0.02,
+            depthWrite: false,
+            polygonOffset: true,
+            polygonOffsetFactor: -1,
+            polygonOffsetUnits: -1,
+          })
+        : null,
     [imageryTexture]
   );
 
@@ -967,26 +988,43 @@ function LunarSurface({
     return () => {
       localGeometry.dispose();
       regionalGeometry.dispose();
-      material.dispose();
+      baseMaterial.dispose();
+      imageryMaterial?.dispose();
     };
-  }, [localGeometry, regionalGeometry, material]);
+  }, [localGeometry, regionalGeometry, baseMaterial, imageryMaterial]);
 
   return (
     <>
       <mesh
         geometry={regionalGeometry}
-        material={material}
+        material={baseMaterial}
         castShadow
         receiveShadow
         frustumCulled={false}
       />
       <mesh
         geometry={localGeometry}
-        material={material}
+        material={baseMaterial}
         castShadow
         receiveShadow
         frustumCulled={false}
       />
+      {imageryMaterial && (
+        <>
+          <mesh
+            geometry={regionalGeometry}
+            material={imageryMaterial}
+            renderOrder={1}
+            frustumCulled={false}
+          />
+          <mesh
+            geometry={localGeometry}
+            material={imageryMaterial}
+            renderOrder={1}
+            frustumCulled={false}
+          />
+        </>
+      )}
     </>
   );
 }
