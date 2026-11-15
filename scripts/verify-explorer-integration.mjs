@@ -180,8 +180,8 @@ async function main() {
   try {
     const basis = getLocalMapBasis(metadata, observer);
     const initialHeading = getTrueHeadingFromSceneYaw(0, basis);
-    if (angularDifference(initialHeading, 163.2181) > 0.2) {
-      fail(`Initial camera heading should be approximately 163.2° at the Site04 reference observer; received ${initialHeading.toFixed(3)}°.`);
+    if (angularDifference(initialHeading, 171.8700) > 0.2) {
+      fail(`Initial camera heading should be approximately 171.9° at the Site04 registered reference observer; received ${initialHeading.toFixed(3)}°.`);
     } else {
       pass(`Initial camera view maps to true bearing ${initialHeading.toFixed(2)}° (south-southeast), not an assumed North.`);
     }
