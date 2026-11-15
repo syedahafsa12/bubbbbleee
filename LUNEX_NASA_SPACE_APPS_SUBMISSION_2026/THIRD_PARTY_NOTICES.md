@@ -73,48 +73,73 @@ One package entry, `webgl-constants@1.1.1`, has no license value in the lockfile
 
 The lockfile also includes dependencies under LGPL-3.0-or-later, MPL-2.0, CC-BY-4.0, Python-2.0, BlueOak-1.0.0, BSD, ISC, 0BSD, CC0, and combined license expressions. Those terms continue to apply to the relevant packages. The dependency lock records versions and declared license metadata; it is not a substitute for preserving upstream license texts and notices when redistributing package code.
 
-## 3D models and local textures
+## 3D models and image assets
 
-### Moon model — NASA source identified by exact filename
+The following visual assets are credited to their original source pages. These credits and reuse terms are separate from the Apache License 2.0 that applies to Lunex's original project code.
 
-The application code references `/models/Moon_NASA_LRO_8k_Topo_Small.glb` as its default Moon model path, with an optional external URL configured through `NEXT_PUBLIC_LUNEX_MOON_MODEL_URL`.
+### 3D models
 
-NASA's Goddard Scientific Visualization Studio publishes a model with this exact filename:
+#### Moon — `Moon_NASA_LRO_8k_Topo_Small.glb`
 
-- Source page: [Moon 3D Models for Web, AR, and Animation — NASA SVS 14959](https://svs.gsfc.nasa.gov/14959/)
-- Direct download: [Moon_NASA_LRO_8k_Topo_Small.glb](https://svs.gsfc.nasa.gov/vis/a010000/a014900/a014959/Moon_NASA_LRO_8k_Topo_Small.glb)
-- Model basis: imagery and topographic data from NASA's Lunar Reconnaissance Orbiter (LRO).
-- Credit: NASA's Goddard Space Flight Center.
-- Producer: Dan Gallagher (eMITS).
-- Data provider: Ernie Wright (USRA).
-- Data analysts: Tuomas Kankola and Josh Klint (Leadwerks Game Engine).
-- Technical support: Aaron E. Lepsch (ADNET Systems, Inc.).
+- **Source:** [NASA Goddard Scientific Visualization Studio — Moon 3D Models for Web, AR, and Animation](https://svs.gsfc.nasa.gov/14959/)
+- **Selected variant:** **COLOR MAP AND HEIGHT MAP**. NASA lists the exact file `Moon_NASA_LRO_8k_Topo_Small.glb` (77.7 MB) under this variant.
+- **Direct file:** [Moon_NASA_LRO_8k_Topo_Small.glb](https://svs.gsfc.nasa.gov/vis/a010000/a014900/a014959/Moon_NASA_LRO_8k_Topo_Small.glb)
+- **Model basis:** Lunar color imagery and topographic data from NASA's Lunar Reconnaissance Orbiter (LRO).
+- **Required source credit:** NASA's Goddard Space Flight Center.
+- **Production credits:** Producer — Dan Gallagher (eMITS); data provider — Ernie Wright (STC); data analysts — Tuomas Kankola and Josh Klint (Leadwerks Game Engine); technical support — Aaron E. Lepsch (ADNET Systems, Inc.).
 
-The exact filename in the source code matches NASA's published filename. However, the GLB itself is not present in the audited Git repository. Before submission, confirm that the deployed app is actually serving this NASA file (or a copy of it), rather than a different file placed at the same path or supplied through the environment variable.
+NASA's page identifies this file as the color-map-and-height-map model, not the color-only or grid model. NASA's media guidance states that NASA-originated media and files used in 3D model rendering are generally not subject to U.S. copyright, subject to third-party-content exceptions. Credit NASA Goddard Space Flight Center and do not imply NASA endorsement.
 
-### Earth and Sun models — source not established
+#### Earth — `earth.glb`
 
-The 3D scene code references `/models/earth.glb` and `/models/sun.glb`. Neither file is present in the audited Git tree, and the source code does not identify their original download pages, creators, or licenses. The filenames alone do not establish that NASA created them.
+- **Source:** [Earth — Akshat (@shooter24994), Sketchfab](https://sketchfab.com/3d-models/earth-41fc80d85dfd480281f21b74b2de2faa)
+- **Creator:** Akshat, Sketchfab username `@shooter24994`.
+- **License:** [Creative Commons Attribution 4.0 International (CC BY 4.0)](https://creativecommons.org/licenses/by/4.0/).
+- **Attribution:** “Earth” by Akshat (@shooter24994), [Sketchfab source](https://skfb.ly/6T88I), licensed under CC BY 4.0.
+- **Project use:** Distributed in Lunex as `/models/earth.glb`. The source file has been placed under the application filename/path; no additional mesh or texture edits are asserted here.
 
-Do not credit these two models to NASA without checking the actual GLB files or their download URLs. Add the original source page, creator, and license for each model before submission. If their origin cannot be established, replace them with models from a documented source or remove them from the submitted build.
+The CC BY 4.0 license requires attribution, a link to the license, and an indication of changes when changes are made. The creator and license must remain credited wherever the model is redistributed or displayed with an asset-credit section.
 
-### Loose texture files — not referenced by the audited app code
+#### Sun — `sun.glb`
 
-These files are present in `public/textures/`:
+- **Source:** [NASA Science / Heliophysics Education Activation Team (HEAT) — Sun 3D Model Interactive](https://science.nasa.gov/learn/heat/resource/sun-3d-model/)
+- **Published resource:** NASA lists a downloadable “3D Model of the Sun (glTF File)” on this page (4.14 MB; September 9, 2023).
+- **Credit:** NASA Science, Heliophysics Education Activation Team (HEAT).
+- **Reuse:** NASA's general media guidance states that NASA-originated media, including files used to render 3D models, are generally not subject to U.S. copyright for educational or informational use. The HEAT download page does not display a separate model-specific license or individual creator credit. NASA's third-party-content exceptions still apply.
 
-- `earth_daymap.jpg`
-- `nasa-lunar-crater.webp`
-- `quickmap-lroc.png`
+Lunex uses the Sun model as a visual asset. The Sun's apparent position and visibility calculations are based on the separately documented JPL Horizons data, not on this model.
 
-A search of the application source files did not find code references to these filenames. Their original source, creator, and license are not recorded in the repository. I could not verify an exact matching original source for these specific files, so this notice does not guess one based on a suggestive filename.
+### Image assets
 
-For context only:
+#### Earth surface texture — `earth_daymap.jpg`
 
-- [Solar System Scope texture pack](https://edu.solarsystemscope.com/textures/) distributes its own planetary textures under CC BY 4.0. This is a possible lead for an Earth day texture, **not confirmation** that the repository's `earth_daymap.jpg` came from that pack.
-- [LROC terms and citation policy](https://www.lroc.im-ldi.com/about/terms) state that PDS-delivered LROC data are public domain, while curated products, downloads, and non-PDS interfaces on the LROC website may be copyrighted. Educational use is permitted with appropriate citation. This is relevant only if `quickmap-lroc.png` is confirmed to be an image or screenshot from LROC QuickMap; the filename alone does not prove its source or image rights.
-- No verified source has been identified for `nasa-lunar-crater.webp`.
+- **File source used:** [Three.js r122 example texture mirrored by MIT Design Heritage](https://designheritage.mit.edu/_dh_debug/THREEjs_122/examples/textures/planets/earth_atmos_2048.jpg) (the hosted source filename is `earth_atmos_2048.jpg`).
+- **Upstream example:** [Three.js repository](https://github.com/mrdoob/three.js/tree/r122/examples).
+- **Underlying Earth-image source credit:** NASA's [Blue Marble / Visible Earth](https://science.nasa.gov/resource/blue-marble/) entry credits NASA Goddard Space Flight Center; image by Reto Stöckli; enhancements by Robert Simmon; and supporting MODIS and USGS data teams.
+- **Reuse:** NASA's media guidance states that NASA-originated imagery is generally not subject to U.S. copyright, subject to third-party-content exceptions. The MIT-hosted URL is a mirror location, not the creator or a separate license grant.
 
-Since these three files are not referenced by the audited application code, remove them from the submission repository if they are not intentionally used. If any is retained or displayed, identify its exact original source, author/creator, and license or permission before submitting. Do not describe them as NASA imagery solely because a filename contains “nasa” or “lroc”.
+**Credit:** NASA Goddard Space Flight Center; image by Reto Stöckli; enhancements by Robert Simmon; supporting data and technical teams as listed in NASA's Blue Marble / Visible Earth credit.
+
+#### Moon image — `quickmap-lroc.png`
+
+- **Source supplied for this asset:** [NASA Science — Moon (Hubble asset)](https://science.nasa.gov/asset/hubble/moon/).
+- **Original release:** “Hubble Shoots the Moon,” April 16, 1999.
+- **Credit displayed by NASA:** Lick Observatory.
+- **Matching image record:** [ESA/Hubble — Moon (opo9914d)](https://esahubble.org/images/opo9914d/), which also identifies the image as the Moon, gives the same release date, and credits Lick Observatory.
+- **Reuse terms:** ESA/Hubble states that its published images are released under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) and require a clear, visible, unaltered “ESA/Hubble” credit. Retain the image-provider credit shown on the asset page as well.
+
+**Credit:** ESA/Hubble; image credit: Lick Observatory. Source: [NASA Science — Moon](https://science.nasa.gov/asset/hubble/moon/) and [ESA/Hubble image opo9914d](https://esahubble.org/images/opo9914d/).
+
+The local filename `quickmap-lroc.png` is not evidence that this image came from LROC QuickMap. The cited source is the 1999 Hubble/Moon asset credited to Lick Observatory; it should not be described as LROC QuickMap imagery.
+
+#### Permanently shadowed lunar crater image — `nasa-lunar-crater.webp`
+
+- **Source:** [NASA — Inside Dark, Polar Moon Craters, Water Not as Invincible as Expected, Scientists Argue](https://www.nasa.gov/general/inside-dark-polar-moon-craters-water-not-as-invincible-as-expected-scientists-argue/).
+- **Image caption on source page:** “A permanently shadowed lunar crater.”
+- **Credit displayed by NASA:** NASA's Goddard Space Flight Center.
+- **Reuse:** NASA's media guidance states that NASA-originated imagery is generally not subject to U.S. copyright for educational or informational use, subject to third-party-content exceptions.
+
+**Credit:** NASA's Goddard Space Flight Center. Source: [NASA article on permanently shadowed lunar craters](https://www.nasa.gov/general/inside-dark-polar-moon-craters-water-not-as-invincible-as-expected-scientists-argue/).
 
 ## NASA Space Apps source and license requirements
 
