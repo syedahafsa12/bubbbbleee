@@ -4,124 +4,72 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 
-const PHOTOSPHERE_TEXTURE_URL = "/api/solar-imagery/photosphere";
 const AIA_304_TEXTURE_URL = "/api/solar-imagery/aia304";
+const SOLAR_DISK_RADIUS_UV = 0.38;
 
 interface SunAia304ReferenceLayerProps {
   position: THREE.Vector3;
   diameter: number;
-}
-
-interface SolarTextures {
-  photosphere: THREE.Texture | null;
-  prominences: THREE.Texture | null;
+  opacity?: number;
 }
 
 /**
- * NASA SDO 4500 Å visible-light photosphere supplies the main solar disk.
- * NASA AIA 304 Å is restricted to the outer rim so its false-colour EUV
- * palette does not turn the entire Sun orange. Both frames are historical,
- * not live data for the selected mission timestamp.
+ * Adds only a restrained, camera-facing outer-atmosphere reference from
+ * NASA SDO/AIA 304 Å. The false-colour EUV image is not used to colour the
+ * photosphere. This is a historical reference layer, not live mission data.
  */
 export function SunAia304ReferenceLayer({
   position,
   diameter,
+  opacity = 1,
 }: SunAia304ReferenceLayerProps) {
   const groupRef = useRef<THREE.Group>(null);
-  const [textures, setTextures] = useState<SolarTextures>({
-    photosphere: null,
-    prominences: null,
-  });
+  const [texture, setTexture] = useState<THREE.Texture | null>(null);
 
   useEffect(() => {
     let active = true;
-    const loader = new THREE.TextureLoader();
-    const loaded: SolarTextures = { photosphere: null, prominences: null };
-
-    const configure = (texture: THREE.Texture) => {
-      texture.colorSpace = THREE.SRGBColorSpace;
-      texture.minFilter = THREE.LinearMipmapLinearFilter;
-      texture.magFilter = THREE.LinearFilter;
-      texture.generateMipmaps = true;
-      texture.anisotropy = 8;
-      texture.needsUpdate = true;
-    };
-
-    loaded.photosphere = loader.load(
-      PHOTOSPHERE_TEXTURE_URL,
-      (texture) => {
-        if (!active) { texture.dispose(); return; }
-        configure(texture);
-        setTextures((previous) => ({ ...previous, photosphere: texture }));
-      },
-      undefined,
-      (error) => {
-        if (active) console.warn("[LUNAPATH] NASA SDO 4500 Å photosphere unavailable.", error);
-      }
-    );
-
-    loaded.prominences = loader.load(
+    const loadedTexture = new THREE.TextureLoader().load(
       AIA_304_TEXTURE_URL,
-      (texture) => {
-        if (!active) { texture.dispose(); return; }
-        configure(texture);
-        setTextures((previous) => ({ ...previous, prominences: texture }));
+      (loaded) => {
+        if (!active) {
+          loaded.dispose();
+          return;
+        }
+
+        loaded.colorSpace = THREE.SRGBColorSpace;
+        loaded.minFilter = THREE.LinearMipmapLinearFilter;
+        loaded.magFilter = THREE.LinearFilter;
+        loaded.generateMipmaps = true;
+        loaded.anisotropy = 8;
+        loaded.needsUpdate = true;
+        setTexture(loaded);
       },
       undefined,
       (error) => {
-        if (active) console.warn("[LUNAPATH] NASA SDO/AIA 304 prominence reference unavailable.", error);
+        if (active) {
+          console.warn("[LUNAPATH] NASA SDO/AIA 304 reference unavailable.", error);
+        }
       }
     );
 
     return () => {
       active = false;
-      loaded.photosphere?.dispose();
-      loaded.prominences?.dispose();
+      loadedTexture.dispose();
     };
   }, []);
 
-  const photosphereMaterial = useMemo(() => {
-    if (!textures.photosphere) return null;
-    return new THREE.ShaderMaterial({
-      uniforms: { uMap: { value: textures.photosphere } },
-      vertexShader: `
-        varying vec2 vUv;
-        void main() {
-          vUv = uv;
-          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-        }
-      `,
-      fragmentShader: `
-        uniform sampler2D uMap;
-        varying vec2 vUv;
-        void main() {
-          float radius = length(vUv - vec2(0.5));
-          float alpha = 1.0 - smoothstep(0.392, 0.402, radius);
-          vec3 sampleColor = texture2D(uMap, vUv).rgb;
-          float signal = dot(sampleColor, vec3(0.2126, 0.7152, 0.0722));
-          float detail = smoothstep(0.025, 0.55, signal);
-          vec3 photosphere = mix(
-            vec3(0.12, 0.12, 0.11),
-            vec3(1.0, 0.985, 0.94),
-            pow(detail, 0.72)
-          );
-          gl_FragColor = vec4(photosphere, alpha);
-        }
-      `,
-      transparent: true,
-      depthTest: false,
-      depthWrite: false,
-      toneMapped: false,
-      side: THREE.DoubleSide,
-    });
-  }, [textures.photosphere]);
-
   const prominenceMaterial = useMemo(() => {
-    if (!textures.prominences) return null;
+    if (!texture) return null;
+
     return new THREE.ShaderMaterial({
-      uniforms: { uMap: { value: textures.prominences } },
+      uniforms: {
+        uMap: { value: texture },
+        uOpacity: { value: opacity },
+        uDiskRadius: { value: SOLAR_DISK_RADIUS_UV },
+      },
       vertexShader: `
         varying vec2 vUv;
+
         void main() {
           vUv = uv;
           gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
@@ -129,22 +77,27 @@ export function SunAia304ReferenceLayer({
       `,
       fragmentShader: `
         uniform sampler2D uMap;
+        uniform float uOpacity;
+        uniform float uDiskRadius;
         varying vec2 vUv;
+
         void main() {
           float radius = length(vUv - vec2(0.5));
-          float rim =
-            smoothstep(0.386, 0.405, radius) *
-            (1.0 - smoothstep(0.455, 0.485, radius));
-          vec3 sampleColor = texture2D(uMap, vUv).rgb;
-          float signal = dot(sampleColor, vec3(0.2126, 0.7152, 0.0722));
-          float detail = smoothstep(0.025, 0.18, signal);
-          float alpha = rim * detail * 0.38;
-          vec3 color = mix(
-            vec3(0.94, 0.91, 0.84),
-            vec3(1.0, 0.96, 0.86),
-            detail
-          );
-          gl_FragColor = vec4(color, alpha);
+          float limb = uDiskRadius;
+
+          // Retain only the narrow off-limb / limb structure, not the
+          // false-colour 304 Å disk itself.
+          float outerAtmosphere =
+            smoothstep(limb - 0.012, limb + 0.008, radius) *
+            (1.0 - smoothstep(limb + 0.055, limb + 0.09, radius));
+
+          vec3 observed = texture2D(uMap, vUv).rgb;
+          float signal = dot(observed, vec3(0.2126, 0.7152, 0.0722));
+          float prominenceSignal = smoothstep(0.035, 0.20, signal);
+          float alpha = outerAtmosphere * prominenceSignal * 0.22 * uOpacity;
+
+          vec3 neutralProminence = vec3(1.0, 0.94, 0.82);
+          gl_FragColor = vec4(neutralProminence, alpha);
         }
       `,
       transparent: true,
@@ -154,42 +107,38 @@ export function SunAia304ReferenceLayer({
       toneMapped: false,
       side: THREE.DoubleSide,
     });
-  }, [textures.prominences]);
+  }, [texture, opacity]);
 
   useEffect(() => {
     return () => {
-      photosphereMaterial?.dispose();
       prominenceMaterial?.dispose();
     };
-  }, [photosphereMaterial, prominenceMaterial]);
+  }, [prominenceMaterial]);
 
   useFrame(({ camera }) => {
     if (!groupRef.current) return;
+
     const towardCamera = camera.position.clone().sub(position).normalize();
     groupRef.current.position.copy(position).addScaledVector(
       towardCamera,
-      Math.max(diameter * 0.515, 0.01)
+      Math.max(diameter * 0.505, 0.01)
     );
     groupRef.current.quaternion.copy(camera.quaternion);
   });
 
-  // NASA source images have a solar disk radius of about 0.40 of image width.
-  const imagePlaneSize = diameter / 0.80;
+  if (!prominenceMaterial || !Number.isFinite(diameter) || diameter <= 0) {
+    return null;
+  }
+
+  // The source disk radius is approximately 0.38 of the full square image.
+  const imagePlaneSize = diameter / (2 * SOLAR_DISK_RADIUS_UV);
 
   return (
     <group ref={groupRef} frustumCulled={false}>
-      {photosphereMaterial && (
-        <mesh renderOrder={20} frustumCulled={false}>
-          <planeGeometry args={[imagePlaneSize, imagePlaneSize]} />
-          <primitive object={photosphereMaterial} attach="material" />
-        </mesh>
-      )}
-      {prominenceMaterial && (
-        <mesh position={[0, 0, 0.002]} renderOrder={21} frustumCulled={false}>
-          <planeGeometry args={[imagePlaneSize, imagePlaneSize]} />
-          <primitive object={prominenceMaterial} attach="material" />
-        </mesh>
-      )}
+      <mesh renderOrder={21} frustumCulled={false}>
+        <planeGeometry args={[imagePlaneSize, imagePlaneSize]} />
+        <primitive object={prominenceMaterial} attach="material" />
+      </mesh>
     </group>
   );
 }
