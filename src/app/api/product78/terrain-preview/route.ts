@@ -23,6 +23,13 @@ type PreviewMetadata = {
   noDataPixelCount?: number;
   bbox: [number, number, number, number];
   pixelResolution: [number, number, number];
+  coordinateSystem: {
+    projection: string;
+    referenceFrame: string;
+    ephemeris: string;
+    linearUnits: string;
+    pixelRegistration: string;
+  };
   georeferencing: {
     tiePoint: {
       column: number;
@@ -33,6 +40,8 @@ type PreviewMetadata = {
     centralMeridianDegrees: number;
     lunarRadiusMeters: number;
   };
+  dataType: string;
+  byteOrder: string;
 };
 
 type PreviewAsset = {

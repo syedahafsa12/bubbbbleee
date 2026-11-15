@@ -74,3 +74,12 @@ The camera/compass direction and mission timestamp are separate: rotating the ca
 - Existing archived diagnostics JSX: `docs/archive/lunapath-explorer-diagnostics.jsx.txt`
 - Current Mission Data page on this branch (integration target; reconcile with incoming version): `src/app/mission-data/page.tsx`
 - Exact-observer JPL API: `src/app/api/horizons/selected-location/route.ts`
+
+
+## Solar illumination and fast first paint — 2026-11-15
+
+The exact-observer JPL endpoint now also returns `solarIrradianceWm2` for each Sun sample. It is computed from the apparent observer-to-Sun range (JPL quantity 20) using the inverse-square law from 1361 W/m² at 1 AU. The Mission Data page should display this number in W/m², with the reference range 1310–1426 W/m² documented by NASA's lunar-surface environment report. It is the incident solar flux, not the amount reflected by the local regolith.
+
+The immersive 360 Explorer uses that flux as a relative renderer-light scale, while visibility is still controlled by the Sun's JPL direction and sampled local horizon. A missing or incomplete 15 km terrain horizon falls back to the geometric horizon rather than automatically switching sunlight off. A sampled terrain blockage still suppresses direct sunlight, so permanently shadowed crater floors can remain dark. This is an explicit approximation when distant terrain coverage is unknown; do not claim a globally verified shadow map.
+
+The new `/api/product78/terrain-preview` endpoint serves a cached 8× block-averaged LOLA preview for first paint. The preview preserves the Product78 coordinate system and georeferencing, then the original 5 m DEM replaces it in the background. The preview is a loading/performance level, not a replacement scientific data product. Site04's 3200×3200 raster becomes a 400×400 40 m preview; Site11 and Site23 follow their own source dimensions. Full-resolution data remains the final source for the Explorer mesh and calculations.
