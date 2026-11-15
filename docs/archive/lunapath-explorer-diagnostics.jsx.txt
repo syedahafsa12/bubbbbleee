@@ -1,0 +1,279 @@
+LUNAPATH EXPLORER — ARCHIVED DIAGNOSTICS UI
+Archived from: src/components/canvas/Lunar360Explorer.tsx
+Archived on: 2026-11-15
+Original purpose: verbose JPL, terrain horizon, Sun/Earth visibility,
+observer HUD, skyline, timeline explanation, and Product78 science UI.
+
+This is intentionally a .txt archive, not an imported/rendered component.
+The UI was removed from the immersive Explorer because its content belongs
+on the Mission Data page. The APIs, data fetching, terrain calculations,
+ephemerides, science endpoints, imagery endpoint, and runtime data types
+remain in the active application.
+
+When migrating to the Mission Data page:
+- Rebuild these panels against that page's data model and request lifecycle.
+- Keep partial horizon coverage and unknown-coverage disclosures.
+- Keep Site04-only Product78 science availability explicit.
+- Do not represent geometric Earth visibility as an RF link budget.
+
+--- PRESERVED JSX (original diagnostic panel markup) ---
+
+            <div
+              className="pointer-events-auto absolute left-5 top-5 z-40 w-[min(360px,calc(100vw-2.5rem))] border border-white/15 bg-black/80 p-3 text-white shadow-xl backdrop-blur-md"
+              onPointerDown={(event) => event.stopPropagation()}
+              onPointerUp={(event) => event.stopPropagation()}
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-[9px] font-semibold tracking-[0.18em] text-white/60">
+                  NASA / JPL HORIZONS
+                </p>
+      
+                <span className="text-[9px] tracking-wider text-white/55">
+                  {horizonsLoading
+                    ? "QUERYING JPL…"
+                    : horizons
+                      ? horizons.status === "partial" ? "PARTIAL DATA LOADED" : "EPHEMERIS + TERRAIN LOADED"
+                      : horizonsError ? "JPL ERROR" : "WAITING"}
+                </span>
+              </div>
+      
+              <p className="mt-2 text-[10px] text-white/40">
+                Mission time: {missionDate} {missionTime} UTC · {durationHours} h
+              </p>
+              <p className="mt-1 text-[9px] tracking-wider text-amber-100/65">
+                TERRAIN HORIZON: PARTIAL · COMPLETE 360° COVERAGE NOT VERIFIED
+              </p>
+              <p className="mt-1 text-[9px] text-white/40">
+                SURFACE IMAGERY: {surfaceImageryStatus === "available"
+                  ? "LROC NAC MOSAIC LOADED"
+                  : surfaceImageryStatus === "loading"
+                    ? "LOADING LROC NAC…"
+                    : "LOLA SHADED RELIEF FALLBACK"}
+              </p>
+              <p className="mt-1 text-[8px] text-white/30">
+                TERRAIN MESH: 5 m near-field · 30 m regional context
+              </p>
+              <p className="mt-1 text-[8px] leading-3 text-white/30">
+                Average image texture only — not calibrated albedo, live illumination or elevation. Native mosaic: 1 m/px; this 24 km texture is resampled to about 11.7 m/texel.
+              </p>
+              <a
+                href="https://data.lroc.im-ldi.com/lroc/view_rdr/NAC_POLE_SOUTH_CM_AVG"
+                target="_blank"
+                rel="noreferrer"
+                className="mt-1 inline-block text-[8px] text-white/45 underline underline-offset-2 hover:text-white/75"
+              >
+                LROC source product · NASA / ASU
+              </a>
+              <p className="mt-1 text-[8px] text-white/30">
+                Celestial disk diameters use JPL apparent angular sizes (1× scale).
+              </p>
+      
+              {horizonsError && (
+                <div className="mt-2 rounded-md border border-red-300/20 bg-red-300/[0.06] p-2">
+                  <p className="max-h-20 overflow-y-auto break-words text-[10px] leading-4 text-red-100/85">
+                    {horizonsError}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setJplRetryCount((count) => count + 1)}
+                    className="mt-2 text-[9px] font-semibold tracking-wider text-red-100 underline underline-offset-2"
+                  >
+                    RETRY JPL REQUEST
+                  </button>
+                </div>
+              )}
+      
+              {horizons?.targetErrors && (horizons.targetErrors.sun || horizons.targetErrors.earth) && (
+                <p className="mt-2 break-words text-[9px] leading-4 text-amber-100/70">
+                  {[
+                    horizons.targetErrors.sun ? `Sun: ${horizons.targetErrors.sun}` : null,
+                    horizons.targetErrors.earth ? `Earth: ${horizons.targetErrors.earth}` : null,
+                  ].filter(Boolean).join(" · ")}
+                </p>
+              )}
+      
+              {horizons?.terrainError && (
+                <p className="mt-2 break-words text-[9px] leading-4 text-amber-100/70">
+                  Terrain horizon unavailable: {horizons.terrainError}. JPL positions can still be displayed; terrain occlusion remains unknown.
+                </p>
+              )}
+      
+              <div className="mt-4 grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-[10px] font-semibold tracking-wider text-amber-200">
+                    SUN
+                  </p>
+      
+                  <p className="mt-2 text-[10px] leading-5 text-white/75">
+                    {getTerrainVisibilityLabel(sun)}
+                  </p>
+                  <p className="mt-1 text-[9px] leading-4 text-white/45">
+                    {getTerrainVisibilityQualification(sun, horizons?.horizonProfile)}
+                  </p>
+                  <p className="mt-1 text-[9px] text-white/35">
+                    JPL: {sun?.time ?? "Unavailable"} · Az {sun ? sun.azimuthDeg.toFixed(1) : "—"}° · El {sun ? sun.elevationDeg.toFixed(1) : "—"}°
+                  </p>
+                </div>
+      
+                <div>
+                  <p className="text-[10px] font-semibold tracking-wider text-blue-200">
+                    EARTH
+                  </p>
+      
+                  <p className="mt-2 text-[10px] leading-5 text-white/75">
+                    {getTerrainVisibilityLabel(earth)}
+                  </p>
+                  <p className="mt-1 text-[9px] leading-4 text-white/45">
+                    {getTerrainVisibilityQualification(earth, horizons?.horizonProfile)}
+                  </p>
+                  <p className="mt-1 text-[9px] text-white/35">
+                    JPL: {earth?.time ?? "Unavailable"} · Az {earth ? earth.azimuthDeg.toFixed(1) : "—"}° · El {earth ? earth.elevationDeg.toFixed(1) : "—"}°
+                  </p>
+                </div>
+              </div>
+            </div>
+      
+            <details
+              className="group pointer-events-auto absolute right-4 top-4 z-40 w-[min(320px,calc(100vw-2rem))] max-h-[70vh] overflow-y-auto rounded-xl border border-white/15 bg-black/85 p-3 text-white shadow-2xl backdrop-blur-md"
+              onPointerDown={(event) => event.stopPropagation()}
+              onPointerUp={(event) => event.stopPropagation()}
+            >
+              <summary
+                aria-label="Expand or collapse the observer HUD containing terrain, skyline and mission timeline"
+                className="list-none cursor-pointer [&::-webkit-details-marker]:hidden"
+              >
+                <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-[9px] font-semibold tracking-[0.18em] text-white/50">OBSERVER HUD · TRUE NORTH</p>
+                  <p className="mt-1 text-2xl font-semibold tabular-nums">{cameraHeading.toFixed(1)}°</p>
+                  <p className="text-[10px] text-white/45">Camera heading · {cameraHeading < 22.5 || cameraHeading >= 337.5 ? "N" : cameraHeading < 67.5 ? "NE" : cameraHeading < 112.5 ? "E" : cameraHeading < 157.5 ? "SE" : cameraHeading < 202.5 ? "S" : cameraHeading < 247.5 ? "SW" : cameraHeading < 292.5 ? "W" : "NW"}</p>
+                  <p className="mt-1 text-[8px] tracking-wider text-amber-100/65">TRUE-NORTH BEARING</p>
+                </div>
+                <div className="grid grid-cols-3 gap-1 text-center text-[9px] text-white/45">
+                  <span />
+                  <span className="rounded border border-white/20 px-2 py-1">N</span>
+                  <span />
+                  <span className="rounded border border-white/20 px-2 py-1">W</span>
+                  <span
+                    className="inline-block rounded border border-amber-300/40 bg-amber-300/10 px-2 py-1 text-amber-100"
+                    style={{ transform: `rotate(${cameraHeading}deg)` }}
+                    title="Arrow indicates the camera look direction relative to true north"
+                  >↑</span>
+                  <span className="rounded border border-white/20 px-2 py-1">E</span>
+                  <span />
+                  <span className="rounded border border-white/20 px-2 py-1">S</span>
+                  <span />
+                </div>
+                </div>
+                <div className="mt-3 flex items-center justify-between rounded-md border border-white/10 bg-white/[0.035] px-3 py-2">
+                  <span className="text-[8px] tracking-[0.12em] text-white/50">TAP TO EXPAND TERRAIN, SKYLINE & TIMELINE</span>
+                  <span className="text-sm text-amber-100 transition-transform group-open:rotate-180">⌄</span>
+                </div>
+              </summary>
+      
+              <div className="mt-3 rounded-lg border border-white/10 bg-white/[0.035] p-3">
+                <p className="text-[9px] tracking-[0.15em] text-white/45">LOOK-DIRECTION TERRAIN</p>
+                {horizonAtHeading?.horizonElevationDeg !== null && horizonAtHeading?.horizonElevationDeg !== undefined ? (
+                  <div className="mt-2 grid grid-cols-2 gap-3">
+                    <div><p className="text-[9px] text-white/40">Sampled horizon</p><strong className="text-sm">{horizonAtHeading.horizonElevationDeg.toFixed(2)}°</strong></div>
+                    <div><p className="text-[9px] text-white/40">Farthest known sample</p><strong className="text-sm">{horizonAtHeading.lastKnownSampleDistanceMeters?.toFixed(0) ?? "—"} m</strong></div>
+                    <p className="col-span-2 text-[9px] text-white/45">Bearing {horizonAtHeading.azimuthDeg.toFixed(2)}° · {horizonAtHeading.horizonSource ?? "unknown"} · {horizonAtHeading.horizonResolutionMeters ?? "—"} m grid</p>
+                  </div>
+                ) : (
+                  <p className="mt-2 text-xs text-amber-100/75">UNKNOWN — no valid terrain sample in this direction.</p>
+                )}
+                <p className="mt-2 text-[9px] text-amber-100/60">Terrain beyond known coverage remains unknown. The 15 km search limit is not a claim of complete horizon coverage.</p>
+              </div>
+      
+              <div className="mt-3 rounded-lg border border-white/10 bg-white/[0.025] p-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-[9px] tracking-[0.15em] text-white/45">360° SAMPLED SKYLINE</p>
+                  <span className="text-[9px] text-white/35">Gaps = unknown</span>
+                </div>
+                <svg viewBox="0 0 320 100" role="img" aria-label="Sampled terrain horizon by azimuth" className="mt-2 h-24 w-full overflow-visible">
+                  <line x1="10" y1="82" x2="310" y2="82" stroke="rgba(255,255,255,.18)" strokeDasharray="3 4" />
+                  <line x1="160" y1="10" x2="160" y2="86" stroke="rgba(255,255,255,.10)" strokeDasharray="3 4" />
+                  {horizonPaths.map((path, index) => <path key={index} d={path} fill="none" stroke="#79cbb7" strokeWidth="2" strokeLinejoin="round" />)}
+                  <text x="10" y="96" fill="rgba(255,255,255,.5)" fontSize="8">N</text>
+                  <text x="85" y="96" fill="rgba(255,255,255,.5)" fontSize="8">E</text>
+                  <text x="160" y="96" fill="rgba(255,255,255,.5)" fontSize="8">S</text>
+                  <text x="235" y="96" fill="rgba(255,255,255,.5)" fontSize="8">W</text>
+                </svg>
+              </div>
+      
+              <div className="mt-3 grid grid-cols-2 gap-3">
+                <div className="rounded-lg border border-amber-200/15 bg-amber-200/[0.04] p-3">
+                  <p className="text-[9px] tracking-wider text-amber-100/60">SUN · AZ / EL</p>
+                  <strong className="mt-1 block text-sm">{sun ? `${sun.azimuthDeg.toFixed(1)}°` : "—"}</strong>
+                  <p className="text-[9px] text-white/55">Elevation {sun ? `${sun.elevationDeg >= 0 ? "+" : ""}${sun.elevationDeg.toFixed(2)}°` : "—"}</p>
+                  <p className="mt-1 text-[9px] text-white/45">{sun ? getTerrainVisibilityLabel(sun) : "No selected sample"}</p>
+                </div>
+                <div className="rounded-lg border border-sky-200/15 bg-sky-200/[0.04] p-3">
+                  <p className="text-[9px] tracking-wider text-sky-100/60">EARTH · AZ / EL</p>
+                  <strong className="mt-1 block text-sm">{earth ? `${earth.azimuthDeg.toFixed(1)}°` : "—"}</strong>
+                  <p className="text-[9px] text-white/55">Elevation {earth ? `${earth.elevationDeg >= 0 ? "+" : ""}${earth.elevationDeg.toFixed(2)}°` : "—"}</p>
+                  <p className="mt-1 text-[9px] text-white/45">{earth ? getTerrainVisibilityLabel(earth) : "No selected sample"}</p>
+                </div>
+              </div>
+      
+              <div className="mt-3 rounded-lg border border-white/10 p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-[9px] tracking-[0.15em] text-white/45">MISSION TIMELINE · JPL SAMPLES</p>
+                  <span className="text-[9px] tabular-nums text-white/55">{timelineLength ? `${safeObservationIndex + 1}/${timelineLength}` : "No samples"}</span>
+                </div>
+                <p className="mt-2 text-[9px] leading-4 text-white/45">
+                  Each step selects one actual 10-minute JPL timestamp. Sun and Earth positions and sampled-terrain visibility update together; the observer and camera remain fixed.
+                </p>
+                {timelineLength > 0 ? (
+                  <>
+                    <input
+                      aria-label="Select actual JPL mission observation"
+                      className="mt-3 w-full accent-amber-300"
+                      type="range"
+                      min="0"
+                      max={timelineLength - 1}
+                      step="1"
+                      value={safeObservationIndex}
+                      onChange={(event) => setSelectedObservation({
+                        key: horizonsRequestKey,
+                        index: Number(event.target.value),
+                      })}
+                    />
+                    <div className="mt-1 flex justify-between text-[9px] text-white/40">
+                      <span>{sunObservations[0]?.timeUtc ?? "—"}</span>
+                      <span>{sunObservations[sunObservations.length - 1]?.timeUtc ?? "—"}</span>
+                    </div>
+                    <p className="mt-2 text-[10px] text-white/65">{selectedTimeUtc ?? "Observation unavailable"}</p>
+                  </>
+                ) : (
+                  <p className="mt-2 text-xs text-white/45">Waiting for exact-observer JPL samples.</p>
+                )}
+              </div>
+      
+              <div className="mt-3 rounded-lg border border-white/10 p-3">
+                <p className="text-[9px] tracking-[0.15em] text-white/45">PRODUCT78 SCIENCE · SELECTED PIXEL</p>
+                {scienceLoading ? (
+                  <p className="mt-2 text-xs text-white/45">Reading science values…</p>
+                ) : scienceSample?.available && scienceSample.values ? (
+                  <>
+                    <div className="mt-2 grid grid-cols-2 gap-3 text-xs">
+                    <div><p className="text-[9px] text-white/40">Elevation · nearest pixel</p><strong>{scienceSample.values.elevationMeters.toFixed(2)} m</strong></div>
+                    <div><p className="text-[9px] text-white/40">Slope</p><strong>{scienceSample.values.slopeDegrees.toFixed(2)}°</strong></div>
+                    <div><p className="text-[9px] text-white/40">Slope RMS uncertainty</p><strong>{scienceSample.values.slopeUncertaintyDegrees.toFixed(2)}°</strong></div>
+                    <div><p className="text-[9px] text-white/40">Elevation RMS uncertainty</p><strong>{scienceSample.values.elevationUncertaintyMeters.toFixed(2)} m</strong></div>
+                    <div><p className="text-[9px] text-white/40">Direct LOLA shots / pixel</p><strong>{scienceSample.values.observationCount.toFixed(0)}</strong></div>
+                    </div>
+                    <p className="mt-3 text-[9px] leading-4 text-white/45">
+                      All values in this card are read from the nearest 5 m raster pixel. Zero direct shots does not mean missing terrain: the Product78 elevation model may interpolate between LOLA tracks. The JPL observer elevation is sampled separately at the exact geographic coordinate.
+                    </p>
+                  </>
+                ) : (
+                  <p className="mt-2 text-[10px] text-amber-100/70">{scienceSample?.reason ?? "Science layers not prepared for this site."}</p>
+                )}
+              </div>
+      
+              <p className="mt-3 text-[9px] leading-4 text-white/40">Camera rotation changes only the true-north look-direction HUD. The shared JPL timestamp updates both celestial bodies and their sampled-terrain assessments. Earth visibility is geometric screening only, not an RF link budget.</p>
+            </details>
+      
+      
+
