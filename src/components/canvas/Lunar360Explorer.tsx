@@ -115,19 +115,18 @@ interface HorizonsTarget extends HorizonsObservation {
 
 interface HorizonsResponse {
   success: boolean;
+  status?: "complete" | "partial" | "unavailable";
+  targetErrors?: {
+    sun?: string | null;
+    earth?: string | null;
+  };
+  terrainError?: string | null;
 
   site?: {
     id: string;
     archiveSite: string;
     displayName: string;
     dataDirectory: string;
-  };
-
-  mission?: {
-    date: string;
-    time: string;
-    startTime: string;
-    stopTime: string;
   };
 
   observer?: {
@@ -328,35 +327,35 @@ function canRenderCelestialDisk(
 
   const visibility = observation.terrainVisibility;
 
-  // No terrain assessment or no positive visibility result.
+  if (!visibility) {
+    return false;
+  }
+
+  // A missing horizon must not erase a real JPL position. Render that
+  // marker with a subdued opacity and label its terrain occlusion unknown.
   if (
-    !visibility ||
+    visibility.status !== "terrain_horizon_unavailable" &&
     visibility.targetDiskVisible !== true
   ) {
     return false;
   }
 
-  // Never invent a celestial disk size.
+  // Never invent a disk size. A target below sampled terrain is still hidden.
   const angularRadiusDeg = getAngularRadiusDeg(observation);
 
-  if (angularRadiusDeg === null) {
+  if (
+    angularRadiusDeg === null ||
+    visibility.status === "target_disk_below_sampled_terrain" ||
+    visibility.status === "target_disk_size_unavailable"
+  ) {
     return false;
   }
 
-  // Only these two states are eligible for rendering.
-  switch (visibility.status) {
-    case "target_disk_intersects_sampled_terrain":
-      return true;
-
-    case "target_disk_above_sampled_terrain_unconfirmed":
-      return true;
-
-    case "target_disk_below_sampled_terrain":
-    case "target_disk_size_unavailable":
-    case "terrain_horizon_unavailable":
-    default:
-      return false;
-  }
+  return (
+    visibility.status === "terrain_horizon_unavailable" ||
+    visibility.status === "target_disk_intersects_sampled_terrain" ||
+    visibility.status === "target_disk_above_sampled_terrain_unconfirmed"
+  );
 }
 
 function getDiskFractionAboveHorizon(
@@ -399,14 +398,16 @@ function getSunlightFraction(
 
   const visibility = sun.terrainVisibility;
 
-  // Do not turn incomplete terrain coverage into confirmed
-  // direct sunlight.
+  // Use a measured local horizon when available. The separate global
+  // completeness flag remains false and is still disclosed in the HUD;
+  // it must not suppress sunlight from a valid sampled local horizon.
   if (
     !visibility ||
     visibility.targetDiskVisible !== true ||
-    visibility.terrainCoverageComplete !== true ||
-    visibility.status !==
-    "target_disk_intersects_sampled_terrain"
+    (
+      visibility.status !== "target_disk_intersects_sampled_terrain" &&
+      visibility.status !== "target_disk_above_sampled_terrain_unconfirmed"
+    )
   ) {
     return 0;
   }
@@ -444,8 +445,11 @@ function getCelestialVisualOpacity(
   }
 
   switch (visibility.status) {
+    case "terrain_horizon_unavailable":
+      return 0.22;
+
     case "target_disk_above_sampled_terrain_unconfirmed":
-      return 0.32;
+      return 0.48;
 
     case "target_disk_intersects_sampled_terrain": {
       const angularRadiusDeg =
@@ -503,7 +507,7 @@ function getTerrainVisibilityLabel(
       return "Unknown — angular diameter unavailable";
 
     case "terrain_horizon_unavailable":
-      return "Unknown — terrain horizon unavailable";
+      return "JPL position known · terrain occlusion unknown";
 
     default:
       return "Unknown";
@@ -1457,6 +1461,7 @@ export default function Lunar360Explorer({
     longitude,
     missionDate,
     missionTime,
+    durationHours,
   ]);
 
   const [horizonsResult, setHorizonsResult] = useState<{
@@ -1478,6 +1483,9 @@ export default function Lunar360Explorer({
 
   const [cameraHeading, setCameraHeading] = useState(0);
   const [selectedObservationIndex, setSelectedObservationIndex] = useState(0);
+  const [horizonsLoading, setHorizonsLoading] = useState(false);
+  const [horizonsError, setHorizonsError] = useState<string | null>(null);
+  const [jplRetryCount, setJplRetryCount] = useState(0);
   const [scienceSample, setScienceSample] = useState<ScienceSample | null>(null);
   const [scienceLoading, setScienceLoading] = useState(false);
 
@@ -1560,6 +1568,9 @@ export default function Lunar360Explorer({
       };
     }
 
+    setHorizonsLoading(true);
+    setHorizonsError(null);
+
     async function loadJplHorizons() {
       try {
         const query = new URLSearchParams({
@@ -1585,8 +1596,15 @@ export default function Lunar360Explorer({
           (await response.json()) as HorizonsResponse;
 
         if (!response.ok || !result.success) {
+          const targetDiagnostics = Object.entries(result.targetErrors ?? {})
+            .filter((entry): entry is [string, string] => typeof entry[1] === "string" && entry[1].length > 0)
+            .map(([target, detail]) => `${target.toUpperCase()}: ${detail}`)
+            .join(" · ");
+
           throw new Error(
-            result.error ||
+            [result.error, targetDiagnostics]
+              .filter((part): part is string => Boolean(part))
+              .join(" — ") ||
             `JPL Horizons request failed: HTTP ${response.status}.`
           );
         }
@@ -1625,10 +1643,15 @@ export default function Lunar360Explorer({
             error.name === "AbortError"
           )
         ) {
-          console.error(
-            "[LUNAPATH] JPL Horizons data unavailable:",
-            error
-          );
+          const message = error instanceof Error
+            ? error.message
+            : "Unknown JPL Horizons request failure.";
+          setHorizonsError(message);
+          console.error("[LUNAPATH] JPL Horizons data unavailable:", error);
+        }
+      } finally {
+        if (!cancelled) {
+          setHorizonsLoading(false);
         }
       }
     }
@@ -1650,6 +1673,7 @@ export default function Lunar360Explorer({
     missionTime,
     durationHours,
     horizonsRequestKey,
+    jplRetryCount,
   ]);
 
   const sunObservations = horizons?.targets?.sun?.observations ?? [];
@@ -1828,13 +1852,15 @@ export default function Lunar360Explorer({
       >
         <color attach="background" args={["#020203"]} />
 
+        {/* Neutral visualization fill keeps LOLA relief legible during
+            JPL outages. Only a measured Sun sample drives directional light. */}
         <ambientLight
-          color="#a9a9a4"
-          intensity={0.14}
+          color="#b8b8b2"
+          intensity={0.42}
         />
 
         <hemisphereLight
-          args={["#b9b9b5", "#3c3c3a", 0.22]}
+          args={["#c8c8c2", "#343431", 0.34]}
         />
 
         <LunarScene
@@ -1849,20 +1875,58 @@ export default function Lunar360Explorer({
         />
       </Canvas>
 
-      <div className="pointer-events-none absolute left-5 top-5 z-40 w-[min(390px,calc(100vw-2.5rem))] border border-white/15 bg-black/75 p-4 text-white shadow-xl backdrop-blur-md">
+      <div
+        className="pointer-events-auto absolute left-5 top-5 z-40 w-[min(360px,calc(100vw-2.5rem))] border border-white/15 bg-black/80 p-3 text-white shadow-xl backdrop-blur-md"
+        onPointerDown={(event) => event.stopPropagation()}
+        onPointerUp={(event) => event.stopPropagation()}
+      >
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-[9px] font-semibold tracking-[0.18em] text-white/60">
             NASA / JPL HORIZONS
           </p>
 
-          <span className="text-[9px] tracking-wider text-white/40">
-            {horizons ? "RESPONSE RECEIVED" : "NO RESPONSE"}
+          <span className="text-[9px] tracking-wider text-white/55">
+            {horizonsLoading
+              ? "QUERYING JPL…"
+              : horizons
+                ? horizons.status === "partial" ? "PARTIAL RESPONSE" : "RESPONSE RECEIVED"
+                : horizonsError ? "JPL ERROR" : "WAITING"}
           </span>
         </div>
 
         <p className="mt-2 text-[10px] text-white/40">
-          Mission time: {missionDate} {missionTime} UTC
+          Mission time: {missionDate} {missionTime} UTC · {durationHours} h
         </p>
+
+        {horizonsError && (
+          <div className="mt-2 rounded-md border border-red-300/20 bg-red-300/[0.06] p-2">
+            <p className="max-h-20 overflow-y-auto break-words text-[10px] leading-4 text-red-100/85">
+              {horizonsError}
+            </p>
+            <button
+              type="button"
+              onClick={() => setJplRetryCount((count) => count + 1)}
+              className="mt-2 text-[9px] font-semibold tracking-wider text-red-100 underline underline-offset-2"
+            >
+              RETRY JPL REQUEST
+            </button>
+          </div>
+        )}
+
+        {horizons?.targetErrors && (horizons.targetErrors.sun || horizons.targetErrors.earth) && (
+          <p className="mt-2 break-words text-[9px] leading-4 text-amber-100/70">
+            {[
+              horizons.targetErrors.sun ? `Sun: ${horizons.targetErrors.sun}` : null,
+              horizons.targetErrors.earth ? `Earth: ${horizons.targetErrors.earth}` : null,
+            ].filter(Boolean).join(" · ")}
+          </p>
+        )}
+
+        {horizons?.terrainError && (
+          <p className="mt-2 break-words text-[9px] leading-4 text-amber-100/70">
+            Terrain horizon unavailable: {horizons.terrainError}. JPL positions can still be displayed; terrain occlusion remains unknown.
+          </p>
+        )}
 
         <div className="mt-4 grid grid-cols-2 gap-4">
           <div>
@@ -1895,8 +1959,13 @@ export default function Lunar360Explorer({
         </div>
       </div>
 
-      <section className="pointer-events-auto absolute right-4 top-4 z-40 w-[min(410px,calc(100vw-2rem))] max-h-[78vh] overflow-y-auto rounded-xl border border-white/15 bg-black/80 p-4 text-white shadow-2xl backdrop-blur-md">
-        <div className="flex items-center justify-between gap-3">
+      <details
+        className="pointer-events-auto absolute right-4 top-4 z-40 w-[min(320px,calc(100vw-2rem))] max-h-[70vh] overflow-y-auto rounded-xl border border-white/15 bg-black/85 p-3 text-white shadow-2xl backdrop-blur-md"
+        onPointerDown={(event) => event.stopPropagation()}
+        onPointerUp={(event) => event.stopPropagation()}
+      >
+        <summary className="list-none cursor-pointer [&::-webkit-details-marker]:hidden">
+          <div className="flex items-center justify-between gap-3">
           <div>
             <p className="text-[9px] font-semibold tracking-[0.18em] text-white/50">OBSERVER HUD · TRUE NORTH</p>
             <p className="mt-1 text-2xl font-semibold tabular-nums">{cameraHeading.toFixed(1)}°</p>
@@ -1913,7 +1982,8 @@ export default function Lunar360Explorer({
             <span className="rounded border border-white/20 px-2 py-1">S</span>
             <span />
           </div>
-        </div>
+          </div>
+        </summary>
 
         <div className="mt-3 rounded-lg border border-white/10 bg-white/[0.035] p-3">
           <p className="text-[9px] tracking-[0.15em] text-white/45">LOOK-DIRECTION TERRAIN</p>
@@ -2004,7 +2074,7 @@ export default function Lunar360Explorer({
         </div>
 
         <p className="mt-3 text-[9px] leading-4 text-white/40">Camera rotation changes only the look-direction HUD. JPL mission time and celestial observations change only when the timeline sample changes. Earth visibility is geometric only, not an RF link budget.</p>
-      </section>
+      </details>
 
       <a
         href="/map"
