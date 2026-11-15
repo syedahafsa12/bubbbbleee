@@ -1480,12 +1480,12 @@ function CelestialBodies({
           castShadow
           shadow-mapSize-width={2048}
           shadow-mapSize-height={2048}
-          shadow-camera-left={-3500}
-          shadow-camera-right={3500}
-          shadow-camera-top={3500}
-          shadow-camera-bottom={-3500}
+          shadow-camera-left={-9000}
+          shadow-camera-right={9000}
+          shadow-camera-top={9000}
+          shadow-camera-bottom={-9000}
           shadow-camera-near={0.1}
-          shadow-camera-far={16000}
+          shadow-camera-far={30000}
           shadow-bias={-0.0001}
           shadow-normalBias={0.02}
         />
