@@ -1418,7 +1418,6 @@ function CelestialBodies({
   const earthVisible = canRenderCelestialDisk(earth);
   const sunOpacity = getCelestialVisualOpacity(sun);
 
-  const earthOpacity = getCelestialVisualOpacity(earth);
 
   const sunlightFraction = getSunlightFraction(sun);
 
