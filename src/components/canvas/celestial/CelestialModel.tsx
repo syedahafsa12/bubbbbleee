@@ -4,7 +4,8 @@ import { useEffect, useMemo } from "react";
 import { useGLTF } from "@react-three/drei";
 import * as THREE from "three";
 
-export const CELESTIAL_DISPLAY_SCALE = 3.5;
+export const EARTH_DISPLAY_SCALE = 3.5;
+export const SUN_DISPLAY_SCALE = 8.0;
 
 export interface CelestialModelProps {
   url: string;

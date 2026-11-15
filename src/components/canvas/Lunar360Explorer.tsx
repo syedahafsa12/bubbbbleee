@@ -23,7 +23,7 @@ import * as THREE from "three";
 
 import { EarthVisual } from "@/components/canvas/celestial/EarthVisual";
 import { SunVisual } from "@/components/canvas/celestial/SunVisual";
-import { CELESTIAL_DISPLAY_SCALE } from "@/components/canvas/celestial/CelestialModel";
+import { EARTH_DISPLAY_SCALE, SUN_DISPLAY_SCALE } from "@/components/canvas/celestial/CelestialModel";
 
 import {
   geographicToLolaProjected,
@@ -2021,10 +2021,10 @@ export default function Lunar360Explorer({
           LROC source product · NASA / ASU
         </a>
         <p className="mt-1 text-[8px] text-white/30">
-          Celestial display: {CELESTIAL_DISPLAY_SCALE.toFixed(1)}× presentation scale · JPL angular data unchanged.
+          Display only: Sun {SUN_DISPLAY_SCALE.toFixed(1)}× · Earth {EARTH_DISPLAY_SCALE.toFixed(1)}×. JPL values unchanged.
         </p>
         <p className="mt-1 text-[8px] text-white/30">
-          Sun detail: NASA SDO / AIA 304 Å · historical false-color reference, not live data.
+          Sun surface: NASA SDO 4500 Å visible-light reference. 304 Å prominences are a separate historical layer.
         </p>
 
         {horizonsError && (

@@ -6,9 +6,9 @@ This branch is an isolated visual preview. It is not merged into `main`.
 
 - The selected landing site remains rendered from the existing NASA LOLA / Product78 elevation raster: 5 m near-field geometry and the existing 30 m regional context mesh.
 - The existing controlled LROC South Pole NAC mosaic remains the surface morphology/albedo layer. The camera starts with a more ground-facing landing-view composition, and lunar fill lighting is reduced to preserve sharper sunlit/shadowed relief.
-- Earth and Sun retain their JPL-derived sky directions and angular-diameter calculations. Their 3D meshes use a separate **3.5× presentation scale** for legibility; the JPL values, direction, occlusion calculations and lighting direction are unchanged. The UI labels this visual exaggeration.
-- The Sun receives a separate NASA SDO/AIA 304 Å historical reference-image overlay. AIA 304 Å is extreme-ultraviolet data shown in false colour; the selected frame is historical and is not represented as the current Sun or as live mission data.
-- The API route `/api/solar-imagery/aia304` proxies the exact NASA SVS reference frame with content-type and size checks.
+- Earth and Sun retain their JPL-derived sky directions and angular-diameter calculations. Earth's 3D mesh uses a **3.5× presentation scale** and the Sun's uses **8.0×** so the solar disk is clearly visible; these are display-only exaggerations. JPL values, direction, occlusion calculations and lighting direction are unchanged. The UI labels this visual exaggeration.
+- The Sun uses a NASA SDO 4500 Å visible-light photosphere reference (including sunspots) as its main disk, with NASA SDO/AIA 304 Å used only at the outer rim for prominence detail. Both reference frames are historical; the 304 Å false-colour image no longer covers the full solar disk.
+- The API routes `/api/solar-imagery/photosphere` and `/api/solar-imagery/aia304` proxy NASA SVS reference frames with content-type and size checks.
 
 ## Asset provenance
 
@@ -18,7 +18,8 @@ NASA source pages:
 - [Earth with Clouds 3D Model](https://science.nasa.gov/resource/earth-with-clouds-3d-model/)
 - [Earth 3D Model fallback](https://science.nasa.gov/learn/heat/resource/earth-3d-model/)
 - [Sun 3D Model](https://science.nasa.gov/learn/heat/resource/sun-3d-model/)
-- [NASA SDO/AIA 304 Å reference frame](https://svs.gsfc.nasa.gov/3983/)
+- [NASA SDO 4500 Å visible-light photosphere](https://svs.gsfc.nasa.gov/3987/)
+- [NASA SDO/AIA 304 Å prominence reference](https://svs.gsfc.nasa.gov/3983/)
 
 ## Preserved systems
 

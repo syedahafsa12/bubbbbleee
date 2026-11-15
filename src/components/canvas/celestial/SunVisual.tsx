@@ -2,7 +2,7 @@
 
 import { useGLTF } from "@react-three/drei";
 import CelestialModel, {
-  CELESTIAL_DISPLAY_SCALE,
+  SUN_DISPLAY_SCALE,
   type CelestialModelProps,
 } from "./CelestialModel";
 import { SunAia304ReferenceLayer } from "./SunAia304ReferenceLayer";
@@ -13,7 +13,7 @@ export type SunVisualProps = Omit<
 >;
 
 export function SunVisual({ position, diameter, ...props }: SunVisualProps) {
-  const displayDiameter = diameter * CELESTIAL_DISPLAY_SCALE;
+  const displayDiameter = diameter * SUN_DISPLAY_SCALE;
 
   return (
     <>
@@ -21,7 +21,7 @@ export function SunVisual({ position, diameter, ...props }: SunVisualProps) {
         url="/models/sun.glb"
         position={position}
         diameter={diameter}
-        displayScale={CELESTIAL_DISPLAY_SCALE}
+        displayScale={SUN_DISPLAY_SCALE}
         {...props}
       />
       <SunAia304ReferenceLayer

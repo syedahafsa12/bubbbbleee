@@ -2,7 +2,7 @@
 
 import { useGLTF } from "@react-three/drei";
 import CelestialModel, {
-  CELESTIAL_DISPLAY_SCALE,
+  EARTH_DISPLAY_SCALE,
   type CelestialModelProps,
 } from "./CelestialModel";
 
@@ -15,7 +15,7 @@ export function EarthVisual(props: EarthVisualProps) {
   return (
     <CelestialModel
       url="/models/earth.glb"
-      displayScale={CELESTIAL_DISPLAY_SCALE}
+      displayScale={EARTH_DISPLAY_SCALE}
       {...props}
     />
   );
