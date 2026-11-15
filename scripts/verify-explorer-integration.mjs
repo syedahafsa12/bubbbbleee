@@ -303,6 +303,18 @@ async function main() {
       }
     }
 
+    const sunTimes = horizons.targets?.sun?.observations ?? [];
+    const earthTimes = horizons.targets?.earth?.observations ?? [];
+    if (
+      sunTimes.length === expectedSamples &&
+      earthTimes.length === expectedSamples &&
+      sunTimes.every((item, index) => item.timeUtc === earthTimes[index]?.timeUtc)
+    ) {
+      pass("Sun and Earth samples share the same UTC timeline.");
+    } else {
+      fail("Sun and Earth observation timestamps are not aligned on one shared timeline.");
+    }
+
     const profile = horizons.horizonProfile ?? [];
     if (profile.length !== 360) {
       fail(`Horizon profile contains ${profile.length} directions; expected 360 one-degree bearings.`);
