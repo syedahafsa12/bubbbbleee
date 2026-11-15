@@ -126,6 +126,7 @@ export default function MapPage() {
           row: String(localLocation.pixel.row),
           date: missionDate,
           time: missionTime,
+          durationHours: missionDuration,
         }).toString()}`
       : null;
 
@@ -150,6 +151,9 @@ export default function MapPage() {
             <a href="#local-terrain" className="hover:text-white">
               Local terrain
             </a>
+            <Link href="/science" className="hover:text-white">
+              Science comparison
+            </Link>
           </nav>
 
           <div className="flex items-center gap-2 text-[10px] tracking-wider text-white/40">

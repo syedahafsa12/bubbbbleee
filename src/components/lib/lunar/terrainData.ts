@@ -128,6 +128,7 @@ export const SITE04_COORDINATES: GeographicCoordinate = {
 };
 
 const terrainPromises = new Map<Product78SiteId, Promise<LolaTerrainData>>();
+const terrainPreviewPromises = new Map<Product78SiteId, Promise<LolaTerrainData>>();
 const sciencePromises = new Map<Product78SiteId, Promise<LolaScienceData>>();
 
 export class LolaNoDataError extends Error {
@@ -599,6 +600,47 @@ async function fetchBinary(path: string): Promise<Uint8Array> {
   }
 
   return new Uint8Array(await response.arrayBuffer());
+}
+
+/**
+ * Loads the cached, compact Product78 preview for immediate first paint.
+ * The full-resolution 5 m DEM is subsequently loaded in the background.
+ */
+export async function loadLolaTerrainPreviewForSite(
+  siteId: Product78SiteId = DEFAULT_PRODUCT78_SITE_ID,
+): Promise<LolaTerrainData> {
+  const cached = terrainPreviewPromises.get(siteId);
+  if (cached) return cached;
+
+  const pending = (async () => {
+    const response = await fetch(
+      `/api/product78/terrain-preview?siteId=${encodeURIComponent(siteId)}`,
+      { cache: "force-cache" },
+    );
+
+    if (!response.ok) {
+      throw new Error(`LOLA preview HTTP ${response.status}.`);
+    }
+
+    const encodedMetadata = response.headers.get("X-LunaPath-Terrain-Metadata");
+    if (!encodedMetadata) {
+      throw new Error("LOLA preview metadata header is missing.");
+    }
+
+    const metadata: unknown = JSON.parse(decodeURIComponent(encodedMetadata));
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    return decodeLolaTerrain(metadata, bytes);
+  })();
+
+  terrainPreviewPromises.set(siteId, pending);
+  try {
+    return await pending;
+  } catch (error) {
+    if (terrainPreviewPromises.get(siteId) === pending) {
+      terrainPreviewPromises.delete(siteId);
+    }
+    throw error;
+  }
 }
 
 export async function loadLolaTerrainForSite(

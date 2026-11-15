@@ -22,6 +22,7 @@ interface ExplorerSearchParams {
   row?: string;
   date?: string;
   time?: string;
+  durationHours?: string;
 }
 
 interface RasterMetadata {
@@ -178,6 +179,7 @@ export default async function ExplorerPage({
       pixelRow={pixelRow}
       missionDate={params.date || "NOT SET"}
       missionTime={params.time || "12:00"}
+      durationHours={params.durationHours || "24"}
     />
   );
 }
