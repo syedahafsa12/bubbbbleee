@@ -45,12 +45,36 @@ const TERRAIN_HORIZON_RESPONSE_BUDGET_MS = 18_000;
 const JPL_SAMPLE_INTERVAL_MINUTES = 10;
 const ALLOWED_DURATION_HOURS = [6, 12, 24, 48, 72] as const;
 
-type HorizonsObservation = {
+// Equatorial diameters from the NASA/JPL planetary fact sheets / IAU values.
+// Horizons quantity 13 supplies the observed angular diameter; quantity 20
+// supplies the observer range used as an independent geometry cross-check.
+const CELESTIAL_EQUATORIAL_DIAMETER_KM = {
+  "10": 1_391_400,
+  "399": 12_756.2732,
+} as const;
+
+const JPL_ANGULAR_DIAMETER_TOLERANCE_PERCENT = 2;
+
+type AngularDiameterSource =
+  | "jpl-range-verified"
+  | "jpl-only"
+  | "range-derived"
+  | "unavailable";
+
+type ParsedHorizonsObservation = {
   time: string;
   timeUtc: string;
   azimuthDeg: number;
   elevationDeg: number;
   angularDiameterArcsec: number | null;
+  observerRangeKm: number | null;
+};
+
+type HorizonsObservation = ParsedHorizonsObservation & {
+  jplAngularDiameterArcsec: number | null;
+  rangeDerivedAngularDiameterArcsec: number | null;
+  angularDiameterSource: AngularDiameterSource;
+  angularDiameterCrossCheckPercent: number | null;
 };
 
 type AssessedHorizonsObservation = HorizonsObservation & {
@@ -390,15 +414,15 @@ function getDateAndTime(
  * The request selects:
  *
  * Quantity 4  = apparent azimuth and elevation
- * Quantity 13 = target angular diameter
+ * Quantity 13 = target angular diameter (arcseconds)
+ * Quantity 20 = apparent observer range and range-rate (km and km/s)
  *
- * Horizons returns the selected quantities in the same order.
- *
- * Quantity 13 is in arcseconds.
+ * Horizons returns the selected quantities in the same order. The range is
+ * retained to independently verify the apparent disk size before rendering.
  */
 function parseHorizonsObservations(
   responseText: string
-): HorizonsObservation[] {
+): ParsedHorizonsObservation[] {
   const startIndex = responseText.indexOf("$$SOE");
   const endIndex = responseText.indexOf("$$EOE");
 
@@ -413,7 +437,7 @@ function parseHorizonsObservations(
     Sep: "09", Oct: "10", Nov: "11", Dec: "12",
   };
   const numericPattern = /[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[Ee][-+]?\d+)?/g;
-  const observations: HorizonsObservation[] = [];
+  const observations: ParsedHorizonsObservation[] = [];
 
   for (const rawLine of table.split(/\r?\n/)) {
     const line = rawLine.trim();
@@ -436,6 +460,9 @@ function parseHorizonsObservations(
     const elevationDeg = numericValues[1];
     const angularDiameter = numericValues.length >= 3
       ? numericValues[2]
+      : Number.NaN;
+    const observerRangeKm = numericValues.length >= 4
+      ? numericValues[3]
       : Number.NaN;
 
     if (
@@ -461,6 +488,10 @@ function parseHorizonsObservations(
         Number.isFinite(angularDiameter) && angularDiameter > 0
           ? angularDiameter
           : null,
+      observerRangeKm:
+        Number.isFinite(observerRangeKm) && observerRangeKm > 0
+          ? observerRangeKm
+          : null,
     });
   }
 
@@ -473,6 +504,84 @@ function parseHorizonsObservations(
   }
 
   return observations;
+}
+
+function calculateAngularDiameterArcsec(
+  equatorialDiameterKm: number,
+  observerRangeKm: number
+): number | null {
+  if (
+    !Number.isFinite(equatorialDiameterKm) ||
+    equatorialDiameterKm <= 0 ||
+    !Number.isFinite(observerRangeKm) ||
+    observerRangeKm <= 0
+  ) {
+    return null;
+  }
+
+  const angularDiameterRadians = 2 * Math.atan2(
+    equatorialDiameterKm / 2,
+    observerRangeKm
+  );
+  const angularDiameterArcsec =
+    angularDiameterRadians * (180 / Math.PI) * 3600;
+
+  return Number.isFinite(angularDiameterArcsec) && angularDiameterArcsec > 0
+    ? angularDiameterArcsec
+    : null;
+}
+
+function verifyCelestialAngularSize(
+  targetId: "10" | "399",
+  observation: ParsedHorizonsObservation
+): HorizonsObservation {
+  const jplAngularDiameterArcsec = observation.angularDiameterArcsec;
+  const rangeDerivedAngularDiameterArcsec =
+    observation.observerRangeKm === null
+      ? null
+      : calculateAngularDiameterArcsec(
+          CELESTIAL_EQUATORIAL_DIAMETER_KM[targetId],
+          observation.observerRangeKm
+        );
+
+  const angularDiameterCrossCheckPercent =
+    jplAngularDiameterArcsec !== null &&
+    rangeDerivedAngularDiameterArcsec !== null
+      ? (
+          Math.abs(
+            jplAngularDiameterArcsec -
+            rangeDerivedAngularDiameterArcsec
+          ) / rangeDerivedAngularDiameterArcsec
+        ) * 100
+      : null;
+
+  const jplRangeVerified =
+    jplAngularDiameterArcsec !== null &&
+    rangeDerivedAngularDiameterArcsec !== null &&
+    angularDiameterCrossCheckPercent !== null &&
+    angularDiameterCrossCheckPercent <= JPL_ANGULAR_DIAMETER_TOLERANCE_PERCENT;
+
+  const angularDiameterArcsec = jplRangeVerified
+    ? jplAngularDiameterArcsec
+    : rangeDerivedAngularDiameterArcsec ?? jplAngularDiameterArcsec;
+
+  const angularDiameterSource: AngularDiameterSource =
+    jplRangeVerified
+      ? "jpl-range-verified"
+      : rangeDerivedAngularDiameterArcsec !== null
+        ? "range-derived"
+        : jplAngularDiameterArcsec !== null
+          ? "jpl-only"
+          : "unavailable";
+
+  return {
+    ...observation,
+    angularDiameterArcsec,
+    jplAngularDiameterArcsec,
+    rangeDerivedAngularDiameterArcsec,
+    angularDiameterSource,
+    angularDiameterCrossCheckPercent,
+  };
 }
 
 /* =====================================================
@@ -500,7 +609,8 @@ async function requestHorizonsTarget(
     START_TIME: `'${startTime}'`,
     STOP_TIME: `'${stopTime}'`,
     STEP_SIZE: "'10m'",
-    QUANTITIES: "'4,13'",
+    QUANTITIES: "'4,13,20'",
+    RANGE_UNITS: "'KM'",
     TIME_TYPE: "'UT'",
     TIME_DIGITS: "'SECONDS'",
     CSV_FORMAT: "'NO'",
@@ -567,7 +677,9 @@ async function requestHorizonsTarget(
     }
 
     try {
-      return parseHorizonsObservations(payload.result);
+      return parseHorizonsObservations(payload.result).map((observation) =>
+        verifyCelestialAngularSize(targetId, observation)
+      );
     } catch (error) {
       throw new Error(
         `Could not parse JPL target ${targetId}: ${error instanceof Error ? error.message : "unknown table error"}`
