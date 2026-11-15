@@ -1,4 +1,3 @@
-
 import Link from "next/link";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
@@ -11,8 +10,9 @@ import {
   type Product78SiteId,
 } from "@/components/lib/lunar/siteRegistry";
 
-// Allow this route to wait for request-time data during rendering.
 export const instant = false;
+
+type ExplorerTarget = "sun" | "earth" | "both";
 
 interface ExplorerSearchParams {
   siteId?: string;
@@ -22,11 +22,22 @@ interface ExplorerSearchParams {
   row?: string;
   date?: string;
   time?: string;
+  target?: string;
 }
 
 interface RasterMetadata {
   width: number;
   height: number;
+}
+
+function getExplorerTarget(
+  value?: string
+): ExplorerTarget {
+  if (value === "sun" || value === "earth") {
+    return value;
+  }
+
+  return "both";
 }
 
 function InvalidSelection() {
@@ -169,6 +180,8 @@ export default async function ExplorerPage({
     return <InvalidSelection />;
   }
 
+  const target = getExplorerTarget(params.target);
+
   return (
     <Lunar360Explorer
       siteId={selectedSiteId}
@@ -178,6 +191,7 @@ export default async function ExplorerPage({
       pixelRow={pixelRow}
       missionDate={params.date || "NOT SET"}
       missionTime={params.time || "12:00"}
+      target={target}
     />
   );
 }

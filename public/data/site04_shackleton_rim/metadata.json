@@ -4,17 +4,8 @@
   "minElevation": -2847.877197265625,
   "maxElevation": 1805.0726318359375,
   "resolutionMeters": 5,
-  "bbox": [
-    -9000,
-    -15000,
-    7000,
-    1000
-  ],
-  "pixelResolution": [
-    5,
-    -5,
-    0
-  ],
+  "bbox": [-9000, -15000, 7000, 1000],
+  "pixelResolution": [5, -5, 0],
   "coordinateSystem": {
     "projection": "South Polar Stereographic",
     "referenceFrame": "MOON_ME",

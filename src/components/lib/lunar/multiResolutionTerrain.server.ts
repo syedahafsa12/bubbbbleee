@@ -12,22 +12,16 @@ import {
     sampleLolaHeightAtLocation,
 } from "./terrainData";
 
-import {
-    getProduct90Diagnostics,
-    sampleProduct90Elevation,
-    sampleProduct90Elevations,
-} from "./product90Terrain.server";
+/* =====================================================
+   TYPES — NASA LOLA PRODUCT 78 ONLY
+===================================================== */
 
-export type TerrainSampleSource =
-    | "product78"
-    | "product90";
+export type TerrainSampleSource = "product78";
 
 export type MultiResolutionTermination =
     | "search_limit"
     | "product78_boundary"
-    | "product78_nodata"
-    | "product90_boundary"
-    | "product90_nodata";
+    | "product78_nodata";
 
 export interface MultiResolutionElevationSample {
     elevationMeters: number;
@@ -46,15 +40,14 @@ export interface MultiResolutionTerrainHorizonDirection {
     horizonResolutionMeters: number | null;
 
     lastKnownSampleDistanceMeters: number | null;
+
     coverageStatus: "partial" | "no_data";
     terrainBeyondKnownCoverageUnknown: true;
 
     samplesChecked: number;
     product78SamplesChecked: number;
-    product90SamplesChecked: number;
 
     terminationReason: MultiResolutionTermination;
-
     coverageLimited: true;
 }
 
@@ -65,88 +58,45 @@ export interface MultiResolutionTerrainHorizonResult {
     lunarRadiusMeters: number;
 
     sampleStepMeters: number;
-    regionalSampleStepMeters: number;
     maxDistanceMeters: number;
 
     directions: MultiResolutionTerrainHorizonDirection[];
 
     calculatedDirections: number;
     totalSamplesChecked: number;
-
     product78SamplesChecked: number;
-    product90SamplesChecked: number;
 
     rasterBoundaryLimitedDirections: number;
-    product90CoverageBoundaryLimitedDirections: number;
-    product90NoDataTerminatedDirections: number;
+    product78BoundaryLimitedDirections: number;
+    product78NoDataTerminatedDirections: number;
     searchLimitReachedDirections: number;
 
     product78ResolutionMeters: number;
-    product90ResolutionMeters: number;
-    product90Status: "disabled" | "available" | "unavailable";
-    product90Error: string | null;
-
-    product78BoundaryLimitedDirections: number;
-    product78NoDataTerminatedDirections: number;
 
     completeHorizonVerified: false;
 }
 
 export interface MultiResolutionTerrainHorizonOptions {
     directionCount?: number;
-
-    // Local Product 78 sampling interval.
     sampleStepMeters?: number;
-
-    // Regional Product 90 sampling interval.
-    regionalSampleStepMeters?: number;
-
     maxDistanceMeters?: number;
-
-    // Limits simultaneous directional calculations.
     directionConcurrency?: number;
-
-    // Product 90 is an optional enhancement. Product 78 remains the
-    // authoritative baseline and is calculated before this is attempted.
-    enableProduct90?: boolean;
 }
 
-type Product90Diagnostics =
-    Awaited<ReturnType<typeof getProduct90Diagnostics>>;
-
-export interface Product90EnhancementDependencies {
-    getDiagnostics?: () => Promise<Product90Diagnostics>;
-    sampleElevations?: typeof sampleProduct90Elevations;
-}
+/* =====================================================
+   CONFIGURATION
+===================================================== */
 
 const DEFAULT_DIRECTION_COUNT = 360;
 const DEFAULT_SAMPLE_STEP_METERS = 5;
-const DEFAULT_REGIONAL_SAMPLE_STEP_METERS = 20;
 const DEFAULT_MAX_DISTANCE_METERS = 15000;
 const DEFAULT_DIRECTION_CONCURRENCY = 8;
 
 const PRODUCT78_RESOLUTION_METERS = 5;
-const PRODUCT90_RESOLUTION_METERS = 20;
 
-let product90DiagnosticsPromise:
-    Promise<Product90Diagnostics> | null = null;
-
-/**
- * Retrieves Product 90 metadata once.
- *
- * Failed initialization remains retryable.
- */
-async function getProduct90Metadata(): Promise<Product90Diagnostics> {
-    if (!product90DiagnosticsPromise) {
-        product90DiagnosticsPromise =
-            getProduct90Diagnostics().catch((error: unknown) => {
-                product90DiagnosticsPromise = null;
-                throw error;
-            });
-    }
-
-    return product90DiagnosticsPromise;
-}
+/* =====================================================
+   VALIDATION HELPERS
+===================================================== */
 
 function assertFinite(
     value: number,
@@ -176,294 +126,34 @@ function approximatelyEqual(
     return Math.abs(actual - expected) <= tolerance;
 }
 
-/**
- * Verifies that the two datasets advertise compatible
- * coordinate-system metadata before they are combined.
- *
- * This checks the supplied dataset descriptions and raster
- * metadata. It does not independently establish a complete
- * CRS transformation or vertical-datum equivalence.
- */
-function validateDatasetCompatibility(
-    product78: LolaTerrainData,
-    product90: Product90Diagnostics
-): void {
-    const local = product78.metadata.coordinateSystem;
-    const regional = product90.dataset;
+/* =====================================================
+   ANGLE HELPERS
+===================================================== */
 
-    const checks = [
-        {
-            name: "projection",
-            local: local.projection,
-            regional: regional.projection,
-        },
-        {
-            name: "reference frame",
-            local: local.referenceFrame,
-            regional: regional.referenceFrame,
-        },
-        {
-            name: "ephemeris",
-            local: local.ephemeris,
-            regional: regional.ephemeris,
-        },
-    ];
-
-    for (const check of checks) {
-        if (
-            normalizeMetadataValue(check.local) !==
-            normalizeMetadataValue(check.regional)
-        ) {
-            throw new Error(
-                `Product 78 and Product 90 ${check.name} mismatch. ` +
-                `Product 78: ${check.local}; Product 90: ${check.regional}.`
-            );
-        }
-    }
-
-    const localUnits = normalizeMetadataValue(
-        local.linearUnits
-    );
-
-    const regionalUnits = normalizeMetadataValue(
-        regional.linearUnits
-    );
-
-    const meterAliases = [
-        "m",
-        "meter",
-        "meters",
-        "metre",
-        "metres",
-    ];
-
-    if (
-        !meterAliases.includes(localUnits) ||
-        !meterAliases.includes(regionalUnits)
-    ) {
-        throw new Error(
-            "Both terrain datasets must use projected coordinates in metres."
-        );
-    }
-
-    const localPixelRegistration = normalizeMetadataValue(
-        local.pixelRegistration
-    );
-
-    if (
-        localPixelRegistration !== "pixelarea" &&
-        localPixelRegistration !== "pixelisarea"
-    ) {
-        throw new Error(
-            `Unsupported Product 78 pixel registration: ${local.pixelRegistration}.`
-        );
-    }
-
-    if (!product90.raster.pixelIsArea) {
-        throw new Error(
-            "Product 90 must use PixelIsArea registration."
-        );
-    }
-
-    if (
-        !approximatelyEqual(
-            Math.abs(product78.metadata.pixelResolution[0]),
-            PRODUCT78_RESOLUTION_METERS,
-            0.001
-        ) ||
-        !approximatelyEqual(
-            Math.abs(product78.metadata.pixelResolution[1]),
-            PRODUCT78_RESOLUTION_METERS,
-            0.001
-        )
-    ) {
-        throw new Error(
-            "Product 78 pixel resolution does not match the configured 5 m sampling model."
-        );
-    }
-
-    if (
-        !approximatelyEqual(
-            Math.abs(product90.raster.pixelWidth),
-            PRODUCT90_RESOLUTION_METERS,
-            0.001
-        ) ||
-        !approximatelyEqual(
-            Math.abs(product90.raster.pixelHeight),
-            PRODUCT90_RESOLUTION_METERS,
-            0.001
-        )
-    ) {
-        throw new Error(
-            "Product 90 pixel resolution does not match the configured 20 m sampling model."
-        );
-    }
-
-    // Verify that the entire Product 78 raster footprint
-    // is covered by the published Product 90 extent.
-    const [
-        localMinX,
-        localMinY,
-        localMaxX,
-        localMaxY,
-    ] = product78.metadata.bbox;
-
-    const [
-        regionalMinX,
-        regionalMinY,
-        regionalMaxX,
-        regionalMaxY,
-    ] = product90.raster.boundingBox;
-
-    if (
-        localMinX < regionalMinX ||
-        localMinY < regionalMinY ||
-        localMaxX > regionalMaxX ||
-        localMaxY > regionalMaxY
-    ) {
-        throw new Error(
-            "Product 78 raster footprint is not completely contained within Product 90 coverage."
-        );
-    }
-}
-
-/**
- * Tests the actual PixelIsArea footprint of Product 90.
- *
- * The upper/right outer edges follow the same half-open
- * pixel footprint convention used by the GeoTIFF sampler.
- */
-function isInsideProduct90Raster(
-    x: number,
-    y: number,
-    diagnostics: Product90Diagnostics
-): boolean {
-    const [
-        minX,
-        minY,
-        maxX,
-        maxY,
-    ] = diagnostics.raster.boundingBox;
-
-    return (
-        x >= minX &&
-        x < maxX &&
-        y > minY &&
-        y <= maxY
-    );
-}
-
-/**
- * Samples both datasets at the same projected lunar
- * coordinate.
- *
- * Priority:
- * 1. Product 78 inside its local raster footprint.
- * 2. Product 90 outside Product 78 but inside Product 90.
- * 3. null if neither dataset supplies a valid elevation.
- *
- * No elevation averaging or artificial blending occurs.
- */
-export async function sampleMultiResolutionElevation(
-    product78: LolaTerrainData,
-    projected: ProjectedCoordinate,
-    options: { enableProduct90?: boolean } = {}
-): Promise<MultiResolutionElevationSample | null> {
-    assertFinite(projected.xMeters, "Projected X");
-    assertFinite(projected.yMeters, "Projected Y");
-
-    const localPixel = projectedToLolaPixel(
-        projected,
-        product78.metadata
-    );
-
-    if (isLolaPixelInsideRaster(localPixel, product78)) {
-        const elevation = sampleLolaHeightAtPixel(
-            product78,
-            localPixel
-        );
-
-        if (!Number.isFinite(elevation)) {
-            throw new Error(
-                "Product 78 returned an invalid elevation."
-            );
-        }
-
-        return {
-            elevationMeters: elevation,
-            source: "product78",
-            resolutionMeters: PRODUCT78_RESOLUTION_METERS,
-        };
-    }
-
-    if (options.enableProduct90 !== true) {
-        return null;
-    }
-
-    const diagnostics = await getProduct90Metadata();
-    validateDatasetCompatibility(product78, diagnostics);
-
-    if (
-        !isInsideProduct90Raster(
-            projected.xMeters,
-            projected.yMeters,
-            diagnostics
-        )
-    ) {
-        return null;
-    }
-
-    const elevation = await sampleProduct90Elevation(
-        projected.xMeters,
-        projected.yMeters
-    );
-
-    if (elevation === null) {
-        return null;
-    }
-
-    if (!Number.isFinite(elevation)) {
-        throw new Error(
-            "Product 90 returned an invalid elevation."
-        );
-    }
-
-    return {
-        elevationMeters: elevation,
-        source: "product90",
-        resolutionMeters: PRODUCT90_RESOLUTION_METERS,
-    };
-}
-
-/**
- * Converts degrees to radians.
- */
 function toRadians(degrees: number): number {
     return (degrees * Math.PI) / 180;
 }
 
-/**
- * Converts radians to degrees.
- */
 function toDegrees(radians: number): number {
     return (radians * 180) / Math.PI;
 }
 
-/**
- * Normalizes east longitude to [0, 360).
- */
 function normalizeEastLongitude(
     longitudeDeg: number
 ): number {
     return ((longitudeDeg % 360) + 360) % 360;
 }
 
+/* =====================================================
+   LUNAR DESTINATION COORDINATE
+===================================================== */
+
 /**
  * Calculates a destination coordinate on a spherical Moon.
  *
  * Bearing:
- * 0° = North
- * 90° = East
+ * 0°   = North
+ * 90°  = East
  * 180° = South
  * 270° = West
  */
@@ -473,10 +163,14 @@ function destinationCoordinate(
     distanceMeters: number,
     lunarRadiusMeters: number
 ): GeographicCoordinate {
-    const latitude1 = toRadians(start.latitudeDeg);
+    const latitude1 = toRadians(
+        start.latitudeDeg
+    );
 
     const longitude1 = toRadians(
-        normalizeEastLongitude(start.longitudeEastDeg)
+        normalizeEastLongitude(
+            start.longitudeEastDeg
+        )
     );
 
     const bearing = toRadians(bearingDeg);
@@ -485,13 +179,17 @@ function destinationCoordinate(
         distanceMeters / lunarRadiusMeters;
 
     const sinLatitude2 =
-        Math.sin(latitude1) * Math.cos(angularDistance) +
+        Math.sin(latitude1) *
+        Math.cos(angularDistance) +
         Math.cos(latitude1) *
         Math.sin(angularDistance) *
         Math.cos(bearing);
 
     const latitude2 = Math.asin(
-        Math.max(-1, Math.min(1, sinLatitude2))
+        Math.max(
+            -1,
+            Math.min(1, sinLatitude2)
+        )
     );
 
     const longitude2 =
@@ -502,24 +200,27 @@ function destinationCoordinate(
             Math.cos(latitude1),
 
             Math.cos(angularDistance) -
-            Math.sin(latitude1) * Math.sin(latitude2)
+            Math.sin(latitude1) *
+            Math.sin(latitude2)
         );
 
     return {
         latitudeDeg: toDegrees(latitude2),
 
-        longitudeEastDeg: normalizeEastLongitude(
-            toDegrees(longitude2)
-        ),
+        longitudeEastDeg:
+            normalizeEastLongitude(
+                toDegrees(longitude2)
+            ),
     };
 }
 
+/* =====================================================
+   TERRAIN ELEVATION ANGLE
+===================================================== */
+
 /**
- * Calculates apparent terrain elevation relative to the
- * observer's local horizontal plane.
- *
- * This preserves the existing spherical lunar-curvature
- * method used by terrainHorizon.ts.
+ * Calculates terrain elevation relative to the observer's
+ * local horizontal plane, accounting for lunar curvature.
  */
 function calculateTerrainElevationAngle(
     observerElevationMeters: number,
@@ -541,10 +242,12 @@ function calculateTerrainElevationAngle(
     }
 
     const observerRadius =
-        lunarRadiusMeters + observerElevationMeters;
+        lunarRadiusMeters +
+        observerElevationMeters;
 
     const terrainRadius =
-        lunarRadiusMeters + terrainElevationMeters;
+        lunarRadiusMeters +
+        terrainElevationMeters;
 
     if (
         observerRadius <= 0 ||
@@ -559,11 +262,13 @@ function calculateTerrainElevationAngle(
         distanceMeters / lunarRadiusMeters;
 
     const vertical =
-        terrainRadius * Math.cos(angularDistance) -
+        terrainRadius *
+        Math.cos(angularDistance) -
         observerRadius;
 
     const horizontal =
-        terrainRadius * Math.sin(angularDistance);
+        terrainRadius *
+        Math.sin(angularDistance);
 
     const angle = toDegrees(
         Math.atan2(vertical, horizontal)
@@ -578,12 +283,72 @@ function calculateTerrainElevationAngle(
     return angle;
 }
 
+/* =====================================================
+   PRODUCT 78 ELEVATION SAMPLING
+===================================================== */
+
 /**
- * Product78-only ray calculation.
+ * Samples an elevation using the local Product 78 raster.
  *
- * This path never initializes, validates, imports metadata from, or samples
- * Product90. Each ray stops at the first actual Product78 footprint boundary
- * or declared NoData sample. Previously sampled terrain is preserved.
+ * Returns null when the coordinate is outside the raster.
+ * Does not use another dataset as a fallback.
+ */
+export async function sampleMultiResolutionElevation(
+    product78: LolaTerrainData,
+    projected: ProjectedCoordinate
+): Promise<MultiResolutionElevationSample | null> {
+    assertFinite(
+        projected.xMeters,
+        "Projected X"
+    );
+
+    assertFinite(
+        projected.yMeters,
+        "Projected Y"
+    );
+
+    const pixel = projectedToLolaPixel(
+        projected,
+        product78.metadata
+    );
+
+    if (!isLolaPixelInsideRaster(pixel, product78)) {
+        return null;
+    }
+
+    const elevation = sampleLolaHeightAtPixel(
+        product78,
+        pixel
+    );
+
+    if (!Number.isFinite(elevation)) {
+        throw new Error(
+            "NASA LOLA Product 78 returned an invalid elevation."
+        );
+    }
+
+    return {
+        elevationMeters: elevation,
+        source: "product78",
+        resolutionMeters: PRODUCT78_RESOLUTION_METERS,
+    };
+}
+
+/* =====================================================
+   PRODUCT 78 DIRECTION HORIZON
+===================================================== */
+
+/**
+ * Calculates the terrain horizon for one azimuth.
+ *
+ * Sampling uses Product 78 exclusively.
+ *
+ * The ray terminates at:
+ * - The configured maximum search distance.
+ * - The Product 78 raster boundary.
+ * - A declared Product 78 NoData sample.
+ *
+ * Missing terrain is never interpreted as unobstructed sky.
  */
 function calculateProduct78DirectionHorizon(
     product78: LolaTerrainData,
@@ -595,21 +360,35 @@ function calculateProduct78DirectionHorizon(
     lunarRadiusMeters: number
 ): MultiResolutionTerrainHorizonDirection {
     let maximumAngle = -Infinity;
+
     let maximumDistance: number | null = null;
     let maximumTerrainElevation: number | null = null;
-    let lastKnownSampleDistance: number | null = null;
-    let samplesChecked = 0;
-    let terminationReason: MultiResolutionTermination = "search_limit";
 
-    const maximumIterations = Math.ceil(maxDistanceMeters / sampleStepMeters) + 2;
-    let distance = Math.min(sampleStepMeters, maxDistanceMeters);
+    let lastKnownSampleDistance: number | null = null;
+
+    let samplesChecked = 0;
+
+    let terminationReason: MultiResolutionTermination =
+        "search_limit";
+
+    const maximumIterations =
+        Math.ceil(
+            maxDistanceMeters / sampleStepMeters
+        ) + 2;
+
+    let distance = Math.min(
+        sampleStepMeters,
+        maxDistanceMeters
+    );
+
     let iterations = 0;
 
     while (distance <= maxDistanceMeters) {
         iterations++;
+
         if (iterations > maximumIterations) {
             throw new Error(
-                `Maximum Product78 path iterations exceeded at azimuth ${azimuthDeg}°.`
+                `Maximum Product 78 path iterations exceeded at azimuth ${azimuthDeg}°.`
             );
         }
 
@@ -619,11 +398,16 @@ function calculateProduct78DirectionHorizon(
             distance,
             lunarRadiusMeters
         );
+
         const projected = geographicToLolaProjected(
             coordinate,
             product78.metadata
         );
-        const pixel = projectedToLolaPixel(projected, product78.metadata);
+
+        const pixel = projectedToLolaPixel(
+            projected,
+            product78.metadata
+        );
 
         if (!isLolaPixelInsideRaster(pixel, product78)) {
             terminationReason = "product78_boundary";
@@ -631,19 +415,24 @@ function calculateProduct78DirectionHorizon(
         }
 
         let elevation: number;
+
         try {
-            elevation = sampleLolaHeightAtPixel(product78, pixel);
+            elevation = sampleLolaHeightAtPixel(
+                product78,
+                pixel
+            );
         } catch (error) {
             if (error instanceof LolaNoDataError) {
                 terminationReason = "product78_nodata";
                 break;
             }
+
             throw error;
         }
 
         if (!Number.isFinite(elevation)) {
             throw new Error(
-                `Product78 returned a non-finite elevation at azimuth ${azimuthDeg}°, distance ${distance} m.`
+                `Product 78 returned a non-finite elevation at azimuth ${azimuthDeg}°, distance ${distance} m.`
             );
         }
 
@@ -672,11 +461,13 @@ function calculateProduct78DirectionHorizon(
             distance + sampleStepMeters,
             maxDistanceMeters
         );
+
         if (nextDistance <= distance) {
             throw new Error(
-                `Product78 sampling failed to advance at azimuth ${azimuthDeg}°.`
+                `Product 78 sampling failed to advance at azimuth ${azimuthDeg}°.`
             );
         }
+
         distance = nextDistance;
     }
 
@@ -684,345 +475,35 @@ function calculateProduct78DirectionHorizon(
 
     return {
         azimuthDeg,
-        horizonElevationDeg: hasSamples ? maximumAngle : null,
+
+        horizonElevationDeg: hasSamples
+            ? maximumAngle
+            : null,
+
         distanceMeters: maximumDistance,
-        terrainElevationMeters: maximumTerrainElevation,
-        horizonSource: hasSamples ? "product78" : null,
+
+        terrainElevationMeters:
+            maximumTerrainElevation,
+
+        horizonSource: hasSamples
+            ? "product78"
+            : null,
+
         horizonResolutionMeters: hasSamples
             ? PRODUCT78_RESOLUTION_METERS
             : null,
-        lastKnownSampleDistanceMeters: lastKnownSampleDistance,
-        coverageStatus: hasSamples ? "partial" : "no_data",
+
+        lastKnownSampleDistanceMeters:
+            lastKnownSampleDistance,
+
+        coverageStatus: hasSamples
+            ? "partial"
+            : "no_data",
+
         terrainBeyondKnownCoverageUnknown: true,
+
         samplesChecked,
         product78SamplesChecked: samplesChecked,
-        product90SamplesChecked: 0,
-        terminationReason,
-        coverageLimited: true,
-    };
-}
-
-/**
- * Calculates a multi-resolution horizon for one azimuth.
- *
- * Product 78 is sampled locally at its configured interval.
- * Product 90 coordinates are collected and sampled in one
- * batch after the directional path has been generated.
- *
- * This avoids repeatedly awaiting four individual pixel
- * reads for every regional elevation sample.
- *
- * The original lunar curvature calculation is preserved.
- */
-async function calculateDirectionHorizon(
-    product78: LolaTerrainData,
-    product90: Product90Diagnostics,
-    observer: GeographicCoordinate,
-    observerElevationMeters: number,
-    azimuthDeg: number,
-    sampleStepMeters: number,
-    regionalSampleStepMeters: number,
-    maxDistanceMeters: number,
-    lunarRadiusMeters: number,
-    sampleRegionalElevations: typeof sampleProduct90Elevations =
-        sampleProduct90Elevations
-): Promise<MultiResolutionTerrainHorizonDirection> {
-    type DirectionPathSample =
-        | {
-            source: "product78";
-            distanceMeters: number;
-            elevationMeters: number;
-        }
-        | {
-            source: "product90";
-            distanceMeters: number;
-            regionalIndex: number;
-        };
-
-    const pathSamples: DirectionPathSample[] = [];
-
-    const regionalCoordinates: Array<{
-        x: number;
-        y: number;
-    }> = [];
-
-    let terminationReason: MultiResolutionTermination =
-        "search_limit";
-
-    // Generate the path using the appropriate resolution.
-    let distance = Math.min(
-        sampleStepMeters,
-        maxDistanceMeters
-    );
-
-    const minimumStepMeters = Math.min(
-        sampleStepMeters,
-        regionalSampleStepMeters
-    );
-
-    const maximumIterations =
-        Math.ceil(maxDistanceMeters / minimumStepMeters) + 2;
-
-    let iterations = 0;
-
-    while (distance <= maxDistanceMeters) {
-        iterations++;
-
-        if (iterations > maximumIterations) {
-            throw new Error(
-                `Maximum path-generation iterations exceeded at azimuth ${azimuthDeg}°.`
-            );
-        }
-
-        const coordinate = destinationCoordinate(
-            observer,
-            azimuthDeg,
-            distance,
-            lunarRadiusMeters
-        );
-
-        const projected = geographicToLolaProjected(
-            coordinate,
-            product78.metadata
-        );
-
-        const localPixel = projectedToLolaPixel(
-            projected,
-            product78.metadata
-        );
-
-        let stepAfterSample: number;
-
-        if (isLolaPixelInsideRaster(localPixel, product78)) {
-            // Product 78: stop explicitly at declared NoData. Do not skip
-            // the gap and continue with Product90 behind unknown local terrain.
-            let elevation: number;
-            try {
-                elevation = sampleLolaHeightAtPixel(
-                    product78,
-                    localPixel
-                );
-            } catch (error) {
-                if (error instanceof LolaNoDataError) {
-                    terminationReason = "product78_nodata";
-                    break;
-                }
-                throw error;
-            }
-
-            pathSamples.push({
-                source: "product78",
-                distanceMeters: distance,
-                elevationMeters: elevation,
-            });
-
-            stepAfterSample = sampleStepMeters;
-        } else {
-            // Product 78 has ended.
-            // Check whether Product 90 still covers this position.
-            if (
-                !isInsideProduct90Raster(
-                    projected.xMeters,
-                    projected.yMeters,
-                    product90
-                )
-            ) {
-                terminationReason = "product90_boundary";
-                break;
-            }
-
-            // Queue regional coordinates instead of awaiting
-            // individual remote elevation reads.
-            const regionalIndex =
-                regionalCoordinates.length;
-
-            regionalCoordinates.push({
-                x: projected.xMeters,
-                y: projected.yMeters,
-            });
-
-            pathSamples.push({
-                source: "product90",
-                distanceMeters: distance,
-                regionalIndex,
-            });
-
-            stepAfterSample = regionalSampleStepMeters;
-        }
-
-        // Include the exact configured endpoint.
-        if (distance >= maxDistanceMeters) {
-            terminationReason = "search_limit";
-            break;
-        }
-
-        const nextDistance = Math.min(
-            distance + stepAfterSample,
-            maxDistanceMeters
-        );
-
-        if (nextDistance <= distance) {
-            throw new Error(
-                `Terrain sampling failed to advance at azimuth ${azimuthDeg}°.`
-            );
-        }
-
-        distance = nextDistance;
-    }
-
-    // Load and sample all regional coordinates in one batch.
-    const regionalElevations =
-        regionalCoordinates.length > 0
-            ? await sampleRegionalElevations(
-                regionalCoordinates
-            )
-            : [];
-
-    if (
-        regionalElevations.length !==
-        regionalCoordinates.length
-    ) {
-        throw new Error(
-            `Product 90 batch returned ${regionalElevations.length} results for ` +
-            `${regionalCoordinates.length} requested coordinates.`
-        );
-    }
-
-    let maximumAngle = -Infinity;
-    let maximumDistance = 0;
-    let maximumTerrainElevation = 0;
-
-    let horizonSource: TerrainSampleSource = "product78";
-
-    let horizonResolutionMeters =
-        PRODUCT78_RESOLUTION_METERS;
-
-    let samplesChecked = 0;
-    let product78SamplesChecked = 0;
-    let product90SamplesChecked = 0;
-    let lastKnownSampleDistanceMeters: number | null = null;
-
-    // Process the samples in original distance order.
-    for (const pathSample of pathSamples) {
-        let terrainElevation: number;
-        let source: TerrainSampleSource;
-        let resolutionMeters: number;
-
-        if (pathSample.source === "product78") {
-            terrainElevation = pathSample.elevationMeters;
-
-            source = "product78";
-            resolutionMeters = PRODUCT78_RESOLUTION_METERS;
-        } else {
-            const regionalElevation =
-                regionalElevations[pathSample.regionalIndex];
-
-            // Stop at the first missing regional elevation.
-            // Never treat missing terrain as unobstructed.
-            if (regionalElevation === null) {
-                terminationReason = "product90_nodata";
-                break;
-            }
-
-            if (!Number.isFinite(regionalElevation)) {
-                throw new Error(
-                    `Invalid Product 90 elevation at azimuth ${azimuthDeg}°.`
-                );
-            }
-
-            terrainElevation = regionalElevation;
-
-            source = "product90";
-            resolutionMeters = PRODUCT90_RESOLUTION_METERS;
-        }
-
-        if (!Number.isFinite(terrainElevation)) {
-            throw new Error(
-                `Invalid ${source} elevation at azimuth ${azimuthDeg}°, ` +
-                `distance ${pathSample.distanceMeters} m.`
-            );
-        }
-
-        // Preserve the existing lunar-curvature model.
-        const elevationAngle =
-            calculateTerrainElevationAngle(
-                observerElevationMeters,
-                terrainElevation,
-                pathSample.distanceMeters,
-                lunarRadiusMeters
-            );
-
-        samplesChecked++;
-        lastKnownSampleDistanceMeters = pathSample.distanceMeters;
-
-        if (source === "product78") {
-            product78SamplesChecked++;
-        } else {
-            product90SamplesChecked++;
-        }
-
-        if (elevationAngle > maximumAngle) {
-            maximumAngle = elevationAngle;
-
-            maximumDistance =
-                pathSample.distanceMeters;
-
-            maximumTerrainElevation =
-                terrainElevation;
-
-            horizonSource = source;
-            horizonResolutionMeters = resolutionMeters;
-        }
-    }
-
-    // A direction with no valid samples is represented as unknown, not
-    // as a zero-degree/open horizon. Valid preceding samples remain usable.
-    if (samplesChecked === 0) {
-        return {
-            azimuthDeg,
-            horizonElevationDeg: null,
-            distanceMeters: null,
-            terrainElevationMeters: null,
-            horizonSource: null,
-            horizonResolutionMeters: null,
-            lastKnownSampleDistanceMeters: null,
-            coverageStatus: "no_data",
-            terrainBeyondKnownCoverageUnknown: true,
-            samplesChecked: 0,
-            product78SamplesChecked: 0,
-            product90SamplesChecked: 0,
-            terminationReason,
-            coverageLimited: true,
-        };
-    }
-
-    if (
-        !Number.isFinite(maximumAngle) ||
-        !Number.isFinite(maximumDistance) ||
-        !Number.isFinite(maximumTerrainElevation)
-    ) {
-        throw new Error(
-            `Invalid horizon result at azimuth ${azimuthDeg}°.`
-        );
-    }
-
-    return {
-        azimuthDeg,
-
-        horizonElevationDeg: maximumAngle,
-        distanceMeters: maximumDistance,
-        terrainElevationMeters: maximumTerrainElevation,
-
-        horizonSource,
-        horizonResolutionMeters,
-
-        lastKnownSampleDistanceMeters,
-        coverageStatus: samplesChecked > 0 ? "partial" : "no_data",
-        terrainBeyondKnownCoverageUnknown: true,
-
-        samplesChecked,
-        product78SamplesChecked,
-        product90SamplesChecked,
 
         terminationReason,
 
@@ -1030,37 +511,44 @@ async function calculateDirectionHorizon(
     };
 }
 
+/* =====================================================
+   PRODUCT 78 HORIZON CALCULATION
+===================================================== */
+
 /**
- * Calculates a Product78-first terrain horizon.
+ * Calculates terrain horizons in multiple azimuth directions.
  *
- * Product78 is always calculated locally. Product90 is loaded and sampled
- * only when explicitly enabled, and its failure never invalidates the
- * completed Product78 baseline.
+ * NASA LOLA Product 78 is the only elevation source.
  *
- * Complete lunar horizon coverage is never claimed by this result.
+ * No external regional terrain dataset is loaded, imported,
+ * sampled, or used as a fallback.
+ *
+ * The calculation never claims complete lunar horizon coverage.
  */
 export async function calculateMultiResolutionTerrainHorizon(
     product78: LolaTerrainData,
     observer: GeographicCoordinate = SITE04_COORDINATES,
-    options: MultiResolutionTerrainHorizonOptions = {},
-    product90Dependencies: Product90EnhancementDependencies = {}
+    options: MultiResolutionTerrainHorizonOptions = {}
 ): Promise<MultiResolutionTerrainHorizonResult> {
     const directionCount =
-        options.directionCount ?? DEFAULT_DIRECTION_COUNT;
+        options.directionCount ??
+        DEFAULT_DIRECTION_COUNT;
 
     const sampleStepMeters =
-        options.sampleStepMeters ?? DEFAULT_SAMPLE_STEP_METERS;
-
-    const regionalSampleStepMeters =
-        options.regionalSampleStepMeters ??
-        DEFAULT_REGIONAL_SAMPLE_STEP_METERS;
+        options.sampleStepMeters ??
+        DEFAULT_SAMPLE_STEP_METERS;
 
     const maxDistanceMeters =
-        options.maxDistanceMeters ?? DEFAULT_MAX_DISTANCE_METERS;
+        options.maxDistanceMeters ??
+        DEFAULT_MAX_DISTANCE_METERS;
 
     const directionConcurrency =
         options.directionConcurrency ??
         DEFAULT_DIRECTION_CONCURRENCY;
+
+    /* -----------------------------------------------
+       Validate calculation parameters.
+    ------------------------------------------------ */
 
     if (
         !Number.isSafeInteger(directionCount) ||
@@ -1077,21 +565,6 @@ export async function calculateMultiResolutionTerrainHorizon(
     ) {
         throw new Error(
             "sampleStepMeters must be greater than zero."
-        );
-    }
-
-    if (!Number.isFinite(regionalSampleStepMeters) || regionalSampleStepMeters <= 0) {
-        throw new Error(
-            "regionalSampleStepMeters must be a finite positive number."
-        );
-    }
-
-    if (
-        options.enableProduct90 === true &&
-        regionalSampleStepMeters < PRODUCT90_RESOLUTION_METERS
-    ) {
-        throw new Error(
-            "regionalSampleStepMeters must be at least Product 90's 20 m pixel spacing."
         );
     }
 
@@ -1127,40 +600,66 @@ export async function calculateMultiResolutionTerrainHorizon(
         );
     }
 
-    const localMetadata = product78.metadata;
-    const localCoordinateSystem = localMetadata.coordinateSystem;
+    /* -----------------------------------------------
+       Validate Product 78 metadata.
+    ------------------------------------------------ */
+
+    const metadata = product78.metadata;
+    const coordinateSystem = metadata.coordinateSystem;
 
     if (
-        normalizeMetadataValue(localCoordinateSystem.projection) !==
-            "southpolarstereographic"
+        normalizeMetadataValue(
+            coordinateSystem.projection
+        ) !== "southpolarstereographic"
     ) {
         throw new Error(
-            "Product78 must use South Polar Stereographic projection."
+            "Product 78 must use South Polar Stereographic projection."
         );
     }
 
     if (
-        normalizeMetadataValue(localCoordinateSystem.referenceFrame) !== "moonme" ||
-        normalizeMetadataValue(localCoordinateSystem.ephemeris) !== "de421"
+        normalizeMetadataValue(
+            coordinateSystem.referenceFrame
+        ) !== "moonme" ||
+        normalizeMetadataValue(
+            coordinateSystem.ephemeris
+        ) !== "de421"
     ) {
         throw new Error(
-            "Product78 must use the MOON_ME reference frame and DE421 ephemeris."
+            "Product 78 must use the MOON_ME reference frame and DE421 ephemeris."
         );
     }
 
-    const localUnits = normalizeMetadataValue(localCoordinateSystem.linearUnits);
-    if (!["m", "meter", "meters", "metre", "metres"].includes(localUnits)) {
-        throw new Error("Product78 projected coordinates must use metres.");
-    }
-
-    const localPixelRegistration = normalizeMetadataValue(
-        localCoordinateSystem.pixelRegistration
+    const units = normalizeMetadataValue(
+        coordinateSystem.linearUnits
     );
+
     if (
-        localPixelRegistration !== "pixelarea" &&
-        localPixelRegistration !== "pixelisarea"
+        ![
+            "m",
+            "meter",
+            "meters",
+            "metre",
+            "metres",
+        ].includes(units)
     ) {
-        throw new Error("Product78 must use PixelIsArea registration.");
+        throw new Error(
+            "Product 78 projected coordinates must use metres."
+        );
+    }
+
+    const pixelRegistration =
+        normalizeMetadataValue(
+            coordinateSystem.pixelRegistration
+        );
+
+    if (
+        pixelRegistration !== "pixelarea" &&
+        pixelRegistration !== "pixelisarea"
+    ) {
+        throw new Error(
+            "Product 78 must use PixelIsArea registration."
+        );
     }
 
     if (
@@ -1168,41 +667,45 @@ export async function calculateMultiResolutionTerrainHorizon(
         !Number.isSafeInteger(product78.height) ||
         product78.width <= 0 ||
         product78.height <= 0 ||
-        localMetadata.width !== product78.width ||
-        localMetadata.height !== product78.height ||
-        product78.elevations.length !== product78.width * product78.height
+        metadata.width !== product78.width ||
+        metadata.height !== product78.height ||
+        product78.elevations.length !==
+            product78.width * product78.height
     ) {
         throw new Error(
-            "Product78 elevation array dimensions do not match validated metadata."
+            "Product 78 elevation array dimensions do not match validated metadata."
         );
     }
 
     if (
         !approximatelyEqual(
-            Math.abs(localMetadata.pixelResolution[0]),
+            Math.abs(metadata.pixelResolution[0]),
             PRODUCT78_RESOLUTION_METERS,
             0.001
         ) ||
         !approximatelyEqual(
-            Math.abs(localMetadata.pixelResolution[1]),
+            Math.abs(metadata.pixelResolution[1]),
             PRODUCT78_RESOLUTION_METERS,
             0.001
         ) ||
         !approximatelyEqual(
-            localMetadata.resolutionMeters,
+            metadata.resolutionMeters,
             PRODUCT78_RESOLUTION_METERS,
             0.001
         )
     ) {
         throw new Error(
-            "Product78 horizon calculation requires the validated 5 m/pixel raster."
+            "Product 78 horizon calculation requires the validated 5 m/pixel raster."
         );
     }
 
     const lunarRadius =
-        localMetadata.georeferencing.lunarRadiusMeters;
+        metadata.georeferencing.lunarRadiusMeters;
 
-    if (!Number.isFinite(lunarRadius) || lunarRadius <= 0) {
+    if (
+        !Number.isFinite(lunarRadius) ||
+        lunarRadius <= 0
+    ) {
         throw new Error(
             `Invalid lunar radius: ${lunarRadius}.`
         );
@@ -1216,134 +719,105 @@ export async function calculateMultiResolutionTerrainHorizon(
         );
     }
 
-    // Ensure the observer has a valid local Product 78 elevation.
-    const observerSample = sampleLolaHeightAtLocation(
-        product78,
-        observer
-    );
+    /* -----------------------------------------------
+       Validate observer elevation.
+    ------------------------------------------------ */
 
-    // Calculate the complete Product78 baseline first. This does not touch
-    // Product90 metadata or the remote tile reader.
-    let directions: MultiResolutionTerrainHorizonDirection[] = [];
+    const observerSample =
+        sampleLolaHeightAtLocation(
+            product78,
+            observer
+        );
+
+    /* -----------------------------------------------
+       Calculate all requested azimuth directions.
+    ------------------------------------------------ */
+
+    const directions: MultiResolutionTerrainHorizonDirection[] = [];
+
     for (
         let start = 0;
         start < directionCount;
         start += directionConcurrency
     ) {
-        const end = Math.min(start + directionConcurrency, directionCount);
-        const batch = await Promise.all(
-            Array.from({ length: end - start }, (_, index) => {
-                const directionIndex = start + index;
-                const azimuthDeg = (directionIndex * 360) / directionCount;
-                return calculateProduct78DirectionHorizon(
-                    product78,
-                    observer,
-                    observerSample.elevationMeters,
-                    azimuthDeg,
-                    sampleStepMeters,
-                    maxDistanceMeters,
-                    lunarRadius
-                );
-            })
+        const end = Math.min(
+            start + directionConcurrency,
+            directionCount
         );
+
+        const batch = await Promise.all(
+            Array.from(
+                { length: end - start },
+                (_, index) => {
+                    const directionIndex = start + index;
+
+                    const azimuthDeg =
+                        (directionIndex * 360) /
+                        directionCount;
+
+                    return calculateProduct78DirectionHorizon(
+                        product78,
+                        observer,
+                        observerSample.elevationMeters,
+                        azimuthDeg,
+                        sampleStepMeters,
+                        maxDistanceMeters,
+                        lunarRadius
+                    );
+                }
+            )
+        );
+
         directions.push(...batch);
     }
 
-    let product90Status: "disabled" | "available" | "unavailable" =
-        "disabled";
-    let product90Error: string | null = null;
-
-    // Product90 is strictly optional. It is attempted only after the local
-    // Product78 profile has completed successfully. Any metadata, compatibility,
-    // network, tile or sampling failure leaves the Product78 baseline intact.
-    if (options.enableProduct90 === true) {
-        try {
-            const product90 = product90Dependencies.getDiagnostics
-                ? await product90Dependencies.getDiagnostics()
-                : await getProduct90Metadata();
-            validateDatasetCompatibility(product78, product90);
-
-            const enhancedDirections: MultiResolutionTerrainHorizonDirection[] = [];
-            for (
-                let start = 0;
-                start < directionCount;
-                start += directionConcurrency
-            ) {
-                const end = Math.min(start + directionConcurrency, directionCount);
-                const batch = await Promise.all(
-                    Array.from({ length: end - start }, (_, index) => {
-                        const directionIndex = start + index;
-                        const azimuthDeg = (directionIndex * 360) / directionCount;
-                        return calculateDirectionHorizon(
-                            product78,
-                            product90,
-                            observer,
-                            observerSample.elevationMeters,
-                            azimuthDeg,
-                            sampleStepMeters,
-                            regionalSampleStepMeters,
-                            maxDistanceMeters,
-                            lunarRadius,
-                            product90Dependencies.sampleElevations ??
-                                sampleProduct90Elevations
-                        );
-                    })
-                );
-                enhancedDirections.push(...batch);
-            }
-
-            directions = enhancedDirections;
-            product90Status = "available";
-        } catch (error) {
-            product90Status = "unavailable";
-            product90Error = error instanceof Error
-                ? error.message
-                : "Unknown Product90 enhancement failure";
-            console.warn(
-                "[Terrain] Optional Product90 enhancement failed; preserving Product78-only result:",
-                product90Error
-            );
-        }
-    }
+    /* -----------------------------------------------
+       Aggregate Product 78 diagnostics.
+    ------------------------------------------------ */
 
     let totalSamplesChecked = 0;
     let product78SamplesChecked = 0;
-    let product90SamplesChecked = 0;
+
     let rasterBoundaryLimitedDirections = 0;
-    let product90CoverageBoundaryLimitedDirections = 0;
-    let product90NoDataTerminatedDirections = 0;
     let product78BoundaryLimitedDirections = 0;
     let product78NoDataTerminatedDirections = 0;
     let searchLimitReachedDirections = 0;
 
     for (const direction of directions) {
-        totalSamplesChecked += direction.samplesChecked;
-        product78SamplesChecked += direction.product78SamplesChecked;
-        product90SamplesChecked += direction.product90SamplesChecked;
+        totalSamplesChecked +=
+            direction.samplesChecked;
 
-        if (direction.terminationReason === "search_limit") {
+        product78SamplesChecked +=
+            direction.product78SamplesChecked;
+
+        if (
+            direction.terminationReason ===
+            "search_limit"
+        ) {
             searchLimitReachedDirections++;
         } else if (
-            direction.terminationReason === "product78_boundary" ||
-            direction.terminationReason === "product90_boundary"
+            direction.terminationReason ===
+            "product78_boundary"
         ) {
             rasterBoundaryLimitedDirections++;
-            if (direction.terminationReason === "product78_boundary") {
-                product78BoundaryLimitedDirections++;
-            } else {
-                product90CoverageBoundaryLimitedDirections++;
-            }
-        } else if (direction.terminationReason === "product78_nodata") {
+            product78BoundaryLimitedDirections++;
+        } else if (
+            direction.terminationReason ===
+            "product78_nodata"
+        ) {
             product78NoDataTerminatedDirections++;
-        } else if (direction.terminationReason === "product90_nodata") {
-            product90NoDataTerminatedDirections++;
         }
     }
+
+    /* -----------------------------------------------
+       Return Product 78-only scientific result.
+    ------------------------------------------------ */
 
     return {
         observer,
 
-        observerProjected: observerSample.projected,
+        observerProjected:
+            observerSample.projected,
 
         observerElevationMeters:
             observerSample.elevationMeters,
@@ -1351,20 +825,17 @@ export async function calculateMultiResolutionTerrainHorizon(
         lunarRadiusMeters: lunarRadius,
 
         sampleStepMeters,
-        regionalSampleStepMeters,
         maxDistanceMeters,
 
         directions,
 
-        calculatedDirections: directions.length,
-        totalSamplesChecked,
+        calculatedDirections:
+            directions.length,
 
+        totalSamplesChecked,
         product78SamplesChecked,
-        product90SamplesChecked,
 
         rasterBoundaryLimitedDirections,
-        product90CoverageBoundaryLimitedDirections,
-        product90NoDataTerminatedDirections,
         product78BoundaryLimitedDirections,
         product78NoDataTerminatedDirections,
         searchLimitReachedDirections,
@@ -1372,14 +843,6 @@ export async function calculateMultiResolutionTerrainHorizon(
         product78ResolutionMeters:
             PRODUCT78_RESOLUTION_METERS,
 
-        product90ResolutionMeters:
-            PRODUCT90_RESOLUTION_METERS,
-
-        product90Status,
-        product90Error,
-
-        // A 15 km search limit and finite raster coverage
-        // never prove the complete lunar horizon.
         completeHorizonVerified: false,
     };
 }

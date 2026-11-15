@@ -1,4 +1,3 @@
-
 "use client";
 
 import {
@@ -38,6 +37,8 @@ import type {
    TYPES
 ===================================================== */
 
+type ExplorerTarget = "sun" | "earth" | "both";
+
 interface Lunar360ExplorerProps {
   siteId: Product78SiteId;
   latitude: number;
@@ -46,6 +47,7 @@ interface Lunar360ExplorerProps {
   pixelRow: number;
   missionDate: string;
   missionTime: string;
+  target: ExplorerTarget;
 }
 
 type TerrainVisibilityStatus =
@@ -133,6 +135,20 @@ interface HorizonsResponse {
 interface LookState {
   yaw: number;
   pitch: number;
+}
+
+interface CelestialAvailability {
+  available: boolean;
+  verified: boolean;
+  fraction: number;
+  detail: string;
+}
+
+interface ExplorerAvailability {
+  available: boolean;
+  verified: boolean;
+  label: string;
+  detail: string;
 }
 
 /* =====================================================
@@ -239,6 +255,10 @@ function canRenderCelestialDisk(
   );
 }
 
+/* =====================================================
+   CELESTIAL DISK CALCULATIONS
+===================================================== */
+
 function getDiskFractionAboveHorizon(
   clearanceDeg: number,
   angularRadiusDeg: number
@@ -270,6 +290,10 @@ function getDiskFractionAboveHorizon(
   );
 }
 
+/* =====================================================
+   SUNLIGHT ASSESSMENT
+===================================================== */
+
 function getSunlightFraction(
   sun: HorizonsObservation | null
 ): number {
@@ -277,17 +301,21 @@ function getSunlightFraction(
     return 0;
   }
 
-  const visibility = sun.terrainVisibility;
-
-  if (!visibility) {
+  if (isConfirmedBlockedByTerrain(sun)) {
     return 0;
   }
 
-  if (
-    visibility.status === "target_disk_below_sampled_terrain" ||
-    visibility.targetDiskVisible === false
-  ) {
-    return 0;
+  const angularRadiusDeg =
+    getAngularRadiusDeg(sun) ??
+    SUN_FALLBACK_ANGULAR_RADIUS_DEG;
+
+  const visibility = sun.terrainVisibility;
+
+  if (!visibility) {
+    return getDiskFractionAboveHorizon(
+      sun.elevationDeg,
+      angularRadiusDeg
+    );
   }
 
   if (
@@ -298,34 +326,220 @@ function getSunlightFraction(
   }
 
   if (
+    visibility.status ===
+      "target_disk_intersects_sampled_terrain" ||
+    visibility.status === "target_disk_size_unavailable"
+  ) {
+    if (
+      visibility.clearanceDeg !== null &&
+      Number.isFinite(visibility.clearanceDeg)
+    ) {
+      return getDiskFractionAboveHorizon(
+        visibility.clearanceDeg,
+        angularRadiusDeg
+      );
+    }
+
+    return getDiskFractionAboveHorizon(
+      sun.elevationDeg,
+      angularRadiusDeg
+    );
+  }
+
+  if (
     visibility.status === "terrain_horizon_unavailable"
   ) {
-    return 0;
+    return getDiskFractionAboveHorizon(
+      sun.elevationDeg,
+      angularRadiusDeg
+    );
   }
-
-  if (
-    visibility.status !==
-      "target_disk_intersects_sampled_terrain" &&
-    visibility.status !== "target_disk_size_unavailable"
-  ) {
-    return 0;
-  }
-
-  if (
-    visibility.clearanceDeg === null ||
-    !Number.isFinite(visibility.clearanceDeg)
-  ) {
-    return 0;
-  }
-
-  const angularRadiusDeg =
-    getAngularRadiusDeg(sun) ??
-    SUN_FALLBACK_ANGULAR_RADIUS_DEG;
 
   return getDiskFractionAboveHorizon(
-    visibility.clearanceDeg,
+    sun.elevationDeg,
     angularRadiusDeg
   );
+}
+
+function getSunAvailability(
+  sun: HorizonsObservation | null
+): CelestialAvailability {
+  if (!sun) {
+    return {
+      available: false,
+      verified: false,
+      fraction: 0,
+      detail: "Sun observation data is unavailable",
+    };
+  }
+
+  if (isConfirmedBlockedByTerrain(sun)) {
+    return {
+      available: false,
+      verified: true,
+      fraction: 0,
+      detail: "Sun is blocked by the sampled terrain",
+    };
+  }
+
+  const fraction = getSunlightFraction(sun);
+
+  if (fraction <= 0) {
+    return {
+      available: false,
+      verified: false,
+      fraction: 0,
+      detail: "Solar disk is below the assessed horizon",
+    };
+  }
+
+  const visibility = sun.terrainVisibility;
+
+  const verified =
+    visibility?.terrainCoverageComplete === true &&
+    visibility.targetDiskVisible === true;
+
+  return {
+    available: true,
+    verified,
+    fraction,
+    detail: verified
+      ? "Direct sunlight confirmed against the verified terrain horizon"
+      : "Direct sunlight available provisionally; terrain coverage is incomplete",
+  };
+}
+
+/* =====================================================
+   EARTH AVAILABILITY ASSESSMENT
+===================================================== */
+
+function getEarthAvailability(
+  earth: HorizonsObservation | null
+): CelestialAvailability {
+  if (!earth) {
+    return {
+      available: false,
+      verified: false,
+      fraction: 0,
+      detail: "Earth observation data is unavailable",
+    };
+  }
+
+  if (isConfirmedBlockedByTerrain(earth)) {
+    return {
+      available: false,
+      verified: true,
+      fraction: 0,
+      detail: "Earth is blocked by the sampled terrain",
+    };
+  }
+
+  const earthVisible = canRenderCelestialDisk(
+    earth,
+    EARTH_FALLBACK_ANGULAR_RADIUS_DEG
+  );
+
+  if (!earthVisible) {
+    return {
+      available: false,
+      verified: false,
+      fraction: 0,
+      detail: "Earth is below the geometric horizon",
+    };
+  }
+
+  const visibility = earth.terrainVisibility;
+
+  const verified =
+    visibility?.terrainCoverageComplete === true &&
+    visibility.targetDiskVisible === true;
+
+  return {
+    available: true,
+    verified,
+    fraction: 1,
+    detail: verified
+      ? "Earth clears the verified terrain horizon"
+      : "Earth is above the assessed horizon provisionally; terrain coverage is incomplete",
+  };
+}
+
+/* =====================================================
+   COMBINED EXPLORER AVAILABILITY
+===================================================== */
+
+function getExplorerAvailability(
+  target: ExplorerTarget,
+  sun: HorizonsObservation | null,
+  earth: HorizonsObservation | null
+): ExplorerAvailability {
+  const sunAssessment = getSunAvailability(sun);
+  const earthAssessment = getEarthAvailability(earth);
+
+  if (target === "sun") {
+    return {
+      available: sunAssessment.available,
+      verified: sunAssessment.verified,
+      label: sunAssessment.available
+        ? "SUN AVAILABLE"
+        : "SUN UNAVAILABLE",
+      detail: sunAssessment.detail,
+    };
+  }
+
+  if (target === "earth") {
+    return {
+      available: earthAssessment.available,
+      verified: earthAssessment.verified,
+      label: earthAssessment.available
+        ? "EARTH AVAILABLE"
+        : "EARTH UNAVAILABLE",
+      detail: earthAssessment.detail,
+    };
+  }
+
+  if (
+    sunAssessment.available &&
+    earthAssessment.available
+  ) {
+    return {
+      available: true,
+      verified:
+        sunAssessment.verified &&
+        earthAssessment.verified,
+      label: "SUN AND EARTH AVAILABLE",
+      detail:
+        `${sunAssessment.detail}. ${earthAssessment.detail}.`,
+    };
+  }
+
+  if (sunAssessment.available) {
+    return {
+      available: true,
+      verified: sunAssessment.verified,
+      label: "SUN AVAILABLE · EARTH UNAVAILABLE",
+      detail:
+        `${sunAssessment.detail}. ${earthAssessment.detail}.`,
+    };
+  }
+
+  if (earthAssessment.available) {
+    return {
+      available: true,
+      verified: earthAssessment.verified,
+      label: "EARTH AVAILABLE · SUN UNAVAILABLE",
+      detail:
+        `${sunAssessment.detail}. ${earthAssessment.detail}.`,
+    };
+  }
+
+  return {
+    available: false,
+    verified: false,
+    label: "SUN AND EARTH UNAVAILABLE",
+    detail:
+      `${sunAssessment.detail}. ${earthAssessment.detail}.`,
+  };
 }
 
 /* =====================================================
@@ -1218,6 +1432,7 @@ export default function Lunar360Explorer({
   pixelRow,
   missionDate,
   missionTime,
+  target,
 }: Lunar360ExplorerProps) {
   const [terrain, setTerrain] =
     useState<LolaTerrainData | null>(null);
@@ -1366,6 +1581,7 @@ export default function Lunar360Explorer({
             sun: result.targets?.sun,
             earth: result.targets?.earth,
             terrainModel: result.terrainModel,
+            explorerTarget: target,
           }
         );
       } catch (error) {
@@ -1401,6 +1617,7 @@ export default function Lunar360Explorer({
     pixelRow,
     missionDate,
     missionTime,
+    target,
   ]);
 
   const sun = useMemo(
@@ -1411,6 +1628,27 @@ export default function Lunar360Explorer({
   const earth = useMemo(
     () => getFirstObservation(horizons?.targets?.earth),
     [horizons]
+  );
+
+  /*
+   * Keep both API observations for availability assessment.
+   * Only the rendered celestial bodies are filtered by target.
+   */
+
+  const displayedSun =
+    target === "earth" ? null : sun;
+
+  const displayedEarth =
+    target === "sun" ? null : earth;
+
+  const availability = useMemo(
+    () => getExplorerAvailability(target, sun, earth),
+    [target, sun, earth]
+  );
+
+  const sunAssessment = useMemo(
+    () => getSunAvailability(sun),
+    [sun]
   );
 
   const observer = useMemo(() => {
@@ -1523,11 +1761,48 @@ export default function Lunar360Explorer({
           pixelColumn={pixelColumn}
           pixelRow={pixelRow}
           look={look}
-          sun={sun}
-          earth={earth}
+          sun={displayedSun}
+          earth={displayedEarth}
           observer={observer}
         />
       </Canvas>
+
+      {/* -------------------------------------------
+          SUN / EARTH AVAILABILITY
+      -------------------------------------------- */}
+
+      <div
+        className="pointer-events-none absolute right-5 top-5 z-50 max-w-[calc(100%-2.5rem)] border border-white/20 bg-black/75 px-4 py-3 shadow-lg backdrop-blur-md"
+        role="status"
+        aria-live="polite"
+      >
+        <div className="flex items-center gap-2">
+          <span
+            className={`h-2 w-2 shrink-0 rounded-full ${
+              !availability.available
+                ? "bg-rose-400"
+                : availability.verified
+                  ? "bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.75)]"
+                  : "bg-amber-400"
+            }`}
+          />
+
+          <span className="text-[10px] font-semibold tracking-[0.12em] text-white">
+            {availability.label}
+          </span>
+        </div>
+
+        <p className="mt-2 text-[9px] leading-relaxed tracking-[0.04em] text-white/55">
+          {availability.detail}
+        </p>
+
+        {target !== "earth" && sunAssessment.available && (
+          <p className="mt-2 text-[9px] tracking-[0.08em] text-white/40">
+            SOLAR DISK ABOVE ASSESSED HORIZON:{" "}
+            {(sunAssessment.fraction * 100).toFixed(1)}%
+          </p>
+        )}
+      </div>
 
       <a
         href="/map"

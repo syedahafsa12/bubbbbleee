@@ -19,7 +19,7 @@ export default function RootLayout({
       className="min-h-full bg-[#080a10] text-white"
       suppressHydrationWarning
     >
-      <body className="m-0 min-h-screen overflow-x-hidden p-0 font-sans antialiased">
+      <body className="antialiased m-0 min-h-screen overflow-x-hidden overflow-y-auto p-0 font-sans">
         {children}
       </body>
     </html>
