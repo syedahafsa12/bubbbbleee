@@ -8,9 +8,15 @@ The project repository contains an Apache License, Version 2.0 (`LICENSE`). That
 
 ## NASA and space-agency material
 
-NASA states that NASA-originated imagery and media are generally not subject to U.S. copyright, but that third-party content appearing on NASA sites can carry separate rights. NASA must be identified as the source, and its insignia/logotype and other NASA identifiers are subject to separate rules. See [NASA Images and Media Usage Guidelines](https://www.nasa.gov/nasa-brand-center/images-and-media/).
+The following NASA and partner-agency data sources provide the terrain, celestial-position data, and lunar imagery used by Lunex.
 
-The NASA / JPL / LRO WAC basemap is attributed in the application as “Imagery: NASA / JPL / LRO Wide Angle Camera.” The Product 78 and Product 90 datasets are credited to NASA's Planetary Geology, Geophysics and Geochemistry Laboratory / LOLA product pages. The optional LROC controlled South Pole NAC average mosaic is separately credited to the LROC product page and the 2023 Archinal et al. citation listed in [DATA_SOURCES.md](DATA_SOURCES.md). Do not treat the project's Apache license as a license for these datasets.
+- **NASA LOLA Product 78 — south-pole elevation models:** [Product 78](https://pgda.gsfc.nasa.gov/products/78) · [Data catalogue](https://pgda.gsfc.nasa.gov/data/LOLA_5mpp/). Supplies the prepared elevation rasters for Shackleton Rim, de Gerlache Rim, and Malapert Massif. Lunex uses these data for local terrain visualization, elevation sampling, and terrain-horizon analysis. NASA describes the product as 5 m pixel spacing; approximately 90% of the 5 m pixels are interpolated.
+- **NASA LOLA Product 90 — regional elevation model:** [Product 90](https://pgda.gsfc.nasa.gov/products/90). Provides optional wider-area terrain data for regional analysis.
+- **NASA/JPL Horizons:** [Horizons API](https://ssd.jpl.nasa.gov/api/horizons.api) · [API documentation](https://ssd-api.jpl.nasa.gov/doc/horizons.html). Supplies time-specific Sun and Earth ephemerides for a lunar-surface observer.
+- **NASA Moon Trek / LRO Wide Angle Camera:** [NASA Moon Trek](https://trek.nasa.gov/moon/). The LRO WAC South Pole mosaic supplies regional lunar map context. Credit: “Imagery: NASA / JPL / LRO Wide Angle Camera.”
+- **Lunar Reconnaissance Orbiter Camera (LROC):** [LROC South Pole mosaic service](https://wms.im-ldi.com/) · [LROC terms and citation policy](https://www.lroc.im-ldi.com/about/terms). The controlled South Pole NAC average mosaic is accessed through Lunaserv WMS for optional image context. Credit: “NASA/GSFC/Arizona State University (ASU), Lunar Reconnaissance Orbiter Camera (LROC).”
+
+Detailed dataset descriptions, processing notes, limitations, and scientific citations are provided in [DATA_SOURCES.md](../../DATA_SOURCES.md).
 
 ## Software dependencies
 
@@ -79,16 +85,15 @@ The following visual assets are credited to their original source pages. These c
 
 ### 3D models
 
-#### Moon — `Moon_NASA_LRO_8k_Topo_Small.glb`
+### Moon 3D Model
 
-- **Source:** [NASA Goddard Scientific Visualization Studio — Moon 3D Models for Web, AR, and Animation](https://svs.gsfc.nasa.gov/14959/)
-- **Selected variant:** **COLOR MAP AND HEIGHT MAP**. NASA lists the exact file `Moon_NASA_LRO_8k_Topo_Small.glb` (77.7 MB) under this variant.
-- **Direct file:** [Moon_NASA_LRO_8k_Topo_Small.glb](https://svs.gsfc.nasa.gov/vis/a010000/a014900/a014959/Moon_NASA_LRO_8k_Topo_Small.glb)
+- **Asset:** `Moon_NASA_LRO_8k_Topo_Small.glb` — **Color Map and Height Map** variant.
+- **Source:** [NASA Goddard Scientific Visualization Studio — *Moon 3D Models for Web, AR, and Animation*](https://svs.gsfc.nasa.gov/14959/).
+- **Direct download:** [Moon_NASA_LRO_8k_Topo_Small.glb](https://svs.gsfc.nasa.gov/vis/a010000/a014900/a014959/Moon_NASA_LRO_8k_Topo_Small.glb).
 - **Model basis:** Lunar color imagery and topographic data from NASA's Lunar Reconnaissance Orbiter (LRO).
-- **Required source credit:** NASA's Goddard Space Flight Center.
-- **Production credits:** Producer — Dan Gallagher (eMITS); data provider — Ernie Wright (STC); data analysts — Tuomas Kankola and Josh Klint (Leadwerks Game Engine); technical support — Aaron E. Lepsch (ADNET Systems, Inc.).
-
-NASA's page identifies this file as the color-map-and-height-map model, not the color-only or grid model. NASA's media guidance states that NASA-originated media and files used in 3D model rendering are generally not subject to U.S. copyright, subject to third-party-content exceptions. Credit NASA Goddard Space Flight Center and do not imply NASA endorsement.
+- **Required credit:** Courtesy of NASA's Goddard Space Flight Center.
+- **Production credits:** Producer — Dan Gallagher (eMITS); data provider — Ernie Wright (USRA); data analysts — Tuomas Kankola and Josh Klint (Leadwerks Game Engine); technical support — Aaron E. Lepsch (ADNET Systems, Inc.).
+- **License / usage:** NASA-originated content is generally not subject to U.S. copyright under NASA's media usage guidelines. Credit NASA's Goddard Space Flight Center. Use does not imply NASA endorsement.
 
 #### Earth — `earth.glb`
 
@@ -120,17 +125,14 @@ Lunex uses the Sun model as a visual asset. The Sun's apparent position and visi
 
 **Credit:** NASA Goddard Space Flight Center; image by Reto Stöckli; enhancements by Robert Simmon; supporting data and technical teams as listed in NASA's Blue Marble / Visible Earth credit.
 
-#### Moon image — `quickmap-lroc.png`
+#### Hubble Moon image — `quickmap-lroc.png`
 
-- **Source supplied for this asset:** [NASA Science — Moon (Hubble asset)](https://science.nasa.gov/asset/hubble/moon/).
+- **Source:** [NASA Science — Moon (Hubble asset)](https://science.nasa.gov/asset/hubble/moon/).
 - **Original release:** “Hubble Shoots the Moon,” April 16, 1999.
-- **Credit displayed by NASA:** Lick Observatory.
-- **Matching image record:** [ESA/Hubble — Moon (opo9914d)](https://esahubble.org/images/opo9914d/), which also identifies the image as the Moon, gives the same release date, and credits Lick Observatory.
-- **Reuse terms:** ESA/Hubble states that its published images are released under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) and require a clear, visible, unaltered “ESA/Hubble” credit. Retain the image-provider credit shown on the asset page as well.
-
-**Credit:** ESA/Hubble; image credit: Lick Observatory. Source: [NASA Science — Moon](https://science.nasa.gov/asset/hubble/moon/) and [ESA/Hubble image opo9914d](https://esahubble.org/images/opo9914d/).
-
-The local filename `quickmap-lroc.png` is not evidence that this image came from LROC QuickMap. The cited source is the 1999 Hubble/Moon asset credited to Lick Observatory; it should not be described as LROC QuickMap imagery.
+- **Credit listed on the NASA asset page:** Lick Observatory.
+- **Image record:** [ESA/Hubble — Moon (opo9914d)](https://esahubble.org/images/opo9914d/), which identifies the same Moon image and provides its reuse terms.
+- **License:** [Creative Commons Attribution 4.0 International (CC BY 4.0)](https://creativecommons.org/licenses/by/4.0/) as stated by ESA/Hubble for its published image.
+- **Attribution:** ESA/Hubble; image credit: Lick Observatory. Source: [NASA Science — Moon](https://science.nasa.gov/asset/hubble/moon/) and [ESA/Hubble image opo9914d](https://esahubble.org/images/opo9914d/).
 
 #### Permanently shadowed lunar crater image — `nasa-lunar-crater.webp`
 
@@ -140,8 +142,3 @@ The local filename `quickmap-lroc.png` is not evidence that this image came from
 - **Reuse:** NASA's media guidance states that NASA-originated imagery is generally not subject to U.S. copyright for educational or informational use, subject to third-party-content exceptions.
 
 **Credit:** NASA's Goddard Space Flight Center. Source: [NASA article on permanently shadowed lunar craters](https://www.nasa.gov/general/inside-dark-polar-moon-craters-water-not-as-invincible-as-expected-scientists-argue/).
-
-## NASA Space Apps source and license requirements
-
-The 2026 [NASA Space Apps Terms and Conditions](https://www.spaceappschallenge.org/legal/) require teams to cite every source used, including open-source and freely available material, and to identify applicable licenses for third-party materials in the submitted documentation. NASA also requires original project content to be freely available or released under an OSI-compliant open-source license.
-
