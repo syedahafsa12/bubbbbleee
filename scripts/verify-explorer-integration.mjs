@@ -52,6 +52,63 @@ function projectToProduct78Pixel(metadata, coordinate) {
   };
 }
 
+function destinationOnMoon(latitudeDeg, longitudeEastDeg, bearingRadians, distanceMeters, lunarRadiusMeters) {
+  const lat1 = latitudeDeg * Math.PI / 180;
+  const lon1 = longitudeEastDeg * Math.PI / 180;
+  const angularDistance = distanceMeters / lunarRadiusMeters;
+  const sinLat2 =
+    Math.sin(lat1) * Math.cos(angularDistance) +
+    Math.cos(lat1) * Math.sin(angularDistance) * Math.cos(bearingRadians);
+  const lat2 = Math.asin(Math.max(-1, Math.min(1, sinLat2)));
+  const y = Math.sin(bearingRadians) * Math.sin(angularDistance) * Math.cos(lat1);
+  const x = Math.cos(angularDistance) - Math.sin(lat1) * Math.sin(lat2);
+  const lon2 = lon1 + Math.atan2(y, x);
+  return {
+    latitudeDeg: lat2 * 180 / Math.PI,
+    longitudeEastDeg: normalizeEastLongitude(lon2 * 180 / Math.PI),
+  };
+}
+
+function getLocalMapBasis(metadata, coordinate) {
+  const probeMeters = 20;
+  const origin = projectToProduct78Pixel(metadata, coordinate);
+  const east = destinationOnMoon(coordinate.latitudeDeg, coordinate.longitudeEastDeg, Math.PI / 2, probeMeters, metadata.georeferencing.lunarRadiusMeters);
+  const north = destinationOnMoon(coordinate.latitudeDeg, coordinate.longitudeEastDeg, 0, probeMeters, metadata.georeferencing.lunarRadiusMeters);
+  const eastPixel = projectToProduct78Pixel(metadata, east);
+  const northPixel = projectToProduct78Pixel(metadata, north);
+  const spacingX = Math.abs(metadata.pixelResolution[0]);
+  const spacingZ = Math.abs(metadata.pixelResolution[1]);
+
+  let eastX = (eastPixel.column - origin.column) * spacingX / probeMeters;
+  let eastZ = (eastPixel.row - origin.row) * spacingZ / probeMeters;
+  let northX = (northPixel.column - origin.column) * spacingX / probeMeters;
+  let northZ = (northPixel.row - origin.row) * spacingZ / probeMeters;
+
+  const eastLength = Math.hypot(eastX, eastZ);
+  const northLength = Math.hypot(northX, northZ);
+  if (eastLength <= 1e-8 || northLength <= 1e-8) throw new Error("Local map basis is degenerate.");
+  eastX /= eastLength;
+  eastZ /= eastLength;
+  northX /= northLength;
+  northZ /= northLength;
+
+  const determinant = eastX * northZ - northX * eastZ;
+  if (Math.abs(determinant) <= 1e-6) throw new Error("Local map basis is singular.");
+  return { eastX, eastZ, northX, northZ, determinant };
+}
+
+function getTrueHeadingFromSceneYaw(yawRadians, basis) {
+  const sceneX = -Math.sin(yawRadians);
+  const sceneZ = -Math.cos(yawRadians);
+  const eastComponent = (sceneX * basis.northZ - basis.northX * sceneZ) / basis.determinant;
+  const northComponent = (basis.eastX * sceneZ - sceneX * basis.eastZ) / basis.determinant;
+  return normalizeEastLongitude(Math.atan2(eastComponent, northComponent) * 180 / Math.PI);
+}
+
+function angularDifference(left, right) {
+  return Math.abs(((left - right + 540) % 360) - 180);
+}
+
 async function getJson(url, label, timeoutMs = 120_000) {
   const response = await fetch(url, {
     cache: "no-store",
@@ -119,6 +176,33 @@ async function main() {
     return;
   }
   pass(`Registered observer maps to Product78 pixel ${column}, ${row}.`);
+
+  try {
+    const basis = getLocalMapBasis(metadata, observer);
+    const initialHeading = getTrueHeadingFromSceneYaw(0, basis);
+    if (angularDifference(initialHeading, 163.2181) > 0.2) {
+      fail(`Initial camera heading should be approximately 163.2° at the Site04 reference observer; received ${initialHeading.toFixed(3)}°.`);
+    } else {
+      pass(`Initial camera view maps to true bearing ${initialHeading.toFixed(2)}° (south-southeast), not an assumed North.`);
+    }
+
+    const cardinalVectors = [
+      { bearing: 0, x: basis.northX, z: basis.northZ },
+      { bearing: 90, x: basis.eastX, z: basis.eastZ },
+      { bearing: 180, x: -basis.northX, z: -basis.northZ },
+      { bearing: 270, x: -basis.eastX, z: -basis.eastZ },
+    ];
+    for (const cardinal of cardinalVectors) {
+      const yaw = Math.atan2(-cardinal.x, -cardinal.z);
+      const actual = getTrueHeadingFromSceneYaw(yaw, basis);
+      if (angularDifference(actual, cardinal.bearing) > 0.05) {
+        fail(`Compass cardinal round-trip failed for ${cardinal.bearing}° (received ${actual.toFixed(3)}°).`);
+      }
+    }
+    pass("True-north transform round-trips N/E/S/W to 0°/90°/180°/270°.");
+  } catch (error) {
+    fail(`True-north regression check failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
 
   // 1. Exact-observer JPL ephemerides and Product78 terrain horizon.
   const now = new Date();
