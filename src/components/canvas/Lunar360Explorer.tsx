@@ -950,16 +950,37 @@ function LunarSurface({
     [terrain, pixelColumn, pixelRow]
   );
 
-  const material = useMemo(
+  // LOLA geometry is always present. Transparent or missing LROC mosaic
+  // pixels reveal this shaded-relief base instead of deleting the ground.
+  const baseMaterial = useMemo(
     () =>
       new THREE.MeshStandardMaterial({
-        map: imageryTexture ?? null,
-        color: imageryTexture ? "#f1f0ec" : LUNAR_REGOLITH_COLOR,
+        color: LUNAR_REGOLITH_COLOR,
         roughness: 1,
         metalness: 0,
         side: THREE.DoubleSide,
-        alphaTest: imageryTexture ? 0.02 : 0,
       }),
+    []
+  );
+
+  const imageryMaterial = useMemo(
+    () =>
+      imageryTexture
+        ? new THREE.MeshStandardMaterial({
+            map: imageryTexture,
+            color: "#ffffff",
+            roughness: 1,
+            metalness: 0,
+            side: THREE.DoubleSide,
+            transparent: true,
+            opacity: 0.9,
+            alphaTest: 0.02,
+            depthWrite: false,
+            polygonOffset: true,
+            polygonOffsetFactor: -1,
+            polygonOffsetUnits: -1,
+          })
+        : null,
     [imageryTexture]
   );
 
@@ -967,26 +988,50 @@ function LunarSurface({
     return () => {
       localGeometry.dispose();
       regionalGeometry.dispose();
-      material.dispose();
     };
-  }, [localGeometry, regionalGeometry, material]);
+  }, [localGeometry, regionalGeometry]);
+
+  useEffect(() => {
+    return () => {
+      baseMaterial.dispose();
+      imageryMaterial?.dispose();
+    };
+  }, [baseMaterial, imageryMaterial]);
 
   return (
     <>
       <mesh
         geometry={regionalGeometry}
-        material={material}
+        material={baseMaterial}
         castShadow
         receiveShadow
         frustumCulled={false}
       />
       <mesh
         geometry={localGeometry}
-        material={material}
+        material={baseMaterial}
         castShadow
         receiveShadow
         frustumCulled={false}
       />
+      {imageryMaterial && (
+        <>
+          <mesh
+            geometry={regionalGeometry}
+            material={imageryMaterial}
+            receiveShadow
+            renderOrder={1}
+            frustumCulled={false}
+          />
+          <mesh
+            geometry={localGeometry}
+            material={imageryMaterial}
+            receiveShadow
+            renderOrder={1}
+            frustumCulled={false}
+          />
+        </>
+      )}
     </>
   );
 }
@@ -1950,12 +1995,12 @@ export default function Lunar360Explorer({
         {/* Neutral visualization fill keeps LOLA relief legible during
             JPL outages. Only a measured Sun sample drives directional light. */}
         <ambientLight
-          color="#a8a8a4"
-          intensity={0.08}
+          color="#b8b8b2"
+          intensity={0.14}
         />
 
         <hemisphereLight
-          args={["#bcbcb7", "#171717", 0.10]}
+          args={["#c8c8c2", "#202020", 0.18]}
         />
 
         <LunarScene
