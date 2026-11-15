@@ -179,13 +179,6 @@ interface HorizonsResponse {
   error?: string;
 }
 
-interface LookState {
-  yaw: number;
-  pitch: number;
-  targetYaw: number;
-  targetPitch: number;
-}
-
 type LookController = (deltaX: number, deltaY: number) => void;
 
 interface ScienceSample {
@@ -1540,23 +1533,21 @@ function ObserverCamera({
   onHeadingChange: (heading: number) => void;
   onLookControllerReady: (controller: LookController | null) => void;
 }) {
-  // The animation loop owns this ref and updates it outside React rendering.
-  const look = useRef<LookState>({
-    yaw: 0,
-    pitch: 0,
-    targetYaw: 0,
-    targetPitch: 0,
-  });
+  // Keep only the requested look target in React state. The camera itself
+  // is the animation state, so the render loop never mutates a React ref.
+  const [lookTarget, setLookTarget] = useState({ yaw: 0, pitch: 0 });
   const headingAccumulator = useRef(0);
   const lastHeading = useRef(-1);
 
   const handleLookInput = useCallback((deltaX: number, deltaY: number) => {
-    look.current.targetYaw -= deltaX * 0.0035;
-    look.current.targetPitch = clamp(
-      look.current.targetPitch - deltaY * 0.0035,
-      -Math.PI / 2 + 0.02,
-      Math.PI / 2 - 0.02
-    );
+    setLookTarget((current) => ({
+      yaw: current.yaw - deltaX * 0.0035,
+      pitch: clamp(
+        current.pitch - deltaY * 0.0035,
+        -Math.PI / 2 + 0.02,
+        Math.PI / 2 - 0.02
+      ),
+    }));
   }, []);
 
   useEffect(() => {
@@ -1574,14 +1565,12 @@ function ObserverCamera({
     camera.position.set(0, OBSERVER_HEIGHT_METERS, 0);
 
     const damping = 1 - Math.exp(-12 * Math.min(delta, 0.05));
-    look.current.yaw +=
-      (look.current.targetYaw - look.current.yaw) * damping;
-    look.current.pitch +=
-      (look.current.targetPitch - look.current.pitch) * damping;
 
+    // Three.js camera rotation is the imperative animation target. React state
+    // changes only when pointer input arrives, not on every animation frame.
     camera.rotation.order = "YXZ";
-    camera.rotation.y = look.current.yaw;
-    camera.rotation.x = look.current.pitch;
+    camera.rotation.y += (lookTarget.yaw - camera.rotation.y) * damping;
+    camera.rotation.x += (lookTarget.pitch - camera.rotation.x) * damping;
     camera.rotation.z = 0;
 
     if (!localMapBasis) return;
@@ -1589,7 +1578,7 @@ function ObserverCamera({
     headingAccumulator.current += delta;
     if (headingAccumulator.current >= 0.1) {
       headingAccumulator.current = 0;
-      const heading = getTrueHeadingFromSceneYaw(look.current.yaw, localMapBasis);
+      const heading = getTrueHeadingFromSceneYaw(camera.rotation.y, localMapBasis);
       if (Math.abs(heading - lastHeading.current) >= 0.5) {
         lastHeading.current = heading;
         onHeadingChange(heading);
