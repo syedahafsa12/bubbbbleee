@@ -207,7 +207,7 @@ interface ScienceSample {
 ===================================================== */
 
 const TERRAIN_RADIUS_PIXELS = 500;
-const REGIONAL_SAMPLE_STEP_PIXELS = 4;
+const REGIONAL_SAMPLE_STEP_PIXELS = 6;
 const IMAGERY_HALF_SPAN_METERS = 12_000;
 
 const OBSERVER_HEIGHT_METERS = 1.7;
@@ -822,7 +822,7 @@ function createAxisSamples(
 }
 
 /**
- * Draws the full prepared Product78 raster at a 20 m mesh interval,
+ * Draws the full prepared Product78 raster at a 30 m mesh interval,
  * leaving the 5 m near-field patch as the sole geometry inside its bounds.
  * This is a regional context mesh, not a 15 km-complete terrain model.
  */
@@ -2144,6 +2144,9 @@ export default function Lunar360Explorer({
               ? "LOADING LROC NAC…"
               : "LOLA SHADED RELIEF FALLBACK"}
         </p>
+        <p className="mt-1 text-[8px] text-white/30">
+          TERRAIN MESH: 5 m near-field · 30 m regional context
+        </p>
         <p className="mt-1 text-[8px] leading-3 text-white/30">
           LROC imagery supplies average surface morphology, not live illumination or elevation.
         </p>
@@ -2235,7 +2238,7 @@ export default function Lunar360Explorer({
             <span />
             <span className="rounded border border-white/20 px-2 py-1">W</span>
             <span
-              className="rounded border border-amber-300/40 bg-amber-300/10 px-2 py-1 text-amber-100"
+              className="inline-block rounded border border-amber-300/40 bg-amber-300/10 px-2 py-1 text-amber-100"
               style={{ transform: `rotate(${cameraHeading}deg)` }}
               title="Arrow indicates the camera look direction relative to true north"
             >↑</span>
@@ -2299,11 +2302,11 @@ export default function Lunar360Explorer({
         <div className="mt-3 rounded-lg border border-white/10 p-3">
           <div className="flex items-center justify-between gap-3">
             <p className="text-[9px] tracking-[0.15em] text-white/45">MISSION TIMELINE · JPL SAMPLES</p>
-            <p className="mt-2 text-[9px] leading-4 text-white/45">
-              Each step selects one actual 10-minute JPL timestamp. Sun and Earth positions and sampled-terrain visibility update together; the observer and camera remain fixed.
-            </p>
             <span className="text-[9px] tabular-nums text-white/55">{timelineLength ? `${safeObservationIndex + 1}/${timelineLength}` : "No samples"}</span>
           </div>
+          <p className="mt-2 text-[9px] leading-4 text-white/45">
+            Each step selects one actual 10-minute JPL timestamp. Sun and Earth positions and sampled-terrain visibility update together; the observer and camera remain fixed.
+          </p>
           {timelineLength > 0 ? (
             <>
               <input
