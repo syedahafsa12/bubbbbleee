@@ -99,6 +99,11 @@ interface HorizonsObservation {
   azimuthDeg: number;
   elevationDeg: number;
   angularDiameterArcsec: number | null;
+  observerRangeKm?: number | null;
+  jplAngularDiameterArcsec?: number | null;
+  rangeDerivedAngularDiameterArcsec?: number | null;
+  angularDiameterSource?: "jpl-range-verified" | "jpl-only" | "range-derived" | "unavailable";
+  angularDiameterCrossCheckPercent?: number | null;
   terrainVisibility: TerrainVisibility;
 }
 
@@ -2141,6 +2146,9 @@ export default function Lunar360Explorer({
               {new Date(selectedTimeUtc).toISOString().slice(0, 16).replace("T", " ")} UTC
             </time>
             <span>{safeObservationIndex + 1}/{timelineLength}</span>
+          </div>
+          <div className="mb-2 text-[9px] text-white/45">
+            Mission window: {horizons?.mission?.durationHours ?? "—"} hours · not a full lunar day
           </div>
           <input
             aria-label="Mission timeline"
