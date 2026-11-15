@@ -8,7 +8,6 @@ import {
   type Product78SiteId,
 } from "@/components/lib/lunar/siteRegistry";
 
-export const runtime = "nodejs";
 export const maxDuration = 60;
 
 const PREVIEW_DOWNSAMPLE_FACTOR = 8;
