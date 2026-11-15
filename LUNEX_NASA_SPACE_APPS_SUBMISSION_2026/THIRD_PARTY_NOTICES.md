@@ -8,15 +8,12 @@ The project repository contains an Apache License, Version 2.0 (`LICENSE`). That
 
 ## NASA and space-agency material
 
-The following NASA and partner-agency data sources provide the terrain, celestial-position data, and lunar imagery used by Lunex.
+- **LOLA Product 78:** [NASA PGDA Product 78](https://pgda.gsfc.nasa.gov/products/78). Primary source for the prepared local south-pole elevation rasters used in Lunex.
+- **JPL Horizons:** [NASA/JPL Horizons](https://ssd.jpl.nasa.gov/horizons/). Source of time-specific Sun and Earth observer ephemerides.
+- **Moon Trek / LRO WAC:** [NASA Moon Trek](https://trek.nasa.gov/moon/). Source of the regional south-pole basemap imagery. Attribution: NASA / JPL / LRO Wide Angle Camera.
+- **LROC South Pole NAC mosaic:** [LROC controlled South Pole mosaic](https://data.lroc.im-ldi.com/lroc/view_rdr/NAC_POLE_SOUTH_CM_AVG), accessed through [Lunaserv WMS](https://wms.im-ldi.com/). Attribution: NASA/GSFC/Arizona State University (ASU), Lunar Reconnaissance Orbiter Camera (LROC).
 
-- **NASA LOLA Product 78 — south-pole elevation models:** [Product 78](https://pgda.gsfc.nasa.gov/products/78) · [Data catalogue](https://pgda.gsfc.nasa.gov/data/LOLA_5mpp/). Supplies the prepared elevation rasters for Shackleton Rim, de Gerlache Rim, and Malapert Massif. Lunex uses these data for local terrain visualization, elevation sampling, and terrain-horizon analysis. NASA describes the product as 5 m pixel spacing; approximately 90% of the 5 m pixels are interpolated.
-- **NASA LOLA Product 90 — regional elevation model:** [Product 90](https://pgda.gsfc.nasa.gov/products/90). Provides optional wider-area terrain data for regional analysis.
-- **NASA/JPL Horizons:** [Horizons API](https://ssd.jpl.nasa.gov/api/horizons.api) · [API documentation](https://ssd-api.jpl.nasa.gov/doc/horizons.html). Supplies time-specific Sun and Earth ephemerides for a lunar-surface observer.
-- **NASA Moon Trek / LRO Wide Angle Camera:** [NASA Moon Trek](https://trek.nasa.gov/moon/). The LRO WAC South Pole mosaic supplies regional lunar map context. Credit: “Imagery: NASA / JPL / LRO Wide Angle Camera.”
-- **Lunar Reconnaissance Orbiter Camera (LROC):** [LROC South Pole mosaic service](https://wms.im-ldi.com/) · [LROC terms and citation policy](https://www.lroc.im-ldi.com/about/terms). The controlled South Pole NAC average mosaic is accessed through Lunaserv WMS for optional image context. Credit: “NASA/GSFC/Arizona State University (ASU), Lunar Reconnaissance Orbiter Camera (LROC).”
-
-Detailed dataset descriptions, processing notes, limitations, and scientific citations are provided in [DATA_SOURCES.md](DATA_SOURCES.md).
+Detailed dataset descriptions, usage in Lunex, and scientific scope are provided in [DATA_SOURCES.md](DATA_SOURCES.md).
 
 ## Software dependencies
 
@@ -75,7 +72,7 @@ The lockfile contains 558 installed package entries, including transitive and pl
 | NOT DECLARED | 1 |
 | Python-2.0 | 1 |
 
-One package entry, `webgl-constants@1.1.1`, has no license value in the lockfile/npm metadata. Its [published package README](https://www.npmjs.com/package/webgl-constants) states that the author's work is released under the MIT License. Preserve that attribution and verify the package contents before redistribution.
+The lockfile does not declare a license for `webgl-constants@1.1.1`. Its [published package README](https://www.npmjs.com/package/webgl-constants) identifies the package as MIT-licensed.
 
 The lockfile also includes dependencies under LGPL-3.0-or-later, MPL-2.0, CC-BY-4.0, Python-2.0, BlueOak-1.0.0, BSD, ISC, 0BSD, CC0, and combined license expressions. Those terms continue to apply to the relevant packages. The dependency lock records versions and declared license metadata; it is not a substitute for preserving upstream license texts and notices when redistributing package code.
 
