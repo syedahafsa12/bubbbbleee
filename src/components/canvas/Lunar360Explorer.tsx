@@ -26,6 +26,7 @@ import {
   geographicToLolaProjected,
   projectedToLolaPixel,
   loadLolaTerrainForSite,
+  loadLolaTerrainPreviewForSite,
   sampleLolaHeightAtPixel,
   type LolaTerrainData,
 } from "@/components/lib/lunar/terrainData";
@@ -104,6 +105,7 @@ interface HorizonsObservation {
   rangeDerivedAngularDiameterArcsec?: number | null;
   angularDiameterSource?: "jpl-range-verified" | "jpl-only" | "range-derived" | "unavailable";
   angularDiameterCrossCheckPercent?: number | null;
+  solarIrradianceWm2?: number | null;
   terrainVisibility: TerrainVisibility;
 }
 
@@ -206,8 +208,11 @@ interface ScienceSample {
    SCENE CONSTANTS
 ===================================================== */
 
-const TERRAIN_RADIUS_PIXELS = 500;
-const REGIONAL_SAMPLE_STEP_PIXELS = 6;
+const TERRAIN_RADIUS_METERS = 2_500;
+const REGIONAL_SAMPLE_STEP_METERS = 30;
+const NATIVE_PRODUCT78_RESOLUTION_METERS = 5;
+const SOLAR_IRRADIANCE_REFERENCE_WM2 = 1_361;
+const SUN_RENDER_INTENSITY_AT_REFERENCE = 2.6;
 const IMAGERY_HALF_SPAN_METERS = 12_000;
 
 const OBSERVER_HEIGHT_METERS = 1.7;
@@ -344,92 +349,48 @@ function getDiskFractionAboveHorizon(
 function getSunlightFraction(
   sun: HorizonsObservation | null
 ): number {
-  if (!sun) {
-    return 0;
-  }
+  if (!sun) return 0;
 
   const visibility = sun.terrainVisibility;
-
-  // Use a measured local horizon when available. The separate global
-  // completeness flag remains false and is still disclosed in the HUD;
-  // it must not suppress sunlight from a valid sampled local horizon.
-  if (
-    !visibility ||
-    visibility.targetDiskVisible !== true ||
-    (
-      visibility.status !== "target_disk_intersects_sampled_terrain" &&
-      visibility.status !== "target_disk_above_sampled_terrain_unconfirmed"
-    )
-  ) {
-    return 0;
-  }
-
-  if (
-    visibility.clearanceDeg === null ||
-    !Number.isFinite(visibility.clearanceDeg)
-  ) {
-    return 0;
-  }
-
   const angularRadiusDeg = getAngularRadiusDeg(sun);
 
-  if (angularRadiusDeg === null) {
-    return 0;
+  // An unavailable 15 km horizon is not proof of darkness. Fall back to the
+  // geometric horizon and let the loaded local DEM cast its real shadows.
+  if (!visibility || visibility.status === "terrain_horizon_unavailable") {
+    return angularRadiusDeg === null
+      ? (sun.elevationDeg > 0 ? 1 : 0)
+      : getDiskFractionAboveHorizon(sun.elevationDeg, angularRadiusDeg);
   }
 
-  return getDiskFractionAboveHorizon(
-    visibility.clearanceDeg,
-    angularRadiusDeg
-  );
+  switch (visibility.status) {
+    case "target_disk_below_sampled_terrain":
+      return 0;
+
+    case "target_disk_intersects_sampled_terrain":
+      if (
+        angularRadiusDeg === null ||
+        visibility.clearanceDeg === null ||
+        !Number.isFinite(visibility.clearanceDeg)
+      ) return 0;
+      return getDiskFractionAboveHorizon(visibility.clearanceDeg, angularRadiusDeg);
+
+    case "target_disk_above_sampled_terrain_unconfirmed":
+      return 1;
+
+    case "target_disk_size_unavailable":
+      return sun.elevationDeg > 0 ? 1 : 0;
+
+    default:
+      return 0;
+  }
 }
 
 function getCelestialVisualOpacity(
   observation: HorizonsObservation | null
 ): number {
-  if (!observation) {
-    return 0;
-  }
-
-  const visibility = observation.terrainVisibility;
-
-  if (!visibility) {
-    return 0;
-  }
-
-  switch (visibility.status) {
-    case "terrain_horizon_unavailable":
-      return 0.22;
-
-    case "target_disk_above_sampled_terrain_unconfirmed":
-      return 0.48;
-
-    case "target_disk_intersects_sampled_terrain": {
-      const angularRadiusDeg =
-        getAngularRadiusDeg(observation);
-
-      if (
-        angularRadiusDeg === null ||
-        visibility.clearanceDeg === null ||
-        !Number.isFinite(visibility.clearanceDeg)
-      ) {
-        return 0.25;
-      }
-
-      const visibleFraction = getDiskFractionAboveHorizon(
-        visibility.clearanceDeg,
-        angularRadiusDeg
-      );
-
-      return clamp(
-        0.25 + visibleFraction * 0.35,
-        0.25,
-        0.6
-      );
-    }
-
-    default:
-      return 0;
-  }
+  // Don't dim an astronomical body to communicate terrain-data confidence.
+  // Occlusion belongs to the terrain geometry / visibility assessment.
+  return observation ? 1 : 0;
 }
 
 /* =====================================================
@@ -629,10 +590,14 @@ function createLunarGeometry(
     row: pixelRow,
   });
 
-  const startColumn = Math.max(0, Math.floor(pixelColumn - TERRAIN_RADIUS_PIXELS));
-  const endColumn = Math.min(width - 1, Math.ceil(pixelColumn + TERRAIN_RADIUS_PIXELS));
-  const startRow = Math.max(0, Math.floor(pixelRow - TERRAIN_RADIUS_PIXELS));
-  const endRow = Math.min(height - 1, Math.ceil(pixelRow + TERRAIN_RADIUS_PIXELS));
+  const terrainRadiusPixels = Math.max(
+    1,
+    Math.round(TERRAIN_RADIUS_METERS / terrain.resolutionMeters)
+  );
+  const startColumn = Math.max(0, Math.floor(pixelColumn - terrainRadiusPixels));
+  const endColumn = Math.min(width - 1, Math.ceil(pixelColumn + terrainRadiusPixels));
+  const startRow = Math.max(0, Math.floor(pixelRow - terrainRadiusPixels));
+  const endRow = Math.min(height - 1, Math.ceil(pixelRow + terrainRadiusPixels));
 
   const columns = endColumn - startColumn + 1;
   const rows = endRow - startRow + 1;
@@ -699,10 +664,11 @@ function createLunarGeometry(
 function createAxisSamples(
   lastIndex: number,
   innerStart: number,
-  innerEnd: number
+  innerEnd: number,
+  sampleStepPixels: number
 ): number[] {
   const samples = new Set<number>([0, lastIndex, innerStart, innerEnd]);
-  for (let index = 0; index <= lastIndex; index += REGIONAL_SAMPLE_STEP_PIXELS) {
+  for (let index = 0; index <= lastIndex; index += sampleStepPixels) {
     samples.add(index);
   }
   return Array.from(samples).sort((left, right) => left - right);
@@ -730,13 +696,25 @@ function createRegionalLunarGeometry(
     row: pixelRow,
   });
 
-  const innerColumnStart = Math.max(0, Math.floor(pixelColumn - TERRAIN_RADIUS_PIXELS));
-  const innerColumnEnd = Math.min(width - 1, Math.ceil(pixelColumn + TERRAIN_RADIUS_PIXELS));
-  const innerRowStart = Math.max(0, Math.floor(pixelRow - TERRAIN_RADIUS_PIXELS));
-  const innerRowEnd = Math.min(height - 1, Math.ceil(pixelRow + TERRAIN_RADIUS_PIXELS));
+  const terrainRadiusPixels = Math.max(
+    1,
+    Math.round(TERRAIN_RADIUS_METERS / terrain.resolutionMeters)
+  );
+  const regionalSampleStepPixels = Math.max(
+    1,
+    Math.round(REGIONAL_SAMPLE_STEP_METERS / terrain.resolutionMeters)
+  );
+  const innerColumnStart = Math.max(0, Math.floor(pixelColumn - terrainRadiusPixels));
+  const innerColumnEnd = Math.min(width - 1, Math.ceil(pixelColumn + terrainRadiusPixels));
+  const innerRowStart = Math.max(0, Math.floor(pixelRow - terrainRadiusPixels));
+  const innerRowEnd = Math.min(height - 1, Math.ceil(pixelRow + terrainRadiusPixels));
 
-  const columnSamples = createAxisSamples(width - 1, innerColumnStart, innerColumnEnd);
-  const rowSamples = createAxisSamples(height - 1, innerRowStart, innerRowEnd);
+  const columnSamples = createAxisSamples(
+    width - 1, innerColumnStart, innerColumnEnd, regionalSampleStepPixels
+  );
+  const rowSamples = createAxisSamples(
+    height - 1, innerRowStart, innerRowEnd, regionalSampleStepPixels
+  );
   const columns = columnSamples.length;
   const rows = rowSamples.length;
 
@@ -827,14 +805,21 @@ function LunarSurface({
   pixelRow: number;
   imageryTexture: THREE.Texture | null;
 }) {
+  const terrainPixelScale =
+    terrain.resolutionMeters / NATIVE_PRODUCT78_RESOLUTION_METERS;
+  const terrainPixelColumn =
+    (pixelColumn + 0.5) / terrainPixelScale - 0.5;
+  const terrainPixelRow =
+    (pixelRow + 0.5) / terrainPixelScale - 0.5;
+
   const localGeometry = useMemo(
-    () => createLunarGeometry(terrain, pixelColumn, pixelRow),
-    [terrain, pixelColumn, pixelRow]
+    () => createLunarGeometry(terrain, terrainPixelColumn, terrainPixelRow),
+    [terrain, terrainPixelColumn, terrainPixelRow]
   );
 
   const regionalGeometry = useMemo(
-    () => createRegionalLunarGeometry(terrain, pixelColumn, pixelRow),
-    [terrain, pixelColumn, pixelRow]
+    () => createRegionalLunarGeometry(terrain, terrainPixelColumn, terrainPixelRow),
+    [terrain, terrainPixelColumn, terrainPixelRow]
   );
 
   // LOLA geometry is always present. Transparent or missing LROC mosaic
@@ -1174,8 +1159,8 @@ function CelestialModel({
             emissive &&
             material instanceof THREE.MeshStandardMaterial
           ) {
-            material.emissive.set("#ffb24d");
-            material.emissiveIntensity = 4.0;
+            material.emissive.set("#fff3df");
+            material.emissiveIntensity = 5.0;
             material.toneMapped = false;
           }
 
@@ -1183,7 +1168,7 @@ function CelestialModel({
             emissive &&
             material instanceof THREE.MeshBasicMaterial
           ) {
-            material.color.set("#fff2d5");
+            material.color.set("#fff8eb");
             material.toneMapped = false;
           }
 
@@ -1269,12 +1254,20 @@ function CelestialBodies({
 
   const sunlightFraction = getSunlightFraction(sun);
 
+  const solarIrradianceScale =
+    sun?.solarIrradianceWm2 !== null &&
+    sun?.solarIrradianceWm2 !== undefined &&
+    Number.isFinite(sun.solarIrradianceWm2) &&
+    sun.solarIrradianceWm2 > 0
+      ? sun.solarIrradianceWm2 / SOLAR_IRRADIANCE_REFERENCE_WM2
+      : 1;
+
   const directSunlightAvailable =
-    sunVisible && sunlightFraction > 0;
+    Boolean(sun && sunPosition && sunlightFraction > 0);
 
   const sunDirection = useMemo(
     () =>
-      sunVisible && sun
+      sun
         ? getLocalSkyDirection(
           sun,
           terrain,
@@ -1282,7 +1275,7 @@ function CelestialBodies({
           longitude
         )
         : null,
-    [sun, sunVisible, terrain, latitude, longitude]
+    [sun, terrain, latitude, longitude]
   );
 
   const earthDirection = useMemo(
@@ -1362,7 +1355,11 @@ function CelestialBodies({
             sunPosition.y,
             sunPosition.z,
           ]}
-          intensity={2.6 * sunlightFraction}
+          intensity={
+            SUN_RENDER_INTENSITY_AT_REFERENCE *
+            solarIrradianceScale *
+            sunlightFraction
+          }
           color="#fff0d7"
           castShadow
           shadow-mapSize-width={2048}
@@ -1517,7 +1514,7 @@ function LunarScene({
     <>
       <color attach="background" args={["#020203"]} />
 
-      <AnimatedStarField />
+      {terrain && <AnimatedStarField />}
 
       {terrain && (
         <LunarSurface
@@ -1573,11 +1570,24 @@ export default function Lunar360Explorer({
   const [terrainResult, setTerrainResult] = useState<{
     key: string;
     data: LolaTerrainData;
+    quality: "preview" | "full";
   } | null>(null);
+  const [terrainLoadFailure, setTerrainLoadFailure] = useState<{
+    key: string;
+    attempt: number;
+    error: string;
+  } | null>(null);
+  const [terrainRetryCount, setTerrainRetryCount] = useState(0);
 
   const terrain =
     terrainResult?.key === terrainRequestKey
       ? terrainResult.data
+      : null;
+  const hasTerrain = terrain !== null;
+  const currentTerrainLoadFailure =
+    terrainLoadFailure?.key === terrainRequestKey &&
+    terrainLoadFailure.attempt === terrainRetryCount
+      ? terrainLoadFailure.error
       : null;
 
   const horizonsRequestKey = JSON.stringify([
@@ -1677,12 +1687,44 @@ export default function Lunar360Explorer({
     let cancelled = false;
 
     async function initializeTerrain() {
+      let previewLoaded = false;
+
+      // Show a compact real Product78 terrain model as soon as the preview arrives.
+      try {
+        const preview = await loadLolaTerrainPreviewForSite(siteId);
+        if (cancelled) return;
+
+        const pixelScale =
+          preview.resolutionMeters / NATIVE_PRODUCT78_RESOLUTION_METERS;
+        sampleLolaHeightAtPixel(preview, {
+          column: (pixelColumn + 0.5) / pixelScale - 0.5,
+          row: (pixelRow + 0.5) / pixelScale - 0.5,
+        });
+
+        previewLoaded = true;
+        setTerrainResult({
+          key: terrainRequestKey,
+          data: preview,
+          quality: "preview",
+        });
+
+        console.info("[LUNAPATH] Fast LOLA preview ready:", {
+          siteId,
+          width: preview.width,
+          height: preview.height,
+          resolutionMeters: preview.resolutionMeters,
+        });
+      } catch (previewError) {
+        console.warn(
+          "[LUNAPATH] Preview unavailable; falling back to full Product78 terrain.",
+          previewError
+        );
+      }
+
+      // Replace the preview with the native 5 m DEM in the background.
       try {
         const loaded = await loadLolaTerrainForSite(siteId);
-
-        if (cancelled) {
-          return;
-        }
+        if (cancelled) return;
 
         sampleLolaHeightAtPixel(loaded, {
           column: pixelColumn,
@@ -1692,19 +1734,34 @@ export default function Lunar360Explorer({
         setTerrainResult({
           key: terrainRequestKey,
           data: loaded,
+          quality: "full",
         });
 
-        console.info("[LUNAPATH] Loaded selected LOLA site:", {
+        console.info("[LUNAPATH] Full-resolution LOLA terrain ready:", {
           siteId,
           width: loaded.width,
           height: loaded.height,
-          metadata: loaded.metadata,
+          resolutionMeters: loaded.resolutionMeters,
         });
       } catch (error) {
-        console.error(
-          `[LUNAPATH] NASA terrain unavailable for ${siteId}:`,
-          error
-        );
+        if (cancelled) return;
+
+        if (previewLoaded) {
+          console.warn(
+            "[LUNAPATH] Full-resolution refinement failed; keeping the valid preview.",
+            error
+          );
+        } else {
+          console.error(
+            `[LUNAPATH] NASA terrain unavailable for ${siteId}:`,
+            error
+          );
+          setTerrainLoadFailure({
+            key: terrainRequestKey,
+            attempt: terrainRetryCount,
+            error: error instanceof Error ? error.message : "Terrain load failed.",
+          });
+        }
       }
     }
 
@@ -1713,7 +1770,7 @@ export default function Lunar360Explorer({
     return () => {
       cancelled = true;
     };
-  }, [siteId, pixelColumn, pixelRow, terrainRequestKey]);
+  }, [siteId, pixelColumn, pixelRow, terrainRequestKey, terrainRetryCount]);
 
   /* -----------------------------------------------
      Load the controlled LROC South Pole NAC average mosaic.
@@ -1722,7 +1779,7 @@ export default function Lunar360Explorer({
   ------------------------------------------------ */
 
   useEffect(() => {
-    if (!terrain) return;
+    if (!hasTerrain) return;
 
     let active = true;
 
@@ -1772,7 +1829,7 @@ export default function Lunar360Explorer({
       texture.dispose();
     };
   }, [
-    terrain,
+    hasTerrain,
     siteId,
     latitude,
     longitude,
@@ -1791,7 +1848,7 @@ export default function Lunar360Explorer({
 
     const controller = new AbortController();
 
-    if (!terrain) {
+    if (!hasTerrain) {
       return () => {
         cancelled = true;
         controller.abort();
@@ -1903,7 +1960,7 @@ export default function Lunar360Explorer({
       controller.abort();
     };
   }, [
-    terrain,
+    hasTerrain,
     siteId,
     latitude,
     longitude,
@@ -2067,7 +2124,7 @@ export default function Lunar360Explorer({
         shadows
         camera={{
           position: [0, OBSERVER_HEIGHT_METERS, 0],
-          fov: 72,
+          fov: 35,
           near: 0.1,
           far: 30000,
         }}
@@ -2107,6 +2164,33 @@ export default function Lunar360Explorer({
           onLookControllerReady={handleLookControllerReady}
         />
       </Canvas>
+
+      {!terrain && (
+        <div
+          className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center bg-[#050607]"
+          role="status"
+          aria-label={currentTerrainLoadFailure ? "Lunar surface unavailable" : "Loading lunar surface"}
+        >
+          {currentTerrainLoadFailure ? (
+            <button
+              type="button"
+              onClick={() => setTerrainRetryCount((count) => count + 1)}
+              title="Retry lunar surface loading"
+              aria-label="Retry lunar surface loading"
+              className="pointer-events-auto flex h-11 w-11 items-center justify-center rounded-full border border-white/20 bg-white/5 text-xl text-white/80"
+            >
+              ↻
+            </button>
+          ) : (
+            <div className="flex flex-col items-center gap-3">
+              <span className="h-8 w-8 animate-spin rounded-full border border-white/15 border-t-amber-100/80" />
+              <span className="text-[9px] tracking-[0.22em] text-white/45">
+                LOADING LUNAR SURFACE
+              </span>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Verbose diagnostics moved intact to docs/archive/lunapath-explorer-diagnostics.jsx.txt for migration
           into Mission Data. Keep the live API/data logic above unchanged. */}

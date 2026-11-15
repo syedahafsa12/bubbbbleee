@@ -304,7 +304,9 @@ async function main() {
           item.rangeDerivedAngularDiameterArcsec <= 0 ||
           item.angularDiameterSource !== "jpl-range-verified" ||
           !Number.isFinite(item.angularDiameterCrossCheckPercent) ||
-          item.angularDiameterCrossCheckPercent > 2
+          item.angularDiameterCrossCheckPercent > 2 ||
+          !Number.isFinite(item.observerRangeKm) ||
+          item.observerRangeKm <= 0
         ) {
           targetValid = false;
           break;
@@ -313,8 +315,28 @@ async function main() {
 
       if (targetValid) {
         const first = observations[0];
+        const diameterDeg = first.angularDiameterArcsec / 3600;
+
+        if (targetName === "sun") {
+          if (
+            diameterDeg < 0.4 ||
+            diameterDeg > 0.7 ||
+            !Number.isFinite(first.solarIrradianceWm2) ||
+            first.solarIrradianceWm2 < 1200 ||
+            first.solarIrradianceWm2 > 1500
+          ) {
+            fail(`SUN apparent diameter/irradiance outside expected lunar values: ${diameterDeg.toFixed(3)}° / ${first.solarIrradianceWm2} W/m².`);
+          } else {
+            pass(`SUN apparent diameter ${diameterDeg.toFixed(3)}°; observer solar irradiance ${first.solarIrradianceWm2.toFixed(1)} W/m².`);
+          }
+        } else if (diameterDeg < 1.3 || diameterDeg > 2.6) {
+          fail(`EARTH apparent diameter outside expected lunar values: ${diameterDeg.toFixed(3)}°.`);
+        } else {
+          pass(`EARTH apparent diameter ${diameterDeg.toFixed(3)}° at this lunar observer.`);
+        }
+
         pass(
-          `${targetName.toUpperCase()} has ${observations.length} valid 10-minute UTC samples, explicit partial terrain coverage, and JPL angular size cross-checked against observer range (first sample: ${first.angularDiameterArcsec.toFixed(2)} arcsec, ${first.observerRangeKm.toLocaleString()} km).`
+          `${targetName.toUpperCase()} has ${observations.length} valid 10-minute UTC samples and JPL angular size cross-checked against observer range (first sample: ${first.angularDiameterArcsec.toFixed(2)} arcsec, ${first.observerRangeKm.toLocaleString()} km).`
         );
       } else {
         fail(`${targetName.toUpperCase()} samples failed timestamp, angle, interval, coverage or apparent-size validation.`);
@@ -329,8 +351,8 @@ async function main() {
       const ratio = earthDiameter / sunDiameter;
       if (
         !Number.isFinite(ratio) ||
-        ratio < 1 ||
-        ratio > 20
+        ratio < 2 ||
+        ratio > 6
       ) {
         fail(`Earth/Sun apparent-diameter ratio is implausible: ${ratio}.`);
       } else {
@@ -459,7 +481,43 @@ async function main() {
     fail(error instanceof Error ? error.message : String(error));
   }
 
-  // 3. LROC image proxy. This is an optional remote visual layer;
+  // 3. Compact Product78 terrain preview should be available before the full DEM.
+  try {
+    const response = await fetch(
+      `${baseUrl}/api/product78/terrain-preview?siteId=${siteId}`,
+      { cache: "no-store", signal: AbortSignal.timeout(45_000) }
+    );
+    const encodedMetadata = response.headers.get("X-LunaPath-Terrain-Metadata");
+    const factor = Number(
+      response.headers.get("X-LunaPath-Terrain-Downsample-Factor")
+    );
+
+    if (!response.ok || !encodedMetadata) {
+      fail(`Product78 terrain preview failed: HTTP ${response.status}.`);
+    } else {
+      const metadata = JSON.parse(decodeURIComponent(encodedMetadata));
+      const bytes = new Uint8Array(await response.arrayBuffer());
+
+      if (
+        response.headers.get("X-LunaPath-Terrain-Preview") !== "true" ||
+        !Number.isSafeInteger(factor) ||
+        factor < 2 ||
+        factor > 8 ||
+        metadata.width * factor !== 3200 ||
+        metadata.height * factor !== 3200 ||
+        metadata.resolutionMeters !== 5 * factor ||
+        bytes.byteLength !== metadata.width * metadata.height * 4
+      ) {
+        fail("Product78 terrain preview georeferencing, resolution or binary length is inconsistent.");
+      } else {
+        pass(`Fast Product78 terrain preview: ${metadata.width}×${metadata.height} at ${metadata.resolutionMeters} m/pixel (${bytes.byteLength.toLocaleString()} bytes).`);
+      }
+    }
+  } catch (error) {
+    fail(`Product78 terrain preview request failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
+
+  // 4. LROC image proxy. This is an optional remote visual layer;
   // a failure must not invalidate Product78 geometry or JPL data.
   const imageryQuery = new URLSearchParams({
     siteId,

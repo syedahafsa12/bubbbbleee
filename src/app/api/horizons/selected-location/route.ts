@@ -44,6 +44,8 @@ const TERRAIN_HORIZON_RESPONSE_BUDGET_MS = 18_000;
 
 const JPL_SAMPLE_INTERVAL_MINUTES = 10;
 const ALLOWED_DURATION_HOURS = [6, 12, 24, 48, 72] as const;
+const ASTRONOMICAL_UNIT_KM = 149_597_870.7;
+const SOLAR_IRRADIANCE_AT_1_AU_WM2 = 1361;
 
 // Equatorial diameters from the NASA/JPL planetary fact sheets / IAU values.
 // Horizons quantity 13 supplies the observed angular diameter; quantity 20
@@ -75,6 +77,7 @@ type HorizonsObservation = ParsedHorizonsObservation & {
   rangeDerivedAngularDiameterArcsec: number | null;
   angularDiameterSource: AngularDiameterSource;
   angularDiameterCrossCheckPercent: number | null;
+  solarIrradianceWm2: number | null;
 };
 
 type AssessedHorizonsObservation = HorizonsObservation & {
@@ -574,6 +577,12 @@ function verifyCelestialAngularSize(
           ? "jpl-only"
           : "unavailable";
 
+  const solarIrradianceWm2 =
+    targetId === "10" && observation.observerRangeKm !== null
+      ? SOLAR_IRRADIANCE_AT_1_AU_WM2 *
+        Math.pow(ASTRONOMICAL_UNIT_KM / observation.observerRangeKm, 2)
+      : null;
+
   return {
     ...observation,
     angularDiameterArcsec,
@@ -581,6 +590,7 @@ function verifyCelestialAngularSize(
     rangeDerivedAngularDiameterArcsec,
     angularDiameterSource,
     angularDiameterCrossCheckPercent,
+    solarIrradianceWm2,
   };
 }
 

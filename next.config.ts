@@ -37,6 +37,14 @@ const nextConfig: NextConfig = {
       "./public/data/site23_malapert_massif/metadata.json",
       "./public/data/site23_malapert_massif/elevation.bin",
     ],
+    "/api/product78/terrain-preview": [
+      "./public/data/site04_shackleton_rim/metadata.json",
+      "./public/data/site04_shackleton_rim/elevation.bin",
+      "./public/data/site11_de_gerlache_rim/metadata.json",
+      "./public/data/site11_de_gerlache_rim/elevation.bin",
+      "./public/data/site23_malapert_massif/metadata.json",
+      "./public/data/site23_malapert_massif/elevation.bin",
+    ],
     "/api/lunar-imagery/nac-south-pole": [
       "./public/data/site04_shackleton_rim/metadata.json",
       "./public/data/site11_de_gerlache_rim/metadata.json",
