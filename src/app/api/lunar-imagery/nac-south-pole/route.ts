@@ -9,7 +9,7 @@ import {
 } from "@/components/lib/lunar/terrainData";
 import { getProduct78Site } from "@/components/lib/lunar/siteRegistry";
 
-export const runtime = "nodejs";
+// Route Handlers use the Node.js runtime by default; avoid a runtime export with cacheComponents.
 export const maxDuration = 30;
 
 const LUNASERV_WMS_URL = "https://wms.im-ldi.com/";
