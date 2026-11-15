@@ -1262,9 +1262,6 @@ function CelestialBodies({
       ? sun.solarIrradianceWm2 / SOLAR_IRRADIANCE_REFERENCE_WM2
       : 1;
 
-  const directSunlightAvailable =
-    Boolean(sun && sunPosition && sunlightFraction > 0);
-
   const sunDirection = useMemo(
     () =>
       sun
@@ -1300,6 +1297,9 @@ function CelestialBodies({
         : null,
     [sunDirection]
   );
+
+  const directSunlightAvailable =
+    Boolean(sun && sunPosition && sunlightFraction > 0);
 
   const earthPosition = useMemo(
     () =>

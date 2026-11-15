@@ -219,11 +219,10 @@ export async function GET(request: NextRequest) {
     getProduct78Site(siteId);
     const preview = await getPreview(siteId);
 
-    return new NextResponse(Buffer.from(
-      preview.bytes.buffer,
-      preview.bytes.byteOffset,
-      preview.bytes.byteLength
-    ), {
+    const responseBody = new ArrayBuffer(preview.bytes.byteLength);
+    new Uint8Array(responseBody).set(preview.bytes);
+
+    return new NextResponse(responseBody, {
       headers: {
         "Content-Type": "application/octet-stream",
         "Cache-Control": "public, max-age=31536000, immutable",
