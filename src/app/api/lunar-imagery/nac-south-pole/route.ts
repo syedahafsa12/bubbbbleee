@@ -69,7 +69,15 @@ function isMetadata(value: unknown): value is LolaTerrainMetadata {
     typeof coordinateSystem === "object" &&
     coordinateSystem !== null &&
     typeof coordinateSystem.projection === "string" &&
-    coordinateSystem.projection.toLowerCase().includes("south polar stereographic")
+    coordinateSystem.projection.toLowerCase().includes("south polar stereographic") &&
+    typeof coordinateSystem.referenceFrame === "string" &&
+    coordinateSystem.referenceFrame.toUpperCase() === "MOON_ME" &&
+    typeof coordinateSystem.ephemeris === "string" &&
+    coordinateSystem.ephemeris.toUpperCase() === "DE421" &&
+    typeof coordinateSystem.linearUnits === "string" &&
+    ["m", "meter", "meters", "metre", "metres"].includes(coordinateSystem.linearUnits.toLowerCase()) &&
+    typeof coordinateSystem.pixelRegistration === "string" &&
+    coordinateSystem.pixelRegistration.toLowerCase().replace(/[^a-z]/g, "") === "pixelarea"
   );
 }
 
