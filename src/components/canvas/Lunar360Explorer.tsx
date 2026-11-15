@@ -23,7 +23,6 @@ import * as THREE from "three";
 
 import { EarthVisual } from "@/components/canvas/celestial/EarthVisual";
 import { SunVisual } from "@/components/canvas/celestial/SunVisual";
-import { EARTH_DISPLAY_SCALE, SUN_DISPLAY_SCALE } from "@/components/canvas/celestial/CelestialModel";
 
 import {
   geographicToLolaProjected,
@@ -1260,7 +1259,7 @@ function CelestialBodies({
     sunAngularRadiusDeg !== null
       ? 2 *
       CELESTIAL_DISTANCE *
-      Math.tan(
+      Math.sin(
         THREE.MathUtils.degToRad(sunAngularRadiusDeg)
       )
       : null;
@@ -1269,7 +1268,7 @@ function CelestialBodies({
     earthAngularRadiusDeg !== null
       ? 2 *
       CELESTIAL_DISTANCE *
-      Math.tan(
+      Math.sin(
         THREE.MathUtils.degToRad(earthAngularRadiusDeg)
       )
       : null;
@@ -2021,7 +2020,7 @@ export default function Lunar360Explorer({
           LROC source product · NASA / ASU
         </a>
         <p className="mt-1 text-[8px] text-white/30">
-          Display only: Sun {SUN_DISPLAY_SCALE.toFixed(1)}× · Earth {EARTH_DISPLAY_SCALE.toFixed(1)}×. JPL values unchanged.
+          Celestial disk sizes: JPL Horizons angular diameters · no display enlargement.
         </p>
         <p className="mt-1 text-[8px] text-white/30">
           Sun surface: NASA SDO 4500 Å visible-light reference. 304 Å prominences are a separate historical layer.
