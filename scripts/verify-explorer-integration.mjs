@@ -294,17 +294,49 @@ async function main() {
           targetValid = false;
           break;
         }
+
+        if (
+          !Number.isFinite(item.observerRangeKm) ||
+          item.observerRangeKm <= 0 ||
+          !Number.isFinite(item.angularDiameterArcsec) ||
+          item.angularDiameterArcsec <= 0 ||
+          !Number.isFinite(item.rangeDerivedAngularDiameterArcsec) ||
+          item.rangeDerivedAngularDiameterArcsec <= 0 ||
+          item.angularDiameterSource !== "jpl-range-verified" ||
+          !Number.isFinite(item.angularDiameterCrossCheckPercent) ||
+          item.angularDiameterCrossCheckPercent > 2
+        ) {
+          targetValid = false;
+          break;
+        }
       }
 
       if (targetValid) {
-        pass(`${targetName.toUpperCase()} has ${observations.length} valid 10-minute UTC samples and explicitly partial terrain coverage.`);
+        const first = observations[0];
+        pass(
+          `${targetName.toUpperCase()} has ${observations.length} valid 10-minute UTC samples, explicit partial terrain coverage, and JPL angular size cross-checked against observer range (first sample: ${first.angularDiameterArcsec.toFixed(2)} arcsec, ${first.observerRangeKm.toLocaleString()} km).`
+        );
       } else {
-        fail(`${targetName.toUpperCase()} samples failed timestamp, angle, interval or coverage validation.`);
+        fail(`${targetName.toUpperCase()} samples failed timestamp, angle, interval, coverage or apparent-size validation.`);
       }
     }
 
     const sunTimes = horizons.targets?.sun?.observations ?? [];
     const earthTimes = horizons.targets?.earth?.observations ?? [];
+    if (sunTimes.length > 0 && earthTimes.length > 0) {
+      const sunDiameter = sunTimes[0].angularDiameterArcsec;
+      const earthDiameter = earthTimes[0].angularDiameterArcsec;
+      const ratio = earthDiameter / sunDiameter;
+      if (
+        !Number.isFinite(ratio) ||
+        ratio < 1 ||
+        ratio > 20
+      ) {
+        fail(`Earth/Sun apparent-diameter ratio is implausible: ${ratio}.`);
+      } else {
+        pass(`Earth appears ${ratio.toFixed(2)}× the Sun's angular diameter at the first mission sample; both sizes are range-verified.`);
+      }
+    }
     if (
       sunTimes.length === expectedSamples &&
       earthTimes.length === expectedSamples &&
