@@ -1718,13 +1718,6 @@ export default function Lunar360Explorer({
       ? horizonsResult.data
       : null;
 
-  const look = useRef<LookState>({
-    yaw: 0,
-    pitch: 0,
-    targetYaw: 0,
-    targetPitch: 0,
-  });
-
   const [cameraHeading, setCameraHeading] = useState(0);
   const [selectedObservation, setSelectedObservation] = useState<{
     key: string;
