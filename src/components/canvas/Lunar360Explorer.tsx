@@ -1622,9 +1622,6 @@ export default function Lunar360Explorer({
     horizonsRequestKey,
     jplRetryCount,
   ]);
-  const horizonsRequestIsValid =
-    /^\d{4}-\d{2}-\d{2}$/.test(missionDate) &&
-    /^\d{2}:\d{2}(?::\d{2})?$/.test(missionTime);
   const currentHorizonsRequestResult =
     horizonsRequestResult?.key === horizonsAttemptKey
       ? horizonsRequestResult
