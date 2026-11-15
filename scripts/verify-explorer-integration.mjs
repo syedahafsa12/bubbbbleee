@@ -323,7 +323,31 @@ async function main() {
       if (uniqueAzimuths.size !== 360) {
         fail("Horizon profile contains duplicate or missing azimuth bearings.");
       } else {
-        pass("Horizon profile contains 360 unique one-degree bearings.");
+        const knownDirections = profile.filter(
+          (item) =>
+            item.coverageStatus === "partial" &&
+            Number.isFinite(item.horizonElevationDeg) &&
+            Number.isFinite(item.lastKnownSampleDistanceMeters) &&
+            item.lastKnownSampleDistanceMeters > 0 &&
+            item.lastKnownSampleDistanceMeters <= 15_000
+        );
+        const directionsConsistent = profile.every((item) => {
+          if (item.terrainBeyondKnownCoverageUnknown !== true) return false;
+          if (item.coverageStatus === "no_data") return item.horizonElevationDeg === null;
+          return item.coverageStatus === "partial" &&
+            Number.isFinite(item.horizonElevationDeg) &&
+            Number.isFinite(item.lastKnownSampleDistanceMeters) &&
+            item.lastKnownSampleDistanceMeters > 0 &&
+            item.lastKnownSampleDistanceMeters <= 15_000;
+        });
+
+        if (!directionsConsistent) {
+          fail("Horizon directions contain inconsistent known/unknown coverage metadata.");
+        } else if (knownDirections.length === 0) {
+          fail("The 360-degree profile contains no measured terrain directions.");
+        } else {
+          pass(`360 unique one-degree bearings are consistent; ${knownDirections.length} have measured terrain and all retain explicit unknown-beyond-coverage flags.`);
+        }
       }
     }
 
