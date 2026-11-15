@@ -1605,7 +1605,7 @@ export default function Lunar360Explorer({
     status: "complete" | "error";
     error?: string;
   } | null>(null);
-  const [scienceResult, setScienceResult] = useState<{
+  const [, setScienceResult] = useState<{
     key: string;
     data: ScienceSample;
   } | null>(null);
