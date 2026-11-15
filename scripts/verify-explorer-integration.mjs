@@ -371,6 +371,11 @@ async function main() {
     );
 
     const values = science.values;
+    if (science.pixel?.column !== column || science.pixel?.row !== row) {
+      fail("Science API did not return the exact nearest pixel requested by the verifier.");
+    } else {
+      pass("Science values are explicitly associated with the requested nearest raster pixel.");
+    }
     const requiredValues = [
       "elevationMeters",
       "elevationUncertaintyMeters",
