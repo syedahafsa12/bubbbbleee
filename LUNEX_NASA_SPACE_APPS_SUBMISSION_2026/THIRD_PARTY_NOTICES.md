@@ -16,7 +16,7 @@ The following NASA and partner-agency data sources provide the terrain, celestia
 - **NASA Moon Trek / LRO Wide Angle Camera:** [NASA Moon Trek](https://trek.nasa.gov/moon/). The LRO WAC South Pole mosaic supplies regional lunar map context. Credit: “Imagery: NASA / JPL / LRO Wide Angle Camera.”
 - **Lunar Reconnaissance Orbiter Camera (LROC):** [LROC South Pole mosaic service](https://wms.im-ldi.com/) · [LROC terms and citation policy](https://www.lroc.im-ldi.com/about/terms). The controlled South Pole NAC average mosaic is accessed through Lunaserv WMS for optional image context. Credit: “NASA/GSFC/Arizona State University (ASU), Lunar Reconnaissance Orbiter Camera (LROC).”
 
-Detailed dataset descriptions, processing notes, limitations, and scientific citations are provided in [DATA_SOURCES.md](../../DATA_SOURCES.md).
+Detailed dataset descriptions, processing notes, limitations, and scientific citations are provided in [DATA_SOURCES.md](DATA_SOURCES.md).
 
 ## Software dependencies
 
@@ -79,11 +79,11 @@ One package entry, `webgl-constants@1.1.1`, has no license value in the lockfile
 
 The lockfile also includes dependencies under LGPL-3.0-or-later, MPL-2.0, CC-BY-4.0, Python-2.0, BlueOak-1.0.0, BSD, ISC, 0BSD, CC0, and combined license expressions. Those terms continue to apply to the relevant packages. The dependency lock records versions and declared license metadata; it is not a substitute for preserving upstream license texts and notices when redistributing package code.
 
-## 3D models and image assets
+## Visual assets
 
 The following visual assets are credited to their original source pages. These credits and reuse terms are separate from the Apache License 2.0 that applies to Lunex's original project code.
 
-### 3D models
+## 3D models
 
 ### Moon 3D Model
 
@@ -95,7 +95,7 @@ The following visual assets are credited to their original source pages. These c
 - **Production credits:** Producer — Dan Gallagher (eMITS); data provider — Ernie Wright (USRA); data analysts — Tuomas Kankola and Josh Klint (Leadwerks Game Engine); technical support — Aaron E. Lepsch (ADNET Systems, Inc.).
 - **License / usage:** NASA-originated content is generally not subject to U.S. copyright under NASA's media usage guidelines. Credit NASA's Goddard Space Flight Center. Use does not imply NASA endorsement.
 
-#### Earth — `earth.glb`
+### Earth Model — `earth.glb`
 
 - **Source:** [Earth — Akshat (@shooter24994), Sketchfab](https://sketchfab.com/3d-models/earth-41fc80d85dfd480281f21b74b2de2faa)
 - **Creator:** Akshat, Sketchfab username `@shooter24994`.
@@ -105,7 +105,7 @@ The following visual assets are credited to their original source pages. These c
 
 The CC BY 4.0 license requires attribution, a link to the license, and an indication of changes when changes are made. The creator and license must remain credited wherever the model is redistributed or displayed with an asset-credit section.
 
-#### Sun — `sun.glb`
+### Sun Model — `sun.glb`
 
 - **Source:** [NASA Science / Heliophysics Education Activation Team (HEAT) — Sun 3D Model Interactive](https://science.nasa.gov/learn/heat/resource/sun-3d-model/)
 - **Published resource:** NASA lists a downloadable “3D Model of the Sun (glTF File)” on this page (4.14 MB; September 9, 2023).
@@ -114,9 +114,9 @@ The CC BY 4.0 license requires attribution, a link to the license, and an indica
 
 Lunex uses the Sun model as a visual asset. The Sun's apparent position and visibility calculations are based on the separately documented JPL Horizons data, not on this model.
 
-### Image assets
+## Image assets
 
-#### Earth surface texture — `earth_daymap.jpg`
+### Earth surface texture — `earth_daymap.jpg`
 
 - **File source used:** [Three.js r122 example texture mirrored by MIT Design Heritage](https://designheritage.mit.edu/_dh_debug/THREEjs_122/examples/textures/planets/earth_atmos_2048.jpg) (the hosted source filename is `earth_atmos_2048.jpg`).
 - **Upstream example:** [Three.js repository](https://github.com/mrdoob/three.js/tree/r122/examples).
@@ -125,7 +125,7 @@ Lunex uses the Sun model as a visual asset. The Sun's apparent position and visi
 
 **Credit:** NASA Goddard Space Flight Center; image by Reto Stöckli; enhancements by Robert Simmon; supporting data and technical teams as listed in NASA's Blue Marble / Visible Earth credit.
 
-#### Hubble Moon image — `quickmap-lroc.png`
+### Hubble Moon image — `quickmap-lroc.png`
 
 - **Source:** [NASA Science — Moon (Hubble asset)](https://science.nasa.gov/asset/hubble/moon/).
 - **Original release:** “Hubble Shoots the Moon,” April 16, 1999.
@@ -134,7 +134,7 @@ Lunex uses the Sun model as a visual asset. The Sun's apparent position and visi
 - **License:** [Creative Commons Attribution 4.0 International (CC BY 4.0)](https://creativecommons.org/licenses/by/4.0/) as stated by ESA/Hubble for its published image.
 - **Attribution:** ESA/Hubble; image credit: Lick Observatory. Source: [NASA Science — Moon](https://science.nasa.gov/asset/hubble/moon/) and [ESA/Hubble image opo9914d](https://esahubble.org/images/opo9914d/).
 
-#### Permanently shadowed lunar crater image — `nasa-lunar-crater.webp`
+### Permanently shadowed lunar crater image — `nasa-lunar-crater.webp`
 
 - **Source:** [NASA — Inside Dark, Polar Moon Craters, Water Not as Invincible as Expected, Scientists Argue](https://www.nasa.gov/general/inside-dark-polar-moon-craters-water-not-as-invincible-as-expected-scientists-argue/).
 - **Image caption on source page:** “A permanently shadowed lunar crater.”
