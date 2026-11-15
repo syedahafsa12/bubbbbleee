@@ -1,32 +1,34 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
+import { useFrame } from "@react-three/fiber";
 import { useGLTF } from "@react-three/drei";
 import * as THREE from "three";
-
-export const EARTH_DISPLAY_SCALE = 3.5;
-export const SUN_DISPLAY_SCALE = 8.0;
 
 export interface CelestialModelProps {
   url: string;
   position: THREE.Vector3;
   diameter: number;
-  displayScale?: number;
   opacity?: number;
+  materialOverride?: THREE.Material | null;
+  faceCamera?: boolean;
 }
 
 /**
- * Loads the existing project glTF while preserving its authored geometry,
- * materials and textures. JPL Horizons supplies position and apparent size.
+ * Normalizes the authored model to the JPL-derived apparent angular diameter.
+ * No presentation multiplier is applied. The common scene radius is a
+ * projection convenience; JPL supplies the true sky direction and angular size.
  */
 export default function CelestialModel({
   url,
   position,
   diameter,
-  displayScale = 1,
   opacity = 1,
+  materialOverride = null,
+  faceCamera = false,
 }: CelestialModelProps) {
   const { scene } = useGLTF(url);
+  const groupRef = useRef<THREE.Group>(null);
 
   const model = useMemo(() => {
     const clone = scene.clone(true);
@@ -42,7 +44,7 @@ export default function CelestialModel({
     group.add(clone);
 
     if (largestDimension > 0 && Number.isFinite(diameter) && diameter > 0) {
-      group.scale.setScalar((diameter * displayScale) / largestDimension);
+      group.scale.setScalar(diameter / largestDimension);
     }
 
     group.traverse((object) => {
@@ -50,25 +52,31 @@ export default function CelestialModel({
 
       if (!(object instanceof THREE.Mesh)) return;
 
-      const materials = Array.isArray(object.material)
-        ? object.material
-        : [object.material];
+      if (materialOverride) {
+        object.material = Array.isArray(object.material)
+          ? object.material.map(() => materialOverride.clone())
+          : materialOverride.clone();
+      } else {
+        const materials = Array.isArray(object.material)
+          ? object.material
+          : [object.material];
 
-      const clonedMaterials = materials.map((sourceMaterial) => {
-        const material = sourceMaterial.clone();
+        const clonedMaterials = materials.map((sourceMaterial) => {
+          const material = sourceMaterial.clone();
 
-        if (opacity < 1) {
-          material.transparent = true;
-          material.opacity *= opacity;
-          material.depthWrite = false;
-        }
+          if (opacity < 1) {
+            material.transparent = true;
+            material.opacity *= opacity;
+            material.depthWrite = false;
+          }
 
-        return material;
-      });
+          return material;
+        });
 
-      object.material = Array.isArray(object.material)
-        ? clonedMaterials
-        : clonedMaterials[0];
+        object.material = Array.isArray(object.material)
+          ? clonedMaterials
+          : clonedMaterials[0];
+      }
 
       object.castShadow = false;
       object.receiveShadow = false;
@@ -76,7 +84,7 @@ export default function CelestialModel({
 
     group.layers.set(1);
     return group;
-  }, [scene, diameter, displayScale, opacity]);
+  }, [scene, diameter, opacity, materialOverride]);
 
   useEffect(() => {
     return () => {
@@ -92,8 +100,17 @@ export default function CelestialModel({
     };
   }, [model]);
 
+  useFrame(({ camera }) => {
+    if (faceCamera && groupRef.current) {
+      groupRef.current.quaternion.copy(camera.quaternion);
+    }
+  });
+
   return (
-    <group position={[position.x, position.y, position.z]}>
+    <group
+      ref={groupRef}
+      position={[position.x, position.y, position.z]}
+    >
       <primitive object={model} />
     </group>
   );
