@@ -988,10 +988,15 @@ function LunarSurface({
     return () => {
       localGeometry.dispose();
       regionalGeometry.dispose();
+    };
+  }, [localGeometry, regionalGeometry]);
+
+  useEffect(() => {
+    return () => {
       baseMaterial.dispose();
       imageryMaterial?.dispose();
     };
-  }, [localGeometry, regionalGeometry, baseMaterial, imageryMaterial]);
+  }, [baseMaterial, imageryMaterial]);
 
   return (
     <>
