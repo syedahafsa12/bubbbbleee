@@ -234,7 +234,7 @@ export async function GET(request: NextRequest) {
         "X-LunaPath-Imagery": "LROC controlled South Pole NAC average mosaic",
         "X-LunaPath-Imagery-Layer": LROC_LAYER,
         "X-LunaPath-Imagery-Projection": LROC_SOUTH_POLAR_SRS,
-        "X-LunaPath-Imagery-Use": "Morphology and albedo texture only; not live illumination or elevation",
+        "X-LunaPath-Imagery-Use": "Average image texture only; not calibrated albedo, live illumination or elevation",
       },
     });
   } catch (error) {
