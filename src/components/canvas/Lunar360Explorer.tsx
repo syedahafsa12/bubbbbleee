@@ -219,6 +219,9 @@ const OBSERVER_HEIGHT_METERS = 1.7;
 const LUNAR_RADIUS_METERS = 1_737_400;
 
 const CELESTIAL_DISTANCE = 8000;
+// NASA Blue Marble true-colour equirectangular Earth map (bundled by three-globe).
+const EARTH_BLUE_MARBLE_TEXTURE_URL =
+  "https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg";
 
 
 const CELESTIAL_VISUAL_SCALE = 1;
@@ -1223,6 +1226,171 @@ function CelestialModel({
 }
 
 /* =====================================================
+   EARTH — BLUE MARBLE SURFACE + THIN ATMOSPHERE
+===================================================== */
+
+function EarthModel({
+  position,
+  diameter,
+  rotationSpeed = 0.0005,
+}: {
+  position: THREE.Vector3;
+  diameter: number;
+  rotationSpeed?: number;
+}) {
+  const [earthTexture, setEarthTexture] = useState<THREE.Texture | null>(null);
+  const [textureFailed, setTextureFailed] = useState(false);
+  const groupRef = useRef<THREE.Group>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loader = new THREE.TextureLoader();
+    loader.setCrossOrigin("anonymous");
+
+    const texture = loader.load(
+      EARTH_BLUE_MARBLE_TEXTURE_URL,
+      (loadedTexture) => {
+        if (cancelled) {
+          loadedTexture.dispose();
+          return;
+        }
+
+        loadedTexture.colorSpace = THREE.SRGBColorSpace;
+        loadedTexture.wrapS = THREE.RepeatWrapping;
+        loadedTexture.wrapT = THREE.ClampToEdgeWrapping;
+        loadedTexture.minFilter = THREE.LinearMipmapLinearFilter;
+        loadedTexture.magFilter = THREE.LinearFilter;
+        loadedTexture.generateMipmaps = true;
+        loadedTexture.anisotropy = 8;
+        loadedTexture.needsUpdate = true;
+        setEarthTexture(loadedTexture);
+      },
+      undefined,
+      (error) => {
+        if (cancelled) return;
+        console.warn(
+          "[LUNAPATH] Blue Marble Earth texture unavailable; using the bundled Earth model.",
+          error
+        );
+        setTextureFailed(true);
+      }
+    );
+
+    return () => {
+      cancelled = true;
+      texture.dispose();
+    };
+  }, []);
+
+  const radius = diameter * 0.5;
+
+  const geometry = useMemo(
+    () => new THREE.SphereGeometry(radius, 96, 64),
+    [radius]
+  );
+
+  const atmosphereGeometry = useMemo(
+    () => new THREE.SphereGeometry(radius * 1.018, 96, 64),
+    [radius]
+  );
+
+  const earthMaterial = useMemo(
+    () =>
+      new THREE.MeshStandardMaterial({
+        map: earthTexture ?? null,
+        color: earthTexture ? "#ffffff" : "#397eb8",
+        roughness: 0.94,
+        metalness: 0,
+      }),
+    [earthTexture]
+  );
+
+  const atmosphereMaterial = useMemo(
+    () =>
+      new THREE.ShaderMaterial({
+        vertexShader: `
+          varying vec3 vNormal;
+          varying vec3 vViewPosition;
+
+          void main() {
+            vec4 viewPosition = modelViewMatrix * vec4(position, 1.0);
+            vNormal = normalize(normalMatrix * normal);
+            vViewPosition = -viewPosition.xyz;
+            gl_Position = projectionMatrix * viewPosition;
+          }
+        `,
+        fragmentShader: `
+          varying vec3 vNormal;
+          varying vec3 vViewPosition;
+
+          void main() {
+            float facing = max(
+              dot(normalize(vNormal), normalize(vViewPosition)),
+              0.0
+            );
+            float rim = pow(1.0 - facing, 3.2);
+            float alpha = rim * 0.34;
+            gl_FragColor = vec4(0.16, 0.48, 1.0, alpha);
+          }
+        `,
+        transparent: true,
+        depthWrite: false,
+        side: THREE.FrontSide,
+        blending: THREE.AdditiveBlending,
+        toneMapped: false,
+      }),
+    []
+  );
+
+  useEffect(() => {
+    groupRef.current?.traverse((object) => object.layers.set(1));
+  }, [earthTexture, geometry, atmosphereGeometry]);
+
+  useEffect(() => () => geometry.dispose(), [geometry]);
+  useEffect(() => () => atmosphereGeometry.dispose(), [atmosphereGeometry]);
+  useEffect(() => () => earthMaterial.dispose(), [earthMaterial]);
+  useEffect(() => () => atmosphereMaterial.dispose(), [atmosphereMaterial]);
+
+  useFrame((_, delta) => {
+    if (groupRef.current && rotationSpeed !== 0) {
+      groupRef.current.rotation.y += rotationSpeed * Math.min(delta, 0.05);
+    }
+  });
+
+  if (textureFailed) {
+    return (
+      <CelestialModel
+        url="/models/earth.glb"
+        position={position}
+        diameter={diameter}
+        rotationSpeed={rotationSpeed}
+      />
+    );
+  }
+
+  return (
+    <group
+      ref={groupRef}
+      position={[position.x, position.y, position.z]}
+    >
+      <mesh
+        geometry={geometry}
+        material={earthMaterial}
+        castShadow={false}
+        receiveShadow={false}
+      />
+      <mesh
+        geometry={atmosphereGeometry}
+        material={atmosphereMaterial}
+        renderOrder={2}
+        castShadow={false}
+        receiveShadow={false}
+      />
+    </group>
+  );
+}
+
+/* =====================================================
    REAL CELESTIAL POSITIONS AND LIGHTING
 ===================================================== */
 
@@ -1392,13 +1560,10 @@ function CelestialBodies({
       {earthVisible &&
         earthPosition &&
         earthDiameter !== null && (
-          <CelestialModel
-            url="/models/earth.glb"
+          <EarthModel
             position={earthPosition}
             diameter={earthDiameter}
             rotationSpeed={0.0005}
-            opacity={earthOpacity}
-
           />
         )}
     </>
