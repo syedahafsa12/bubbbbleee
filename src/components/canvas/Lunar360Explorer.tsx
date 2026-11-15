@@ -2133,25 +2133,23 @@ export default function Lunar360Explorer({
         <span />
       </div>
 
-      {/* The timeline stays available as a compact exploration control.
-          Its full explanation and ephemeris diagnostics remain archived above. */}
+      {/* Keep only the time control in the immersive view. All explanatory
+          mission/ephemeris diagnostics are archived for the Mission Data page. */}
       {timelineLength > 0 && selectedTimeUtc && (
         <div
-          className="pointer-events-auto absolute bottom-5 left-1/2 z-40 w-[min(520px,calc(100vw-11rem))] -translate-x-1/2 rounded-lg border border-white/15 bg-black/65 px-4 py-3 text-white shadow-xl backdrop-blur-md"
+          className="pointer-events-auto absolute bottom-5 left-1/2 z-40 w-[min(440px,calc(100vw-7rem))] -translate-x-1/2 rounded-full border border-white/10 bg-black/55 px-4 py-2 text-white shadow-lg backdrop-blur-md"
           onPointerDown={(event) => event.stopPropagation()}
           onPointerUp={(event) => event.stopPropagation()}
         >
-          <div className="mb-2 flex items-center justify-between gap-3 text-[10px] tabular-nums text-white/65">
-            <time dateTime={selectedTimeUtc}>
-              {new Date(selectedTimeUtc).toISOString().slice(0, 16).replace("T", " ")} UTC
-            </time>
-            <span>{safeObservationIndex + 1}/{timelineLength}</span>
-          </div>
-          <div className="mb-2 text-[9px] text-white/45">
-            Mission window: {horizons?.mission?.durationHours ?? "—"} hours · not a full lunar day
-          </div>
+          <time
+            className="mb-1 block text-center text-[9px] tabular-nums text-white/55"
+            dateTime={selectedTimeUtc}
+          >
+            {new Date(selectedTimeUtc).toISOString().slice(0, 16).replace("T", " ")} UTC
+          </time>
           <input
             aria-label="Mission timeline"
+            title="Mission timeline"
             className="block w-full accent-amber-300"
             type="range"
             min="0"
@@ -2172,8 +2170,9 @@ export default function Lunar360Explorer({
           onClick={() => setJplRetryCount((count) => count + 1)}
           className="pointer-events-auto absolute right-5 top-28 z-40 rounded-md border border-red-200/30 bg-black/70 px-3 py-2 text-[10px] text-red-100/85 backdrop-blur-md"
           aria-label="Retry JPL mission data request"
+          title="Retry JPL data"
         >
-          JPL retry
+          ↻
         </button>
       )}
 
@@ -2185,10 +2184,11 @@ export default function Lunar360Explorer({
         onPointerUp={(
           event: ReactPointerEvent<HTMLAnchorElement>
         ) => event.stopPropagation()}
-        className="absolute bottom-5 left-5 z-50 inline-flex items-center gap-2 border border-white/25 bg-black/70 px-4 py-3 text-[10px] font-medium tracking-[0.16em] text-white/85 shadow-lg backdrop-blur-md transition-colors hover:border-white/60 hover:bg-black/90 hover:text-white"
+        aria-label="Back to planner"
+        title="Back to planner"
+        className="absolute bottom-5 left-5 z-50 inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/20 bg-black/55 text-lg text-white/85 shadow-lg backdrop-blur-md transition-colors hover:border-white/60 hover:bg-black/85 hover:text-white"
       >
         <span aria-hidden="true">←</span>
-        BACK TO PLANNER
       </a>
     </main>
   );
