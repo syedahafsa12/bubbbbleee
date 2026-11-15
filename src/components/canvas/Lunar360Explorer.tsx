@@ -324,35 +324,35 @@ function canRenderCelestialDisk(
 
   const visibility = observation.terrainVisibility;
 
-  // No terrain assessment or no positive visibility result.
+  if (!visibility) {
+    return false;
+  }
+
+  // A missing horizon must not erase a real JPL position. Render that
+  // marker with a subdued opacity and label its terrain occlusion unknown.
   if (
-    !visibility ||
+    visibility.status !== "terrain_horizon_unavailable" &&
     visibility.targetDiskVisible !== true
   ) {
     return false;
   }
 
-  // Never invent a celestial disk size.
+  // Never invent a disk size. A target below sampled terrain is still hidden.
   const angularRadiusDeg = getAngularRadiusDeg(observation);
 
-  if (angularRadiusDeg === null) {
+  if (
+    angularRadiusDeg === null ||
+    visibility.status === "target_disk_below_sampled_terrain" ||
+    visibility.status === "target_disk_size_unavailable"
+  ) {
     return false;
   }
 
-  // Only these two states are eligible for rendering.
-  switch (visibility.status) {
-    case "target_disk_intersects_sampled_terrain":
-      return true;
-
-    case "target_disk_above_sampled_terrain_unconfirmed":
-      return true;
-
-    case "target_disk_below_sampled_terrain":
-    case "target_disk_size_unavailable":
-    case "terrain_horizon_unavailable":
-    default:
-      return false;
-  }
+  return (
+    visibility.status === "terrain_horizon_unavailable" ||
+    visibility.status === "target_disk_intersects_sampled_terrain" ||
+    visibility.status === "target_disk_above_sampled_terrain_unconfirmed"
+  );
 }
 
 function getDiskFractionAboveHorizon(
@@ -395,14 +395,16 @@ function getSunlightFraction(
 
   const visibility = sun.terrainVisibility;
 
-  // Do not turn incomplete terrain coverage into confirmed
-  // direct sunlight.
+  // Use a measured local horizon when available. The separate global
+  // completeness flag remains false and is still disclosed in the HUD;
+  // it must not suppress sunlight from a valid sampled local horizon.
   if (
     !visibility ||
     visibility.targetDiskVisible !== true ||
-    visibility.terrainCoverageComplete !== true ||
-    visibility.status !==
-    "target_disk_intersects_sampled_terrain"
+    (
+      visibility.status !== "target_disk_intersects_sampled_terrain" &&
+      visibility.status !== "target_disk_above_sampled_terrain_unconfirmed"
+    )
   ) {
     return 0;
   }
@@ -440,8 +442,11 @@ function getCelestialVisualOpacity(
   }
 
   switch (visibility.status) {
+    case "terrain_horizon_unavailable":
+      return 0.22;
+
     case "target_disk_above_sampled_terrain_unconfirmed":
-      return 0.32;
+      return 0.48;
 
     case "target_disk_intersects_sampled_terrain": {
       const angularRadiusDeg =
@@ -1322,11 +1327,13 @@ export default function Lunar360Explorer({
       ? horizonsResult.data
       : null;
 
+  // Start slightly below the true horizon so the local LOLA surface
+  // is visible immediately. Mouse look remains fully user-controlled.
   const look = useRef<LookState>({
     yaw: 0,
-    pitch: 0,
+    pitch: -0.18,
     targetYaw: 0,
-    targetPitch: 0,
+    targetPitch: -0.18,
   });
 
   const [cameraHeading, setCameraHeading] = useState(0);
