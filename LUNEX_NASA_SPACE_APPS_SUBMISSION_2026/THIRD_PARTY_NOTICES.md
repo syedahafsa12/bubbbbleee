@@ -73,17 +73,48 @@ One package entry, `webgl-constants@1.1.1`, has no license value in the lockfile
 
 The lockfile also includes dependencies under LGPL-3.0-or-later, MPL-2.0, CC-BY-4.0, Python-2.0, BlueOak-1.0.0, BSD, ISC, 0BSD, CC0, and combined license expressions. Those terms continue to apply to the relevant packages. The dependency lock records versions and declared license metadata; it is not a substitute for preserving upstream license texts and notices when redistributing package code.
 
-## Local image and 3D model assets requiring provenance confirmation
+## 3D models and local textures
 
-The repository tree contains these image files under `public/textures/`:
+### Moon model — NASA source identified by exact filename
+
+The application code references `/models/Moon_NASA_LRO_8k_Topo_Small.glb` as its default Moon model path, with an optional external URL configured through `NEXT_PUBLIC_LUNEX_MOON_MODEL_URL`.
+
+NASA's Goddard Scientific Visualization Studio publishes a model with this exact filename:
+
+- Source page: [Moon 3D Models for Web, AR, and Animation — NASA SVS 14959](https://svs.gsfc.nasa.gov/14959/)
+- Direct download: [Moon_NASA_LRO_8k_Topo_Small.glb](https://svs.gsfc.nasa.gov/vis/a010000/a014900/a014959/Moon_NASA_LRO_8k_Topo_Small.glb)
+- Model basis: imagery and topographic data from NASA's Lunar Reconnaissance Orbiter (LRO).
+- Credit: NASA's Goddard Space Flight Center.
+- Producer: Dan Gallagher (eMITS).
+- Data provider: Ernie Wright (USRA).
+- Data analysts: Tuomas Kankola and Josh Klint (Leadwerks Game Engine).
+- Technical support: Aaron E. Lepsch (ADNET Systems, Inc.).
+
+The exact filename in the source code matches NASA's published filename. However, the GLB itself is not present in the audited Git repository. Before submission, confirm that the deployed app is actually serving this NASA file (or a copy of it), rather than a different file placed at the same path or supplied through the environment variable.
+
+### Earth and Sun models — source not established
+
+The 3D scene code references `/models/earth.glb` and `/models/sun.glb`. Neither file is present in the audited Git tree, and the source code does not identify their original download pages, creators, or licenses. The filenames alone do not establish that NASA created them.
+
+Do not credit these two models to NASA without checking the actual GLB files or their download URLs. Add the original source page, creator, and license for each model before submission. If their origin cannot be established, replace them with models from a documented source or remove them from the submitted build.
+
+### Loose texture files — not referenced by the audited app code
+
+These files are present in `public/textures/`:
 
 - `earth_daymap.jpg`
 - `nasa-lunar-crater.webp`
 - `quickmap-lroc.png`
 
-The checked application source files audited for this document did not contain references to those three filenames. Their original creator/source and applicable license are not recorded alongside the files in the repository. If they are unused, remove them from the submitted project. If they are used, add the original source URL, creator, and license/permission before submission.
+A search of the application source files did not find code references to these filenames. Their original source, creator, and license are not recorded in the repository. I could not verify an exact matching original source for these specific files, so this notice does not guess one based on a suggestive filename.
 
-The application code also references `/models/earth.glb`, `/models/sun.glb`, and the optional Moon model path `/models/Moon_NASA_LRO_8k_Topo_Small.glb` or an externally configured model URL. Those model files were not present in the audited Git tree. If the deployed application serves them from an external asset location, identify the actual model source, creator, and license in this file before submission. Do not assume they are NASA assets from their filenames.
+For context only:
+
+- [Solar System Scope texture pack](https://edu.solarsystemscope.com/textures/) distributes its own planetary textures under CC BY 4.0. This is a possible lead for an Earth day texture, **not confirmation** that the repository's `earth_daymap.jpg` came from that pack.
+- [LROC terms and citation policy](https://www.lroc.im-ldi.com/about/terms) state that PDS-delivered LROC data are public domain, while curated products, downloads, and non-PDS interfaces on the LROC website may be copyrighted. Educational use is permitted with appropriate citation. This is relevant only if `quickmap-lroc.png` is confirmed to be an image or screenshot from LROC QuickMap; the filename alone does not prove its source or image rights.
+- No verified source has been identified for `nasa-lunar-crater.webp`.
+
+Since these three files are not referenced by the audited application code, remove them from the submission repository if they are not intentionally used. If any is retained or displayed, identify its exact original source, author/creator, and license or permission before submitting. Do not describe them as NASA imagery solely because a filename contains “nasa” or “lroc”.
 
 ## NASA Space Apps source and license requirements
 
