@@ -2207,16 +2207,18 @@ export default function Lunar360Explorer({
           {scienceLoading ? (
             <p className="mt-2 text-xs text-white/45">Reading science values…</p>
           ) : scienceSample?.available && scienceSample.values ? (
-            <div className="mt-2 grid grid-cols-2 gap-3 text-xs">
-              <div><p className="text-[9px] text-white/40">Elevation</p><strong>{scienceSample.values.elevationMeters.toFixed(2)} m</strong></div>
-              <div><p className="text-[9px] text-white/40">Slope</p><strong>{scienceSample.values.slopeDegrees.toFixed(2)}°</strong></div>
-              <div><p className="text-[9px] text-white/40">Slope RMS uncertainty</p><strong>{scienceSample.values.slopeUncertaintyDegrees.toFixed(2)}°</strong></div>
-              <div><p className="text-[9px] text-white/40">Elevation RMS uncertainty</p><strong>{scienceSample.values.elevationUncertaintyMeters.toFixed(2)} m</strong></div>
-              <div><p className="text-[9px] text-white/40">Direct LOLA shots / pixel</p><strong>{scienceSample.values.observationCount.toFixed(0)}</strong></div>
-            </div>
-            <p className="mt-3 text-[9px] leading-4 text-white/45">
-              Zero direct shots does not mean missing terrain: Product78 can interpolate elevation between LOLA tracks. Elevation is bilinearly sampled at the selected coordinate; slope, RMS errors and shot count use the nearest 5 m pixel.
-            </p>
+            <>
+              <div className="mt-2 grid grid-cols-2 gap-3 text-xs">
+                <div><p className="text-[9px] text-white/40">Elevation</p><strong>{scienceSample.values.elevationMeters.toFixed(2)} m</strong></div>
+                <div><p className="text-[9px] text-white/40">Slope</p><strong>{scienceSample.values.slopeDegrees.toFixed(2)}°</strong></div>
+                <div><p className="text-[9px] text-white/40">Slope RMS uncertainty</p><strong>{scienceSample.values.slopeUncertaintyDegrees.toFixed(2)}°</strong></div>
+                <div><p className="text-[9px] text-white/40">Elevation RMS uncertainty</p><strong>{scienceSample.values.elevationUncertaintyMeters.toFixed(2)} m</strong></div>
+                <div><p className="text-[9px] text-white/40">Direct LOLA shots / pixel</p><strong>{scienceSample.values.observationCount.toFixed(0)}</strong></div>
+              </div>
+              <p className="mt-3 text-[9px] leading-4 text-white/45">
+                Zero direct shots does not mean missing terrain: Product78 can interpolate elevation between LOLA tracks. Elevation is bilinearly sampled at the selected coordinate; slope, RMS errors and shot count use the nearest 5 m pixel.
+              </p>
+            </>
           ) : (
             <p className="mt-2 text-[10px] text-amber-100/70">{scienceSample?.reason ?? "Science layers not prepared for this site."}</p>
           )}
