@@ -1555,12 +1555,13 @@ export default function Lunar360Explorer({
       ? horizonsResult.data
       : null;
 
-  // Start with a slight downward view so the local LOLA/LROC surface is visible.
+  // Match the validated Explorer's level initial horizon so distant
+  // LOLA ridges, crater rims and regional relief remain visible on entry.
   const look = useRef<LookState>({
     yaw: 0,
-    pitch: -0.28,
+    pitch: 0,
     targetYaw: 0,
-    targetPitch: -0.28,
+    targetPitch: 0,
   });
 
   const [cameraHeading, setCameraHeading] = useState(0);
